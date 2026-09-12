@@ -52,9 +52,11 @@ from typing import Callable
 try:  # como paquete
     from ..configuracion import ConfigVision
     from ..mundo import EstadoMundo, a_mensaje
+    from .puerto import liberar_puerto
 except ImportError:  # como script suelto
     from vision.configuracion import ConfigVision  # type: ignore[no-redef]
     from vision.mundo import EstadoMundo, a_mensaje  # type: ignore[no-redef]
+    from vision.publish.puerto import liberar_puerto  # type: ignore[no-redef]
 
 from contrato import schema  # noqa: E402  (`mundo` ya dejó `contrato/` en el camino)
 from contrato.publicador import Publicador  # noqa: E402
@@ -80,6 +82,7 @@ class PublicadorTelemetria:
                  avisar: Callable[[str], None] = print):
         self._cfg = cfg
         self._avisar = avisar
+        self._host = host
         self._publicador = Publicador(host, cfg.publicacion.puerto, avisar=avisar)
         self._hz = cfg.publicacion.hz
         # La casilla del último estado bueno. Es lo único que cruza entre el
@@ -102,6 +105,17 @@ class PublicadorTelemetria:
     # -- ciclo de vida -----------------------------------------------------
 
     def arrancar(self) -> None:
+        """Deja el puerto listo y empieza a publicar.
+
+        Liberar el puerto va ANTES del `bind()` y no dentro de él: el `bind()`
+        vive en `contrato/publicador.py`, compartido con el simulador, y si esta
+        lógica fuera compartida los dos programas se matarían mutuamente al
+        arrancar. El sistema de visión reclama el puerto; el simulador no.
+        """
+        if self._cfg.publicacion.liberar_puerto_al_arrancar:
+            liberar_puerto(self._cfg.publicacion.puerto,
+                           espera_s=self._cfg.publicacion.espera_liberacion_s,
+                           avisar=self._avisar, host=self._host)
         self._publicador.arrancar()
         self._hilo = threading.Thread(target=self._ciclo, name="publicacion", daemon=True)
         self._hilo.start()

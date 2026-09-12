@@ -234,6 +234,28 @@ class MarcadorVerdad:
 
 
 @dataclass(frozen=True, slots=True)
+class MarcadorExtra:
+    """Un marcador de más, para probar lo que la cancha no produce a pedido.
+
+    Existe por los **IDs duplicados**: en la cancha real un fantasma con el ID
+    de un rover aparece unas veintitrés veces por minuto, pero no cuando uno
+    quiere. Con esto se dibuja a voluntad un segundo marcador con un ID que ya
+    está en uso, del tamaño y en el lugar que haga falta, y el caso se puede
+    verificar sin depender de la suerte.
+
+    `lado_celdas` por defecto es chico —15 mm— porque es el tamaño típico de los
+    fantasmas medidos sobre la cancha: de 13,2 a 18,0 mm.
+    """
+
+    id: int
+    col: float
+    row: float
+    theta: float = 0.0
+    lado_celdas: float = 0.75
+    altura_mm: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
 class CuboVerdad:
     """Dónde puso el generador un cubo. La verdad es el centro de su BASE.
 
@@ -270,6 +292,8 @@ class VerdadTablero:
     esquinas: tuple[MarcadorVerdad, ...]
     rovers: tuple[MarcadorVerdad, ...]
     cubos: tuple[CuboVerdad, ...] = ()
+    #: Marcadores dibujados a pedido, típicamente para probar IDs duplicados.
+    extras: tuple[MarcadorVerdad, ...] = ()
 
     @property
     def nadir_celdas(self) -> tuple[float, float]:
@@ -399,6 +423,7 @@ def generar(
     semilla: int = 0,
     cubos: tuple[CuboDemo, ...] | None = None,
     con_cuerpo: bool = True,
+    marcadores_extra: tuple[MarcadorExtra, ...] = (),
 ) -> tuple[np.ndarray, VerdadTablero]:
     """Dibuja una imagen sintética del tablero y devuelve `(imagen, verdad)`.
 
@@ -472,6 +497,19 @@ def generar(
                 )
             )
 
+    # --- marcadores extra --------------------------------------------------
+    # Se estampan al final, encima de todo: son marcadores que NO existen en la
+    # cancha —fantasmas a pedido— y su razón de ser es repetir un ID que ya está
+    # dibujado, para poder probar la resolución de duplicados.
+    extras: list[MarcadorVerdad] = []
+    for extra in marcadores_extra:
+        extras.append(
+            _dibujar_marcador(
+                lienzo, camara, diccionario, extra.id, extra.col, extra.row, extra.theta,
+                extra.lado_celdas, extra.lado_celdas * 0.2, ppc, extra.altura_mm,
+            )
+        )
+
     # --- degradación opcional ---------------------------------------------
     if s.desenfoque_px > 0:
         k = 2 * s.desenfoque_px + 1
@@ -493,6 +531,7 @@ def generar(
         esquinas=tuple(esquinas),
         rovers=tuple(sorted(marcadores_rover, key=lambda m: m.id)),
         cubos=tuple(verdad_cubos),
+        extras=tuple(extras),
     )
     return lienzo, verdad
 
@@ -513,7 +552,7 @@ def _dibujar_marcador(
 
     Primero se calcula el cuadrado en **celdas** —el mundo— y recién después se
     lo proyecta con la cámara. Ese orden es el que hace que el paralaje aparezca
-    solo: un marcador a 90 mm se proyecta en otro lado que el mismo marcador al
+    solo: un marcador a 80 mm se proyecta en otro lado que el mismo marcador al
     ras, sin que haya que programar ninguna corrección.
     """
     # El cuadrilátero que se estampa incluye la zona blanca; el que se guarda

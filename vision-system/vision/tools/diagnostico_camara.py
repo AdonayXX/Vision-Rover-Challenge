@@ -296,7 +296,8 @@ def main(argv: list[str] | None = None) -> int:
                     continue
 
                 detectados = detectar_marcadores(
-                    cuadro.imagen, cfg.marcadores_esquina.nombre_diccionario)
+                    cuadro.imagen, cfg.marcadores_esquina.nombre_diccionario,
+                    cfg.deteccion_marcadores.refinamiento_esquinas)
                 encontrados = sorted(set(detectados) & set(esperados))
                 completo = len(encontrados) == len(esperados)
 

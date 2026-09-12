@@ -145,7 +145,9 @@ def correr_modo(cfg, con_perspectiva, umbral_mm, salida, quiere_anotar) -> bool:
     todo_bien = True
     for nombre, cubos_demo, rovers_demo in escenarios(cfg):
         imagen, verdad = generar(cfg, rovers=rovers_demo, cubos=cubos_demo, perspectiva=persp)
-        detectados_aruco = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario)
+        detectados_aruco = detectar_marcadores(
+            imagen, cfg.marcadores_esquina.nombre_diccionario,
+            cfg.deteccion_marcadores.refinamiento_esquinas)
         try:
             sistema = construir_sistema(imagen, cfg, detectados_aruco)
         except ErrorGeometria as exc:

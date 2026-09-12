@@ -68,7 +68,7 @@ sistema sino el resultado de medir aparatos concretos:
 | `calibraciones/` | Un **perfil por cámara** con su distorsión de lente. Ver [`geometry/`](geometry/README.md). |
 | `mediciones/` | Una sesión por cada prueba de **precisión de ubicación**. Ver [`tools/`](tools/README.md). |
 
-Dos módulos sueltos que no son de ningún lado, y siete subpaquetes:
+Tres módulos sueltos que no son de ningún lado, y ocho subpaquetes:
 
 | Módulo | Qué es |
 |---|---|
@@ -82,12 +82,13 @@ su propio README con el detalle:
 | Paquete | Lado | Rol | Estado |
 |---|---|---|---|
 | `sources/` | Productor | De dónde salen las imágenes | 🟢 **cámara USB real** y **generador sintético con cámara estenopeica**, intercambiables |
-| `geometry/` | Productor | Píxeles → celdas | 🟢 **coordenadas ArUco**, **corrección de distorsión**, **pose de cámara**, **paralaje** y **degradación con 3 marcadores** |
+| `geometry/` | Productor | Píxeles → celdas | 🟢 **coordenadas ArUco**, **corrección de distorsión**, **pose de cámara**, **paralaje**, **degradación con 3 marcadores**, **refinamiento subpíxel** y los **filtros de plausibilidad** (tamaño, posición, duplicados) |
 | `detectors/` | Productor | Qué hay y dónde | 🟢 **rovers** por marcador y **cubos** por color |
-| `tracking/` | Productor | Identidad, oclusión y edad | 🟢 **memoria entre cuadros** |
+| `tracking/` | Productor | Identidad, oclusión y edad | 🟢 **memoria entre cuadros** y **admisión de identidades nuevas** |
+| `reglas/` | — | Lo que el sistema decide | 🟢 **conteo de cubos en posición**, con permanencia mínima |
 | `publish/` | Consumidor | Publicación TCP/NDJSON | 🟢 **reloj propio y último-valor-gana** (el transporte lo comparte con el contrato) |
-| `record/` | Consumidor | Grabación a disco | ⚪ vacío |
-| `tools/` | Herramientas | Puesta a punto y verificación | 🟢 **nueve herramientas** · ⚪ guía de alineamiento |
+| `record/` | Consumidor | Acta de la ronda y grabación a disco | 🟢 **acta funcionando** |
+| `tools/` | Herramientas | Puesta a punto y verificación | 🟢 **trece herramientas** · ⚪ guía de alineamiento |
 
 🟢 hay código funcionando · ⚪ planificado, sin código aún
 
@@ -99,7 +100,7 @@ inclinada, y contra un criterio de aceptación de **10 mm**:
 | Etapa | Error |
 |---|---|
 | Píxeles → celdas | 0,52 mm |
-| Paralaje del rover | 41 mm sin corregir → **0,9 mm** corregido |
+| Paralaje del rover | 27 mm sin corregir → **1,0 mm** corregido |
 | Rovers | 1,03 mm · 1,2° |
 | Cubos | 1,05 mm · **4,88 mm** con un rover empujándolos |
 
@@ -117,13 +118,14 @@ Desde `vision-system/`, con el entorno virtual ya creado (ver el
 ```
 
 Sin argumentos abre la **cámara**. Lo sintético hay que pedirlo, y el sistema lo
-avisa en pantalla todo el tiempo. Mientras corre se le escribe `ready`, `start`,
-`stop` o `quit`.
+avisa en pantalla todo el tiempo. Mientras corre se le escribe `ready`, `stop`,
+`abort` o `quit`. **No hay comando para arrancar la ronda**: de `READY` a
+`RUNNING` pasa el reloj solo, al agotarse la preparación.
 
 Con `--ventana` se abre la **vista en vivo**: la imagen con los marcadores, la
 grilla reproyectada, los rovers con su flecha y los cubos con su base, cada uno
 etiquetado con **la celda que se está publicando**. Desde la ventana se maneja
-con `r` / `s` / `f` / `q`.
+con `r` ready / `f` stop / `a` abort / `q` o ESC para salir.
 
 La vista se refresca a su propio reloj —12 Hz por defecto, `--ventana-hz` lo
 cambia— así que **no le cuesta nada al procesamiento**: medido, 179 cuadros en

@@ -47,6 +47,31 @@ blanca, que es exactamente cómo se pierde un marcador en la cancha real—.
 El detalle de por qué con tres se conserva en vez de reajustar está en
 [`../geometry/README.md`](../geometry/README.md).
 
+#### Y un cuarto bloque: los IDs duplicados
+
+Dos marcadores distintos que decodifican el **mismo ID** en un cuadro. La cancha
+real lo produce sola: medido, el ID 10 —que es un ID de rover— apareció 46 veces
+en dos minutos con el rover retirado del tablero.
+
+| Situación | Qué se exige |
+|---|---|
+| Fantasma de 30 mm con el ID de un rover | **resuelve**: gana el de 41,6 mm |
+| Fantasma de 30 mm con el ID de una esquina | **resuelve**, y la homografía sigue dando 0,52 mm |
+| Dos marcadores idénticos con el ID de un rover, sin el rover | **descarta el cuadro** |
+
+Las dos salidas son correctas en su caso. Resolver, porque en cada ronda hay un
+marcador real 10 y del orden de veintitrés fantasmas 10 por minuto chocando
+contra él: descartar tiraría más del 1 % de los cuadros por algo que el sistema
+puede decidir midiendo. Descartar, cuando los candidatos son igual de
+plausibles, porque ahí elegir es adivinar.
+
+> **El caso ambiguo se arma SIN el rover real, y no es un detalle de montaje.**
+> Con el rover en la cancha el caso deja de ser ambiguo: uno de los tres
+> candidatos está justo donde el seguimiento lo recuerda y gana limpio.
+
+Los marcadores extra los dibuja el generador a pedido (`MarcadorExtra`): esperar
+a que la cancha real produzca el caso sería depender de la suerte.
+
 ### `verificar_rovers.py`
 
 Verifica la **detección de rovers** contra la misma verdad conocida: genera
@@ -127,6 +152,108 @@ Se prueba con **cuadros generados y procesados de punta a punta**, no con
 detecciones escritas a mano: así se ejercitan detección, confiabilidad y memoria
 juntas, en vez de comprobar solo que un diccionario recuerda cosas.
 
+### `verificar_acopio.py`
+
+Verifica la regla de entrega del reto: **¿el cubo está completamente dentro de
+su zona?**
+
+```bash
+python -m vision.tools.verificar_acopio
+python -m vision.tools.verificar_acopio --holgura-mm 5
+python -m vision.tools.verificar_acopio --modo cenital
+```
+
+Corre en **dos bloques**, y el primero es el que sostiene todo lo demás.
+
+**Bloque 1 — el criterio, sin imágenes.** Que el límite de la ventana esté donde
+dice, y sobre todo que el criterio sea **conservador para cualquier rotación**:
+con el centro del cubo parado en el borde de la ventana, sus cuatro esquinas
+tienen que caer dentro de la zona esté como esté girado. Se barre el giro de 0°
+a 90° sobre los cuatro bordes de las tres zonas. Si esa propiedad no se
+cumpliera, el sistema daría por entregado un cubo que sobresale.
+
+> **El borde exacto no se prueba, y es a propósito.** No se puede representar:
+> `21.5 + 2.8786796564403576 − 21.5` devuelve dos milésimas de femtocelda de
+> más —4 × 10⁻¹⁴ mm— así que una desigualdad cae de un lado o del otro según la
+> zona y el eje. Probar ese punto mediría la coma flotante. Lo que se prueba es
+> **un pelo adentro** y **un micrón afuera**, que es la frontera que existe.
+
+**Bloque 2 — el sistema entero**, sobre imágenes sintéticas y en los dos modos
+de cámara: los cubos en el centro de su zona, justo adentro del criterio, justo
+afuera, y girados 45°. Acá no se prueba una fórmula sino la cadena completa
+—detección de color y ajuste de la base incluidos—, que es donde entra el error
+real de ubicación.
+
+Cada veredicto positivo se comprueba además **contra la verdad del generador**:
+que el cubo que el sistema dio por entregado esté de verdad entero dentro del
+rectángulo, no solo que el número detectado sea coherente.
+
+| Por qué la holgura | |
+|---|---|
+| "Justo adentro" y "justo afuera" no pueden ser *exactamente* el límite | el detector ubica con ~1 mm de error, y un cubo a cero del límite caería de un lado o del otro según el ruido: la prueba mediría la detección y no el criterio |
+| Por defecto son **3 mm** | tres veces ese error |
+| "Justo afuera" empuja **hacia adentro de la cancha** | es el error que ocurre de verdad en una ronda: el rover no terminó de empujar el cubo hasta el fondo de la zona |
+
+### `verificar_ronda.py`
+
+Verifica el **árbitro**: el mapa de transiciones y el cronómetro oficial.
+
+```bash
+python -m vision.tools.verificar_ronda
+```
+
+Seis bloques: las transiciones que se pueden y las que **no** —que `start` no
+exista y que arrancar en `RUNNING` lance son parte de lo verificado—, los tres
+valores del cronómetro, el cierre por reto cumplido, la cadena completa
+contador + árbitro, **las guardas de geometría** —que sin ver la cancha no se
+prepara ni se arranca una ronda, y que un apagón largo la cierra— y el acta.
+
+El reloj **se inyecta**, y por eso la herramienta existe: verificar el cierre por
+tiempo agotado durmiendo diez minutos haría que nadie la corriera nunca, y una
+verificación que no se corre no verifica nada. Así se prueba el instante exacto
+del límite, un milisegundo antes, y **pasado**, que es el caso que siempre ocurre
+de verdad.
+
+### `verificar_config.py`
+
+Revisa `config_vision.json` **antes** de que importe, y muestra lo que el
+sistema entendió de lo que ahí dice.
+
+```bash
+python -m vision.tools.verificar_config
+python -m vision.tools.verificar_config --config otra_config.json
+```
+
+Responde **dos preguntas distintas**, y esa separación es el punto de la
+herramienta:
+
+| | Quién lo decide | Qué pasa |
+|---|---|---|
+| **¿Es posible?** | `revisar_config` | Si no, el sistema **no arranca** |
+| **¿Es además razonable?** | `avisos_config` | Avisa y **deja arrancar** |
+
+Un error es una configuración que describe una cancha que no existe —una zona de
+acopio en una esquina, o más grande que el tablero—. Eso no falla cuando se usa:
+publica telemetría perfectamente válida y mal, y el equipo que la consume busca
+el problema en su propio código.
+
+Un aviso es algo posible pero **ajustado**. El que motivó la separación, y que
+hoy ya no aparece, es el mejor ejemplo de para qué sirve: con el fondo de zona
+de 100 mm, la ventana donde tiene que caer el centro del cubo medía **15,2 mm**
+—7,6 mm a cada lado del eje— contra un criterio de precisión de **10 mm**. La
+cancha real le dio la razón: un cubo bien puesto oscilaba a través de ese
+límite. El fondo subió a 150 mm y el aviso se apagó solo.
+
+> **El código de salida solo mira los errores.** Con avisos y sin errores sale
+> 0, para que encadenar esto a otra cosa no se rompa porque una medida quedó
+> justa. Un aviso que bloqueara el arranque terminaría borrado por quien tiene
+> una ronda esperando; un error que solo avisara, ignorado hasta que sea tarde.
+
+Lo que imprime es **lo deducido, no lo escrito**: el lado sobre el que apoya
+cada zona no está declarado en ninguna parte —sale del borde más cercano a su
+centro— y verlo acá es la forma de confirmar que salió el que uno esperaba,
+antes de tener la cancha montada.
+
 ### `medir_desfases.py`
 
 Mide los **dos desfases entre el marcador y el robot** usando el propio sistema
@@ -187,12 +314,12 @@ Los dos promedian varias orientaciones por **media circular**
 (`atan2(Σ sen, Σ cos)`). Promediar 359° y 1° a secas da 180°, que es el revés de
 la respuesta.
 
-#### El paralaje infla el módulo un 4,5 %
+#### El paralaje infla el módulo un 4,0 %
 
-El marcador está a 90 mm del tablero, así que se ve corrido hacia afuera.
+El marcador está a 80 mm del tablero, así que se ve corrido hacia afuera.
 Mientras el robot gira en el lugar, ese efecto es una **homotecia** alrededor del
 punto bajo la cámara: **conserva la dirección y escala el módulo** por
-`H/(H−h)` = 1,045 con la cámara a 2,1 m.
+`H/(H−h)` = 1,0396 con la cámara a 2,1 m.
 
 La herramienta reporta **el valor medido y el corregido**, y recomienda el
 corregido. Es el primer consumidor real del bloque `paralaje` de la
@@ -265,6 +392,51 @@ sobre el sistema real.
 El indicador que más importa apuntando al tablero físico es
 **"MARCADORES DE ESQUINA: 4 de 4"**: significa que el mundo real se comporta como
 lo sintético y las coordenadas se pueden anclar.
+
+### `diagnostico_falsos_positivos.py`
+
+Mide **cuántos marcadores inventa el detector de ArUco** sobre la cancha real.
+
+```bash
+python -m vision.tools.diagnostico_falsos_positivos
+python -m vision.tools.diagnostico_falsos_positivos --minutos 5
+python -m vision.tools.diagnostico_falsos_positivos --sintetico   # probar la herramienta
+```
+
+> ⚠️ **La cancha tiene que estar VACÍA**: los cuatro marcadores de esquina y nada
+> más. Todo lo que aparezca que no sea una esquina es, por definición, un falso
+> positivo.
+
+**No corrige nada, y es el punto.** El tablero es una cuadrícula fina de blanco y
+negro —exactamente la clase de textura con la que se construye un código ArUco— y
+`DICT_4X4_50` tiene poca distancia entre códigos, así que un recorte afortunado
+puede parecerse lo suficiente a un marcador válido. Elegir umbrales para eso a
+ojo es adivinar; esta herramienta da los números con los que decidir.
+
+De cada detección que no sea una esquina registra:
+
+| Qué | Para qué sirve |
+|---|---|
+| **ID** | si cae en un ID declarado de rover, el fantasma **pisa a un rover de verdad**, en silencio |
+| **Lado en mm** sobre el plano del tablero | un marcador real mide 100 mm (esquina) o 40 (rover); un fantasma casi nunca |
+| **Error de cuadratura** | en celdas un marcador real vuelve a ser un cuadrado: sus cuatro lados y sus dos diagonales coinciden. Un recorte de la cuadrícula, no |
+| **Racha** | cuántos cuadros CONSECUTIVOS duró. Un fantasma vive uno o dos y salta a otro lado |
+
+Todo se mide **en celdas y no en píxeles**: en píxeles, un marcador cerca del
+borde de la imagen se ve más chico que el mismo marcador en el centro, así que
+los tamaños no se podrían comparar entre sí. La homografía deshace exactamente
+eso.
+
+**Los cuatro marcadores de esquina se miden también, con la misma vara.** Son el
+**control**: sin saber cuánto se desvía un marcador legítimo no hay forma de
+elegir la tolerancia con la que rechazar a los falsos.
+
+El informe final da la tasa por minuto —en detecciones y en apariciones
+distintas—, qué IDs aparecieron, la distribución de tamaños y cuántos de esos
+tamaños caen cerca de un marcador real. También informa **cuánto infla el
+paralaje** al marcador del rover, que está a 80 mm de altura y por eso se mide
+más grande de lo que es: quien fije una tolerancia de tamaño tiene que
+contemplarlo.
 
 ### `patron_calibracion.py`
 

@@ -83,7 +83,7 @@ que resolver de verdad:
 
 - el **paralaje**: un objeto con altura se ve corrido porque su rayo cruza el
   plano del tablero en otro lado. Los marcadores de rover se dibujan a sus
-  **90 mm** reales y los cubos como **cajas 3D**;
+  **80 mm** reales y los cubos como **cajas 3D**;
 - la **oclusión**: un objeto tapa a otro cuando se le pone en el rayo. Sale del
   algoritmo del pintor —se dibuja de lejos a cerca— sin programarla.
 

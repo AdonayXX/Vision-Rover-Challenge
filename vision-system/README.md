@@ -48,16 +48,18 @@ El sistema hace tres cosas:
 
 Además, el sistema publica la **fase oficial de la ronda** para que todos los
 rovers reciban una referencia común (`IDLE`, `READY`, `RUNNING`, `FINISHED`).
-La transición entre fases es operada por la organización de acuerdo con las
-indicaciones del juez; el sistema de visión distribuye ese estado de manera
-consistente a todos los equipos.
+**La visión es el árbitro de la ronda**: lleva el cronómetro oficial, pasa de
+`READY` a `RUNNING` sola al agotarse la preparación —sin que nadie apriete
+nada, para que todos los equipos preparen con el mismo tiempo— y cierra la
+ronda sola, por tiempo agotado, por reto cumplido o por haber perdido de vista
+la cancha. Una persona prepara (`ready`), puede cerrarla antes (`stop`) o
+abortar la preparación (`abort`); arrancarla no.
 
 ### Lo que este proyecto NO hace
 
 **No maneja los rovers.** La planificación de rutas, la asignación de tareas, la
-coordinación entre los dos robots, el control de motores y la lógica de juego son
-responsabilidad de **cada equipo y deben ejecutarse en los rovers durante una
-ronda oficial**. Nosotros solo informamos; los rovers deciden.
+coordinación entre los dos robots, el control de motores y la lógica de juego
+están **fuera de este sistema**: son de cada equipo. Nosotros solo informamos.
 
 La computadora que ejecuta este sistema de visión pertenece a la infraestructura
 oficial de la competencia. No es una computadora de control del equipo y no
@@ -92,10 +94,12 @@ confiar tanto en la estabilidad del formato como en la separación entre
 La comunicación del contrato de visión es **unidireccional**: el sistema oficial
 publica el estado del mundo y los rovers lo leen.
 
-Durante desarrollo y pruebas, un equipo puede consumir la telemetría desde una
-computadora para depurar, simular o validar su software. Durante una ronda
-oficial, esa computadora externa no puede convertirse en el planificador,
-coordinador o controlador de los rovers.
+Cualquiera puede consumir la telemetría desde una computadora para depurar,
+simular o validar software: el sistema publica lo mismo para todos y no sabe
+quién lo está leyendo.
+
+Qué arquitectura de control se admite durante una ronda oficial **no lo define
+este sistema**: está en el reglamento.
 
 
 ---
@@ -131,7 +135,7 @@ rover que decide girar:
   │   captura       │      exacta en que se tomó.
   └────────┬────────┘
            ▼
-  ┌─────────────────┐   ②  Quita la curvatura que mete el lente gran angular,
+  ┌─────────────────┐   ②  Quita la curvatura que mete el lente de la cámara,
   │   geometry/     │      usando el perfil de ESA cámara. Va antes que todo lo
   │   rectificación │      demás: la geometría de ③ supone que las rectas del
   └────────┬────────┘      mundo se ven rectas, y la distorsión rompe eso.
@@ -141,7 +145,6 @@ rover que decide girar:
   │   píxeles→celdas│      cualquier píxel en su celda. De los mismos cuatro
   └────────┬────────┘      deduce la POSE DE LA CÁMARA, que hace falta para
            │               corregir el paralaje de los objetos con altura.
-           ▼
            ▼
   ┌─────────────────┐   ④  Busca los rovers por su marcador ArUco y los cubos
   │   detectors/    │      por color. Solo DETECTA: no interpreta.
@@ -168,7 +171,7 @@ rover que decide girar:
   └──────┬──────┘    └─────────────┘
          │
          │  TCP · puerto 2026 · NDJSON (un JSON por línea)
-         │  {"v":1,"seq":4137,"ts_ms":...,"phase":"RUNNING","rovers":[...]}
+         │  {"v":2,"seq":4137,"ts_ms":...,"phase":"RUNNING","rovers":[...]}
          │
     ─────┼──────────────────────────────────────────────────────────────────
          ▼
@@ -199,11 +202,12 @@ El diagrama muestra el recorrido completo, y **está construido entero**:
 |---|---|---|
 | ① captura · ② rectificación | ✅ | — |
 | ③ píxeles→celdas | ✅ | 0,52 mm |
-| ③b pose de cámara · ③c paralaje | ✅ | 41 mm → **0,9 mm** |
+| ③b pose de cámara · ③c paralaje | ✅ | 27 mm → **1,0 mm** |
 | ④ detectores — **rovers** | ✅ | 1,03 mm · 1,2° |
 | ④ detectores — **cubos** | ✅ | 1,05 mm (4,88 mm empujado) |
 | ⑤ seguimiento · ⑥ estado del mundo · ⑦ publicación | ✅ | — |
-| ⑦ grabación a disco | ⚪ todavía no existe | — |
+| ⑦ acta de la ronda | ✅ | — |
+| ⑧ grabación de sesiones a disco | ⚪ todavía no existe | — |
 
 Todos los errores son **contra la verdad conocida** del generador sintético, con
 la cámara inclinada, y contra un criterio de aceptación de **10 mm**.
@@ -318,6 +322,7 @@ Vision-Rover-Challenge/              # raíz del repositorio (fork de CENFOTEC)
     ├── README.md                    # este documento
     ├── MONTAJE.md                   # guía para armar la cancha física
     ├── PUESTA_A_PUNTO.md            # guía para dejar lista una cámara
+    ├── OPERACION.md                 # guía para correr una ronda
     ├── CLAUDE.md                    # las reglas del proyecto
     ├── .gitignore
     │
@@ -356,10 +361,14 @@ Vision-Rover-Challenge/              # raíz del repositorio (fork de CENFOTEC)
         ├── tracking/                # productor: identidad, oclusión y edad
         │   └── seguimiento.py       #   memoria entre cuadros
         │
+        ├── reglas/                  # decidir, no detectar: la regla del reto
+        │   └── acopio.py            #   cubos en posición, con permanencia
+        │
         ├── publish/                 # consumidor: a la red
         │   └── telemetria.py        #   reloj propio, último estado bueno
         │
-        ├── record/                  # consumidor: a disco               (vacío)
+        ├── record/                  # consumidor: a disco
+        │   └── acta.py              #   el registro de cada ronda cerrada
         │
         ├── tools/                   # herramientas de puesta a punto
         │   ├── diagnostico_camara.py    # ¿la cámara sirve?
@@ -371,6 +380,8 @@ Vision-Rover-Challenge/              # raíz del repositorio (fork de CENFOTEC)
         │   ├── verificar_rovers.py      # rovers contra verdad conocida
         │   ├── verificar_cubos.py       # cubos contra verdad conocida
         │   ├── verificar_seguimiento.py # oclusión y edad
+        │   ├── verificar_acopio.py      # ¿el cubo está dentro de su zona?
+        │   ├── verificar_config.py      # la configuración: errores y avisos
         │   └── panel.py                 # el panel que dibujan las demás
         │
         ├── calibraciones/           # DATOS: un perfil por cámara calibrada
@@ -477,8 +488,20 @@ coordenadas: un sesgo ahí no afecta a un objeto, los corre a todos.
 ### Por qué tres zonas de acopio, una por color
 
 Hay **tres cubos**, de colores distintos (verde, azul, rojo), y **tres zonas de
-acopio**, una de cada color, en las tres esquinas que no son la de salida.
-**Cada cubo va a la zona de su color.**
+acopio**, una de cada color, **al centro de cada uno de los tres lados** que no
+son el de la salida. **Cada cubo va a la zona de su color.**
+
+Cada zona es un **rectángulo de 200 × 150 mm** con su lado largo apoyado sobre
+el borde de la cancha, y un cubo cuenta como entregado cuando queda
+**completamente adentro**. Eso es una diferencia de fondo con el punto que eran
+antes: hay un criterio exacto, y el sistema lo muestra en pantalla mientras
+corre la ronda.
+
+Las tres son **virtuales**: no se pega ni se pinta nada sobre el tablero. No es
+comodidad, es una condición de la detección: los cubos se encuentran porque
+**todo lo que tiene color saturado sobre un tablero acromático es un objeto del
+juego**, y tres rectángulos de color pegados en la cancha serían tres manchas
+permanentes compitiendo con los cubos.
 
 Esto convierte el reto en un problema de **asignación**, no solo de transporte:
 los equipos tienen que decidir qué rover lleva qué cubo y en qué orden, en vez de
@@ -533,10 +556,17 @@ arrastrar 44 MB de OpenCV ni la mitad del sistema de visión.
 
 La visión publica un campo de **fase**: `IDLE`, `READY`, `RUNNING`, `FINISHED`.
 
-Todos los equipos necesitan una referencia común sobre el estado de la ronda. La
-autoridad de inicio y finalización corresponde a la **organización y al juez**;
-el sistema de visión convierte esa decisión operativa en un estado técnico único
-y lo publica a todos los rovers.
+Todos los equipos necesitan una referencia común sobre el estado de la ronda, y
+esa referencia tiene que ser **una sola voz**. La visión es esa voz: además de
+publicar la fase, **la decide**. Lleva el cronómetro oficial —con reloj
+monótono, para que un ajuste de hora del sistema no altere un tiempo de
+competencia—, arranca la ronda sola al agotarse la preparación y la cierra sola
+al agotarse el tiempo, al quedar todos los cubos en posición, o al perder de
+vista la cancha más de un par de segundos.
+
+El campo `clock` viaja en cada mensaje para que cualquiera pueda saber en qué
+punto está la ronda con **un solo mensaje y sin memoria**: un robot que llevara
+su propio reloj se desviaría del oficial.
 
 De esta manera, todos reciben la misma información de fase sin que cada equipo
 tenga que inferir por su cuenta si la ronda comenzó o terminó.
@@ -565,27 +595,30 @@ completo, el mismo que aparece en [`contrato/CONTRATO.md`](contrato/CONTRATO.md)
 
 ```json
 {
-  "v": 1,
+  "v": 2,
   "seq": 4137,
   "ts_ms": 1785012345678,
   "phase": "RUNNING",
+  "clock": { "elapsed_ms": 88000, "remaining_ms": 512000, "total_ms": 600000 },
   "grid": { "cols": 43, "rows": 43, "cell_mm": 20.0 },
   "rovers": [
-    { "id": 10, "col": 4.302,  "row": 3.705,  "theta": 46.20, "age_ms": 0 },
+    { "id": 10, "col": 18.402, "row": 6.705,  "theta": 84.20, "age_ms": 0 },
     { "id": 11, "col": 15.265, "row": 28.661, "theta": 40.22, "age_ms": 0 }
   ],
   "cubes": [
-    { "color": "green", "col": 25.968, "row": 9.999,  "age_ms": 0   },
+    { "color": "green", "col": 21.480, "row": 3.762, "age_ms": 0   },
     { "color": "blue",  "col": 15.000, "row": 29.000, "age_ms": 425 },
     { "color": "red",   "col": 33.071, "row": 25.983, "age_ms": 0   }
   ],
   "obstacles": [],
-  "start":  { "col": 2.5, "row": 2.5 },
+  "start":  { "col": 3.75, "row": 21.5 },
   "depots": [
-    { "color": "green", "col": 40.5, "row": 2.5  },
-    { "color": "blue",  "col": 2.5,  "row": 40.5 },
-    { "color": "red",   "col": 40.5, "row": 40.5 }
-  ]
+    { "color": "green", "col": 21.5,  "row": 3.75  },
+    { "color": "red",   "col": 39.25, "row": 21.5  },
+    { "color": "blue",  "col": 21.5,  "row": 39.25 }
+  ],
+  "depot_size": { "length": 10.0, "depth": 7.5 },
+  "cube_side": 3.0
 }
 ```
 
@@ -626,8 +659,9 @@ empujados.
 
 Un equipo puede escribir y probar gran parte de su lógica **antes de ver una
 cancha**, utilizando una computadora como entorno de desarrollo y el simulador
-como fuente de telemetría. Antes de competir, esa lógica debe quedar preparada
-para ejecutarse en los rovers según las reglas de autonomía.
+como fuente de telemetría. El simulador publica en el **mismo puerto y con el
+mismo formato** que el sistema real, así que pasar de uno al otro no exige tocar
+una línea.
 
 El manual completo para los equipos está en
 **[`contrato/CONTRATO.md`](contrato/CONTRATO.md)**.
@@ -636,25 +670,58 @@ El manual completo para los equipos está en
 
 ## 8. Cómo correr y probar lo que ya existe
 
-### Encender el sistema completo
+### 1. Instalar (una sola vez)
+
+El sistema de visión necesita **Python 3.10 o superior**. Desde la raíz del
+repositorio:
+
+```bash
+cd vision-system
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r vision/requirements.txt
+```
+
+Eso instala OpenCV, NumPy y Pillow en un entorno aislado, sin tocar el Python
+del sistema. La carpeta `.venv/` está ignorada por git.
+
+### 2. Encender el sistema
 
 Esto es lo que hace todo: mira, deduce y publica.
 
 ```bash
-.venv/bin/python -m vision.sistema                # con la cámara real
-.venv/bin/python -m vision.sistema --sintetico    # sin cámara, con imágenes generadas
-.venv/bin/python -m vision.sistema --ventana      # además, la vista en vivo
+cd vision-system
+.venv/bin/python -m vision.sistema --ventana
 ```
 
-Mientras corre, el operador de la infraestructura oficial puede escribir
-`ready`, `start`, `stop`, `quit`. Estos comandos cambian la fase publicada por el
-sistema de visión y deben utilizarse de acuerdo con la señal del juez y la
-operación de la competencia.
+**Los dos comandos importan.** El `cd` no es un detalle: `-m vision.sistema`
+busca el paquete `vision` desde la carpeta actual, así que desde otro lado falla
+con `No module named vision`. Y `.venv/bin/python` es el intérprete **del
+proyecto**, el único que tiene OpenCV instalado; con `python` a secas falla con
+`No module named cv2`.
+
+Otras formas de arrancarlo:
+
+```bash
+.venv/bin/python -m vision.sistema                # sin ventana: procesa y publica a ciegas
+.venv/bin/python -m vision.sistema --sintetico    # sin cámara, con imágenes generadas
+```
+
+Al arrancar pregunta **qué cámara** usar y qué perfil de calibración, y después
+queda corriendo. Mientras corre, el operador de la infraestructura oficial puede
+escribir por teclado `ready`, `stop`, `abort`, `quit`. Estos comandos cambian la
+fase de la ronda. Las otras dos transiciones —el arranque y el cierre por tiempo
+o por reto cumplido— **las hace el reloj del sistema**, no una persona.
 
 No son comandos disponibles para los equipos ni mecanismos de control de los
 rovers.
 
-### La vista en vivo
+> **El puerto 2026 se reclama solo.** Si un proceso anterior —otra visión, o el
+> simulador— lo tiene tomado, el sistema lo termina y arranca igual, avisando por
+> pantalla a quién terminó. Ya no hace falta matar nada a mano ni existe el
+> `Address already in use` al arrancar.
+
+
+### 3. La vista en vivo
 
 `--ventana` abre una ventana con **la imagen de la cámara y lo que el sistema
 dedujo, dibujado encima**: los cuatro marcadores, la grilla de celdas
@@ -668,7 +735,8 @@ no se está detectando; si algo se pone ámbar, está viejo y su edad está crec
 
 Es un **consumidor**: solo lee, se refresca a su propio reloj y **no le cuesta
 nada al procesamiento** —medido, 179 cuadros en 6 segundos con y sin ventana—.
-Desde la ventana se maneja con `r` ready · `s` start · `f` stop · `q` salir.
+Desde la ventana se maneja con `r` ready · `f` stop · `a` abort · `q` salir.
+No hay tecla para arrancar la ronda: de `READY` a `RUNNING` pasa el reloj solo.
 
 > **Sin argumentos abre la cámara.** Lo sintético hay que **pedirlo**, y cuando
 > corre así el sistema lo repite en pantalla en un cartel imposible de pasar por
@@ -684,24 +752,9 @@ Es el cliente de referencia para **desarrollo, pruebas y validación**: se conec
 al puerto 2026 y verifica cada mensaje contra el contrato.
 
 Sirve para comprobar desde una computadora que la red y la telemetría funcionan.
-No representa la arquitectura de control permitida durante una ronda oficial; en
-competencia, el rover debe implementar el consumo del contrato y ejecutar
-localmente su estrategia.
+Es una herramienta de diagnóstico, no un ejemplo de arquitectura de control.
 
-### Preparar el entorno (una sola vez)
-
-El sistema de visión necesita **Python 3.10 o superior**. Parado en
-`vision-system/`:
-
-```bash
-python3.12 -m venv .venv
-.venv/bin/python -m pip install -r vision/requirements.txt
-```
-
-Eso instala OpenCV, NumPy y Pillow en un entorno aislado, sin tocar el Python
-del sistema. La carpeta `.venv/` está ignorada por git.
-
-### Probar el simulador del contrato
+### Probar el simulador del contrato (sin instalar nada)
 
 Esto **no necesita el entorno virtual ni ninguna instalación**: corre con
 cualquier Python 3.9 o superior. Desde `vision-system/contrato/`, en dos
@@ -712,8 +765,8 @@ python3 mock_publisher.py     # terminal 1: el simulador
 python3 test_client.py        # terminal 2: el cliente de prueba
 ```
 
-En la terminal 1, escribí `ready` y después `start`. Vas a ver la telemetría
-llegando y validándose.
+En la terminal 1, escribí `ready` y **esperá**: al agotarse la preparación, la
+ronda arranca sola. Vas a ver la telemetría llegando y validándose.
 
 La guía completa, paso a paso y a prueba de principiantes, está en la sección 7
 de [`contrato/CONTRATO.md`](contrato/CONTRATO.md).
@@ -736,7 +789,7 @@ Para ver la imagen que generó:
 .venv/bin/python -m vision.tools.verificar_geometria --salida /tmp/tablero.png --anotar
 ```
 
-### Las cuatro verificaciones contra verdad conocida
+### Las verificaciones contra verdad conocida
 
 Cada etapa tiene la suya. Todas corren **sin cámara** y devuelven código de
 salida distinto de cero si algo se sale de umbral, así que sirven igual para
@@ -747,8 +800,15 @@ mirarlas a mano o para encadenarlas.
 .venv/bin/python -m vision.tools.verificar_rovers         # posición y ángulo
 .venv/bin/python -m vision.tools.verificar_cubos          # color, base y oclusión
 .venv/bin/python -m vision.tools.verificar_seguimiento    # memoria, oclusión y edad
+.venv/bin/python -m vision.tools.verificar_acopio         # ¿el cubo está en su zona?
+.venv/bin/python -m vision.tools.verificar_config         # la configuración declarada
 .venv/bin/python -m vision.tools.medir_desfases --autoprueba
 ```
+
+`verificar_config` es la única que no compara contra la verdad del generador:
+revisa lo que declara la configuración y separa lo **imposible** —que impide
+arrancar— de lo **ajustado**, que avisa y deja seguir. Sale con código distinto
+de cero solo ante errores, nunca ante avisos.
 
 Ese último no es una verificación del sistema sino de **la matemática de la
 herramienta de desfases**: le inyecta un desfase conocido al generador y
@@ -785,20 +845,21 @@ va engrosando. Así siempre hay algo que funciona y se puede verificar.
 
 | Pieza | Qué hace |
 |---|---|
-| **El contrato** (`contrato/`) | Formato definido, validador, simulador con patologías reales, cliente de referencia y manual completo. Protocolo **v1**. |
+| **El contrato** (`contrato/`) | Formato definido, validador, simulador con patologías reales, cliente de referencia y manual completo. Protocolo **v2**: zonas de acopio rectangulares, salida al centro del lado, y la geometría del acopio compartida con los equipos. |
+| **La regla de acopio** (`vision/reglas/`) | Cuenta los cubos completamente dentro de su zona, con permanencia mínima para que el número no titile. El veredicto sale del contrato, así que la pantalla y el rover dicen lo mismo. El conteo **no se publica**, pero cuando están todos, el contador se lo informa al árbitro y **la ronda se cierra sola** con motivo `reto_cumplido`. |
 | **Generador sintético** (`vision/sources/`) | Crea imágenes del tablero con marcadores y rovers, **conociendo la verdad** de lo que dibujó. |
 | **Captura real** (`vision/sources/`) | Lee la webcam USB en un hilo propio que **nunca bloquea**, con exposición, enfoque y balance de blancos fijos —y **verificados por efecto**, porque muchas cámaras aceptan el ajuste y siguen haciendo lo que quieren—. Incluye un menú para elegir qué cámara abrir. |
 | **Geometría de esquinas** (`vision/geometry/`) | Detecta los 4 marcadores y convierte píxeles a celdas. Verificado contra la verdad del generador sintético, con los marcadores de **100 mm** reales: **exacto** con la cámara cenital y **0,44 mm** de error máximo con la cámara inclinada. El centro de cada marcador sale de **cruzar sus diagonales** y no de promediar sus esquinas (ver más abajo). |
-| **Calibración de distorsión** (`vision/geometry/`) | Corrige la curvatura del lente gran angular. **Dos cámaras ya calibradas y verificadas**: ArgomTech CAM40 (1920×1080, 0,314 px) y Logitech C270 (1280×720, 0,206 px). |
+| **Calibración de distorsión** (`vision/geometry/`) | Corrige la curvatura del lente. Hace falta en **toda** cámara, también en las que no son gran angular: la C270 oficial mide 47,1° × 27,6° y distorsiona igual. **Dos cámaras ya calibradas y verificadas**: ArgomTech CAM40 (1920×1080, 0,314 px) y Logitech C270 (1280×720, 0,206 px). |
 | **Perfiles por cámara** (`vision/geometry/`) | Cada aparato guarda su propia calibración, y el sistema **avisa cuando el perfil no le corresponde** a la cámara conectada, en vez de corregir mal en silencio. |
 | **Detección de rovers** (`vision/detectors/`) | Encuentra los rovers por su marcador y deduce su **celda y su ángulo**, calculados en celdas y no en píxeles porque la perspectiva no conserva los ángulos. Verificado contra la verdad del generador: **0,8 mm** de error de posición y **1,3°** de orientación con la cámara inclinada, sobre 36 rovers repartidos. |
 | **Detección de cubos** (`vision/detectors/`) | Encuentra los cubos por color —croma en Lab para separar, matiz para clasificar— y los ubica por su **base**, ajustando el modelo del cubo al contorno visible. **1,05 mm** con el cubo despejado y **4,88 mm** con un rover empujándolo y tapándole el 22 %. |
-| **Pose de cámara y paralaje** (`vision/geometry/`) | La pose sale de los mismos cuatro marcadores, sin declarar nada. Con ella, el corrimiento del marcador del rover baja de **41 mm a 0,9 mm**. |
+| **Pose de cámara y paralaje** (`vision/geometry/`) | La pose sale de los mismos cuatro marcadores, sin declarar nada. Con ella, el corrimiento del marcador del rover baja de **27 mm a 1,0 mm**. |
 | **Seguimiento** (`vision/tracking/`) | Memoria entre cuadros: un objeto tapado conserva su posición y su edad crece, en vez de desaparecer. Acá **no hay problema de asociación**, porque cada objeto trae su identidad. |
 | **Publicación** (`vision/publish/`) | TCP/NDJSON en el 2026, con reloj propio y último-valor-gana. El transporte lo comparte con el simulador. |
 | **El sistema completo** (`vision/sistema.py`) | El programa que se enciende: elige la fuente, corre el bucle, falla abierto y arbitra las fases. |
 | **La vista en vivo** (`vision/vista.py`) | Ventana con la imagen y lo detectado encima, etiquetado con la celda publicada. Es un consumidor: solo lee y no le cuesta nada al procesamiento. |
-| **Herramientas de puesta a punto** (`vision/tools/`) | Nueve: diagnóstico de cámara, generación de los PDF, calibración, medición de precisión, medición de desfases, y cuatro verificaciones contra verdad conocida —geometría, rovers, cubos y seguimiento—. |
+| **Herramientas de puesta a punto** (`vision/tools/`) | Once: diagnóstico de cámara, generación de los PDF, calibración, medición de precisión, medición de desfases, revisión de la configuración, y cinco verificaciones contra verdad conocida —geometría, rovers, cubos, seguimiento y acopio—. |
 
 **Precisión medida sobre hardware real.** El criterio era **error máximo por
 debajo de 10 mm** —un cubo mide 60 mm, así que 10 mm mantiene el objetivo dentro
@@ -816,7 +877,9 @@ ubica bien, así que la cámara se puede elegir por disponibilidad y precio.
 
 El **sistema de visión** está completo y verificado: capta, deduce y publica.
 Fuera de ese alcance quedan dos cosas que no son percepción —el **instalador
-para Windows** y la **grabación de sesiones** (`record/`)— y las **mediciones
+para Windows** y la **grabación de sesiones** para repetirlas sin cámara, que
+todavía no tiene código; el acta de cada ronda, en cambio, ya está en
+`record/`— y las **mediciones
 sobre la cancha montada**, que necesitan el hardware en su lugar definitivo.
 
 Las medidas que todavía no están confirmadas llevan su estado escrito **en la
@@ -840,5 +903,8 @@ configuración**, junto al valor: `vision/config_vision.json` distingue lo
   la disposición exacta de los marcadores, la regla del margen blanco y una
   comprobación para hacer antes de la primera ronda. Pegar los marcadores en otro
   orden rota todas las coordenadas, y el sistema no se queja.
+- **Si vas a correr una ronda:** leé **[`OPERACION.md`](OPERACION.md)**. El ciclo
+  completo, los comandos, por qué el cronómetro no se pausa, las dos guardas que
+  impiden arbitrar a ciegas, los cinco motivos de cierre y qué trae el acta.
 
 El trabajo va en la rama **`desarrollo`**; `main` queda como llegó del fork.

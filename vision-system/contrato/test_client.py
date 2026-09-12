@@ -18,17 +18,27 @@ alguno inválido.
 from __future__ import annotations
 
 import argparse
+import math
 import socket
 import sys
 import time
 from collections.abc import Iterator
 from typing import Any
 
+# `cubo_en_depot` y `geometria_depot` se importan SOLO para el autochequeo del
+# final de este archivo, que compara el veredicto del contrato contra el que se
+# calcula acá a mano. NO son parte del camino que sigue un equipo: el ejemplo
+# que hay que copiar es `cubo_en_su_zona`, escrito sobre el JSON crudo y sin
+# importar nada.
 try:  # como paquete: python -m contrato.test_client
-    from .schema import DEFAULT_PORT, ahora_ms, decodificar_ndjson, validate_message
+    from .schema import (
+        DEFAULT_PORT, ahora_ms, cubo_en_depot, decodificar_ndjson, geometria_depot,
+        validate_message,
+    )
 except ImportError:  # como script suelto: python contrato/test_client.py
     from schema import (  # type: ignore[no-redef]
-        DEFAULT_PORT, ahora_ms, decodificar_ndjson, validate_message,
+        DEFAULT_PORT, ahora_ms, cubo_en_depot, decodificar_ndjson, geometria_depot,
+        validate_message,
     )
 
 
@@ -60,6 +70,86 @@ def leer_lineas(conexion: socket.socket) -> Iterator[str]:
                 yield linea.decode("utf-8")
 
 
+# ==========================================================================
+# ▼▼▼  EJEMPLO PARA COPIAR  ▼▼▼
+#
+# Todo lo que sigue hasta el próximo cartel trabaja sobre el JSON crudo, con la
+# biblioteca estándar y nada más. Es lo que un equipo copia a su rover.
+# ==========================================================================
+
+
+def lado_de_la_zona(depot: dict[str, Any], grid: dict[str, Any]) -> str:
+    """A qué borde de la cancha apoya una zona de acopio.
+
+    La orientación NO viene en el mensaje: se deduce. Cada zona apoya su lado
+    largo sobre el borde más cercano a su centro, y está a 3,75 celdas de ese
+    borde contra 21,5 de los otros, así que no hay ambigüedad.
+    """
+    distancias = {
+        "arriba": depot["row"],
+        "abajo": grid["rows"] - depot["row"],
+        "izquierda": depot["col"],
+        "derecha": grid["cols"] - depot["col"],
+    }
+    return min(distancias, key=lambda lado: distancias[lado])
+
+
+def cubo_en_su_zona(cubo, depot, depot_size, grid, cube_side):
+    """¿El cubo entero está dentro de su zona? Devuelve `(adentro, falta)`.
+
+    `falta` es cuántas celdas hay que moverlo para que entre, y vale 0 si ya
+    está adentro.
+
+    El criterio es **conservador por media diagonal**: el centro del cubo tiene
+    que estar a `cube_side * raíz(2) / 2` de cada borde del rectángulo. Con eso
+    el cubo entero queda adentro **con cualquier rotación**, y por eso alcanza
+    con el centro, que es lo único que el contrato publica: la rotación del cubo
+    no viaja en el mensaje y no hace falta.
+
+    Ojo con el largo y el fondo: `length` es el lado que va PARALELO al borde y
+    `depth` el que entra hacia adentro, así que cuál de los dos corresponde a
+    `col` y cuál a `row` depende del lado donde esté la zona.
+    """
+    lado = lado_de_la_zona(depot, grid)
+    if lado in ("arriba", "abajo"):
+        semi_col = depot_size["length"] / 2.0
+        semi_row = depot_size["depth"] / 2.0
+    else:
+        semi_col = depot_size["depth"] / 2.0
+        semi_row = depot_size["length"] / 2.0
+
+    margen = cube_side * math.sqrt(2.0) / 2.0
+    ventana_col = semi_col - margen
+    ventana_row = semi_row - margen
+
+    exceso_col = max(0.0, abs(cubo["col"] - depot["col"]) - ventana_col)
+    exceso_row = max(0.0, abs(cubo["row"] - depot["row"]) - ventana_row)
+    falta = math.hypot(exceso_col, exceso_row)
+    return falta == 0.0, falta
+
+
+def _reloj(clock: dict[str, Any]) -> str:
+    """El cronómetro del mensaje, en texto.
+
+    `total_ms` en cero significa que no se está contando nada, y por eso no se
+    imprime un "0:00 de 0:00" que parecería una ronda a punto de terminar.
+
+    El tiempo NO se calcula con el reloj de esta máquina: sale tal cual del
+    mensaje, que es el punto del campo. Un cliente que llevara su propio reloj
+    se desviaría del oficial, y uno que se conecta tarde no sabría en qué
+    momento entró.
+    """
+    if not clock["total_ms"]:
+        return "sin cuenta"
+    return "{}  (quedan {})".format(
+        _mmss(clock["elapsed_ms"]), _mmss(clock["remaining_ms"]))
+
+
+def _mmss(ms: int) -> str:
+    segundos = ms // 1000
+    return "{}:{:02d}".format(segundos // 60, segundos % 60)
+
+
 # --------------------------------------------------------------------------
 # Ejemplo de consumo — lo que un equipo haría de verdad
 # --------------------------------------------------------------------------
@@ -82,8 +172,9 @@ def ejemplo_de_consumo(msg: dict[str, Any]) -> list[str]:
     lineas = []
     grid = msg["grid"]
     lineas.append(
-        "cancha: {}x{} celdas de {} mm  |  fase: {}".format(
-            grid["cols"], grid["rows"], grid["cell_mm"], msg["phase"]
+        "cancha: {}x{} celdas de {} mm  |  fase: {}  |  {}".format(
+            grid["cols"], grid["rows"], grid["cell_mm"], msg["phase"],
+            _reloj(msg["clock"]),
         )
     )
 
@@ -98,14 +189,27 @@ def ejemplo_de_consumo(msg: dict[str, Any]) -> list[str]:
             )
         )
 
+    # Los TAMAÑOS se leen del mensaje, igual que la grilla: no se asumen. El
+    # veredicto de "cubo en su zona" depende de los dos.
+    lineas.append(
+        "zona de acopio: {} x {} celdas (largo x fondo)  |  cubo: {} celdas de lado".format(
+            msg["depot_size"]["length"], msg["depot_size"]["depth"], msg["cube_side"]
+        )
+    )
+
     # Cada cubo va al depot de SU color: se cruzan las dos listas por color.
     depots_por_color = {d["color"]: d for d in msg["depots"]}
     for cubo in msg["cubes"]:
         destino = depots_por_color[cubo["color"]]
+        adentro, falta = cubo_en_su_zona(
+            cubo, destino, msg["depot_size"], msg["grid"], msg["cube_side"]
+        )
+        veredicto = "EN POSICIÓN" if adentro else "le falta {:.2f} celdas".format(falta)
         lineas.append(
-            "cubo {:<5} en ({:.2f}, {:.2f}) -> depot ({:.2f}, {:.2f})  age={} ms".format(
-                cubo["color"], cubo["col"], cubo["row"], destino["col"], destino["row"],
-                cubo["age_ms"],
+            "cubo {:<5} en ({:.2f}, {:.2f}) -> zona {} ({:.2f}, {:.2f})  age={} ms  [{}]".format(
+                cubo["color"], cubo["col"], cubo["row"],
+                lado_de_la_zona(destino, msg["grid"]), destino["col"], destino["row"],
+                cubo["age_ms"], veredicto,
             )
         )
 
@@ -116,6 +220,47 @@ def ejemplo_de_consumo(msg: dict[str, Any]) -> list[str]:
         "salida en ({:.2f}, {:.2f})".format(msg["start"]["col"], msg["start"]["row"])
     )
     return lineas
+
+
+# ==========================================================================
+# ▲▲▲  FIN DEL EJEMPLO PARA COPIAR  ▲▲▲
+#
+# Lo que sigue es AUTOCHEQUEO de esta herramienta, no ejemplo para el rover.
+# ==========================================================================
+
+
+def discrepancias_de_acopio(msg: dict[str, Any]) -> list[str]:
+    """Compara el veredicto escrito acá contra el de `schema.py`.
+
+    Son dos implementaciones independientes de la misma regla: la de arriba, que
+    los equipos copian, y la del contrato, que usan el simulador y el sistema de
+    visión. Que coincidan sobre datos reales, mensaje tras mensaje, vale más que
+    cualquier prueba escrita a mano, porque las ejercita justo en los casos que
+    de verdad ocurren —incluido el cubo parado en el borde del criterio—.
+
+    Si alguna vez difieren, el que está mal es el DOCUMENTO además del código:
+    los equipos habrían copiado una regla distinta de la que decide la ronda.
+    """
+    problemas = []
+    depots_por_color = {d["color"]: d for d in msg["depots"]}
+    for cubo in msg["cubes"]:
+        destino = depots_por_color[cubo["color"]]
+        adentro, falta = cubo_en_su_zona(
+            cubo, destino, msg["depot_size"], msg["grid"], msg["cube_side"]
+        )
+        geometria = geometria_depot(
+            col=destino["col"], row=destino["row"],
+            length=msg["depot_size"]["length"], depth=msg["depot_size"]["depth"],
+            cols=msg["grid"]["cols"], rows=msg["grid"]["rows"], cube_side=msg["cube_side"],
+        )
+        veredicto = cubo_en_depot(col=cubo["col"], row=cubo["row"], geometria=geometria)
+        if adentro != veredicto.adentro or abs(falta - veredicto.falta_celdas) > 1e-9:
+            problemas.append(
+                "cubo {}: el ejemplo dice adentro={} falta={:.6f} y el contrato dice "
+                "adentro={} falta={:.6f}".format(
+                    cubo["color"], adentro, falta, veredicto.adentro, veredicto.falta_celdas)
+            )
+    return problemas
 
 
 # --------------------------------------------------------------------------
@@ -130,6 +275,9 @@ class Estadisticas:
         self.recibidos = 0
         self.invalidos = 0
         self.no_parseables = 0
+        #: Veces que el ejemplo de consumo y el contrato dieron veredictos
+        #: distintos sobre el mismo cubo. Tiene que ser 0 siempre.
+        self.discrepancias = 0
         self.seq_anterior: int | None = None
         self.saltos = 0
         self.mensajes_perdidos = 0
@@ -243,6 +391,12 @@ def main(argv: list[str] | None = None) -> int:
 
             stats.registrar(msg, recepcion - msg["ts_ms"])
 
+            for problema in discrepancias_de_acopio(msg):
+                stats.discrepancias += 1
+                stats.registrar_error("veredicto de acopio: " + problema)
+                if not args.silencioso:
+                    print("  [ACOPIO DISCREPA] {}".format(problema))
+
             if primero:
                 primero = False
                 if not args.silencioso:
@@ -269,11 +423,12 @@ def main(argv: list[str] | None = None) -> int:
     print("\n=== resumen final =============================================")
     print("  " + stats.linea_resumen())
     print("  no parseables: {}".format(stats.no_parseables))
+    print("  veredictos de acopio que discrepan del contrato: {}".format(stats.discrepancias))
     if stats.primeros_errores:
         print("  primeros errores:")
         for texto in stats.primeros_errores:
             print("    - {}".format(texto))
-    fallo = stats.invalidos > 0 or stats.no_parseables > 0
+    fallo = stats.invalidos > 0 or stats.no_parseables > 0 or stats.discrepancias > 0
     print("  contrato: {}".format("CON ERRORES" if fallo else "OK, sin errores"))
     print("===============================================================")
     return 1 if fallo else 0

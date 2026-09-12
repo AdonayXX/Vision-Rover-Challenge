@@ -40,6 +40,12 @@ build/
 *.mp4
 *.avi
 grabaciones/
+
+# Actas de ronda. Son el registro de UNA ronda concreta en UNA cancha concreta:
+# datos de competencia, no del repositorio. Con veinte equipos se acumula una
+# por ronda y en un día son cientos. Si alguna hay que conservar —una ronda
+# reclamada, un récord—, se archiva a mano fuera de acá.
+actas/
 calibracion_*.npz
 calibracion_*.yaml
 

@@ -64,6 +64,13 @@ from contrato import schema  # noqa: E402  (después de tocar sys.path, a propó
 #: Las fases que puede tener una ronda. La visión es árbitro y esta es su voz.
 FASES = ("IDLE", "READY", "RUNNING", "FINISHED")
 
+#: La versión del protocolo, reexportada desde el contrato para que el resto de
+#: `vision/` no la escriba a mano. Un "v1" olvidado en un cartel de pantalla
+#: mientras el socket emite v2 es exactamente el tipo de mentira que nadie
+#: revisa. Esta es la única puerta al contrato, así que también es la puerta de
+#: su número de versión.
+VERSION_PROTOCOLO = schema.PROTOCOL_VERSION
+
 
 @dataclass(frozen=True, slots=True)
 class RoverEnMundo:
@@ -93,6 +100,31 @@ class CuboEnMundo:
 
 
 @dataclass(frozen=True, slots=True)
+class RelojRonda:
+    """El cronómetro oficial de la ronda en un instante, en milisegundos.
+
+    Viaja **dentro del estado del mundo**, y no se le pregunta al árbitro desde
+    el publicador. El estado es lo único que cruza de productores a consumidores
+    (CLAUDE.md, sección 3), y abrir una segunda vía obligaría a poner candados
+    donde hoy no hacen falta: el publicador corre en otro hilo.
+
+    Los tres valores son del **mismo instante** que el `ts_ms` del estado que los
+    lleva, así que un cliente resuelve con **un** mensaje y sin memoria en qué
+    punto de la ronda está. Se publican los tres, en vez de uno y una resta,
+    porque cada fase tiene una pregunta distinta: en READY interesa cuánto falta
+    para moverse, en RUNNING cuánto queda, y al terminar interesa **cuánto
+    tardó**, que es `transcurrido_ms`.
+
+    `total_ms` en cero significa que **no se está contando nada**: es lo que
+    distingue "esta fase no cuenta" de "cuenta y va en cero".
+    """
+
+    transcurrido_ms: int = 0
+    restante_ms: int = 0
+    total_ms: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class EstadoMundo:
     """La cancha en un instante. Inmutable, y lo único que cruza al otro lado.
 
@@ -104,6 +136,9 @@ class EstadoMundo:
 
     ts_ms: int
     fase: str
+    #: El cronómetro oficial en este instante. Viaja acá adentro y no se le
+    #: pregunta al árbitro desde el publicador: el estado es lo único que cruza.
+    reloj: RelojRonda = RelojRonda()
     rovers: tuple[RoverEnMundo, ...] = ()
     cubos: tuple[CuboEnMundo, ...] = ()
 
@@ -125,14 +160,30 @@ def a_mensaje(estado: EstadoMundo, cfg: ConfigVision, seq: int) -> schema.Mensaj
     `obstacles` sale siempre como lista vacía: esta edición del reto no los usa.
     El campo sigue existiendo y sigue siendo una lista, así que **no es un cambio
     de contrato** y ningún equipo tiene que tocar nada.
+
+    `depot_size` y `cube_side` salen de la configuración y viajan **en celdas**,
+    como toda longitud del mensaje. Se publican en vez de dejarlos como constante
+    del documento porque el veredicto de "cubo completamente dentro de su zona"
+    depende de los dos, y un número copiado a mano por el equipo no se puede
+    verificar contra lo que la cancha está publicando.
     """
+    cell_mm = cfg.tablero.cell_mm
+    tamano = cfg.lugares.tamano_deposito
     return schema.Mensaje(
         seq=seq,
         ts_ms=estado.ts_ms,
         phase=estado.fase,
         grid=schema.Grid(cols=cfg.tablero.cols, rows=cfg.tablero.rows,
-                         cell_mm=cfg.tablero.cell_mm),
+                         cell_mm=cell_mm),
         start=schema.Start(col=cfg.lugares.start_col, row=cfg.lugares.start_row),
+        depot_size=schema.DepotSize(length=tamano.largo_mm / cell_mm,
+                                    depth=tamano.fondo_mm / cell_mm),
+        cube_side=cfg.elementos.cubos.lado_mm / cell_mm,
+        clock=schema.Clock(
+            elapsed_ms=estado.reloj.transcurrido_ms,
+            remaining_ms=estado.reloj.restante_ms,
+            total_ms=estado.reloj.total_ms,
+        ),
         depots=tuple(
             schema.Depot(color=d.color, col=d.col, row=d.row) for d in cfg.lugares.depositos
         ),

@@ -5,11 +5,15 @@ contrato. Es la única pieza del sistema que los equipos ven.
 
 ## Estado: publicando
 
-**Todavía no hay código acá.** Pero el comportamiento **ya está implementado y
-probado** en el simulador del contrato
-([`../../contrato/mock_publisher.py`](../../contrato/mock_publisher.py)), que
-publica exactamente el mismo formato con la misma política. Cuando se escriba
-esta pieza, el simulador es la referencia a seguir.
+| Archivo | Qué hace |
+|---|---|
+| [`telemetria.py`](telemetria.py) | El reloj de publicación, el contador de secuencia y la casilla del último estado bueno |
+| [`puerto.py`](puerto.py) | Deja el 2026 libre antes de abrirlo, terminando a quien lo tenga tomado |
+
+El simulador del contrato
+([`../../contrato/mock_publisher.py`](../../contrato/mock_publisher.py)) publica
+el mismo formato con la misma política, y sigue siendo la referencia: los dos
+comparten el transporte, así que no pueden divergir.
 
 ## Lo que ya existe
 
@@ -64,6 +68,33 @@ competencia.
 
 Lo que sí está acá es lo propio de este lado: el **reloj de publicación**, el
 **contador de secuencia** y la **casilla del último estado bueno**.
+
+### El puerto se reclama, no se pide
+
+El 2026 es **oficial y no se cambia**, así que es un recurso único: si algo lo
+tiene tomado, la visión no puede publicar. Antes eso hacía fallar el `bind()` con
+`Address already in use` y **moría el arranque entero**.
+
+Ahora [`puerto.py`](puerto.py) lo libera primero: averigua qué proceso lo escucha,
+le pide terminar, y si no suelta lo mata. Después arranca el publicador. En el
+caso normal —puerto libre— no hace nada y no cuesta nada.
+
+En todo el proyecto hay **dos** programas que abren el 2026, y los dos son
+nuestros: otra instancia de la visión que quedó viva, o el simulador, que usa el
+mismo puerto a propósito y por eso es mutuamente excluyente con ella. Por eso
+terminar al ocupante es aceptable, y por eso se anuncia por pantalla con nombre y
+PID en vez de hacerse en silencio.
+
+**No va en `contrato/publicador.py`** aunque el `bind()` viva ahí. Dos motivos: el
+contrato se entrega suelto a los equipos y matar procesos no es asunto suyo; y si
+fuera compartido, el simulador también mataría a la visión, y dos programas que se
+apagan mutuamente al arrancar son peor que el problema original. **La visión
+reclama el puerto; el simulador sigue siendo educado.**
+
+Dos salvaguardas: solo se termina a quien **escucha** el puerto —nunca a un
+cliente conectado, que sería matar a un rover consumiendo telemetría— y nunca a
+uno mismo. Se apaga con `publicacion.liberar_puerto_al_arrancar` en `false`, que
+es lo correcto en una máquina compartida.
 
 ### Los dos relojes
 

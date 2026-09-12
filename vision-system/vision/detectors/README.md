@@ -21,19 +21,19 @@ toda la cancha.
 
 #### Cómo se separan los rovers de las esquinas
 
-No hay una lista de "IDs de rover". La regla es al revés: **es rover todo
-marcador que no sea una esquina**, y las esquinas son las que declara
-`marcadores_esquina.disposicion` en la configuración.
+**Es rover solo el ID que esté en `deteccion_rovers.ids_rover`** —hoy el 10 y el
+11—. Lo que no está en esa lista se descarta, y se informa en pantalla para que
+un robot que alguien pegó y nadie declaró se vea en vez de desaparecer en
+silencio.
 
-Una lista de rovers habría que mantenerla sincronizada con los marcadores que se
-peguen de verdad, y el día que no lo estuviera, un rover dejaría de existir sin
-que nada avisara. Con esta regla, un marcador nuevo aparece solo.
+La regla era la contraria: "es rover todo marcador que no sea una esquina", para
+que un marcador nuevo apareciera solo sin tener que mantener una lista. **La
+cancha real la desmintió.** El detector inventa marcadores sobre la cuadrícula
+del tablero —medido: entre 28 y 54 por minuto, con doce IDs distintos— y con la
+regla abierta cada uno de esos fantasmas nacía como un rover nuevo.
 
-La única excepción es `ids_ignorados`, que **arranca vacío**. Existe para un caso
-concreto: el marcador ID 20 de la prueba de precisión es un objeto físico real y
-podría quedar olvidado sobre la cancha. Arranca vacío porque descartar en
-silencio un marcador que sí es un rover es peor que reportar uno de más, que al
-menos se ve.
+`ids_ignorados` sobrevive de aquella época y **arranca vacío**: con la lista
+blanca casi no hace falta, porque lo que no está declarado ya se descarta.
 
 #### Por qué todo se calcula en celdas y no en píxeles
 
@@ -53,15 +53,15 @@ en todo el sistema.
 
 #### El paralaje no afecta la orientación
 
-El marcador del rover está a 90 mm sobre el tablero, así que no está en el plano
+El marcador del rover está a 80 mm sobre el tablero, así que no está en el plano
 que define la homografía y aparece **corrido hacia afuera**. Pero como su plano
 es **paralelo** al del tablero, esa deformación es una homotecia —un
 agrandamiento alrededor del punto que está bajo la cámara— y una homotecia
 **conserva las direcciones**.
 
 Consecuencia práctica, ya medida: la corrección de paralaje —que **ya existe**,
-en [`../geometry/`](../geometry/README.md)— baja el error de posición de 41 mm a
-0,9 mm y **deja la orientación igual**. Se le pasa a `detectar_rovers` como
+en [`../geometry/`](../geometry/README.md)— baja el error de posición de 27 mm a
+1,0 mm y **deja la orientación igual**. Se le pasa a `detectar_rovers` como
 `pose_de_camara`.
 
 Es opcional a propósito, y no un descuido: hay un caso legítimo sin pose —

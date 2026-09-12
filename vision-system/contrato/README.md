@@ -55,7 +55,9 @@ python3 test_client.py        # terminal 2: el cliente de prueba
 
 En Windows, cambiá `python3` por `python`.
 
-Después escribí `ready` y luego `start` en la terminal 1.
+Después escribí `ready` en la terminal 1 y **esperá**: de `READY` a `RUNNING`
+pasa el reloj solo, al agotarse la preparación. Los comandos son `ready`,
+`stop`, `abort` y `quit`; no hay ninguno para arrancar la ronda.
 
 > Si algo de esto falla, **no improvises**: la sección 7 de
 > [`CONTRATO.md`](CONTRATO.md) tiene la guía completa y una lista de problemas

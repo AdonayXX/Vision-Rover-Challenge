@@ -56,7 +56,8 @@ PERIODO_MS = 50  # tiempo simulado entre cuadros
 def un_cuadro(cfg, seguidor, ts_ms, rovers, cubos, persp):
     """Genera un cuadro, lo procesa entero y se lo da al seguidor."""
     imagen, verdad = generar(cfg, rovers=rovers, cubos=cubos, perspectiva=persp)
-    detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario)
+    detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario,
+                                     cfg.deteccion_marcadores.refinamiento_esquinas)
     sistema = construir_sistema(imagen, cfg, detectados)
     pose = pose_camara(sistema, verdad.camara.matriz)
     return seguidor.actualizar(

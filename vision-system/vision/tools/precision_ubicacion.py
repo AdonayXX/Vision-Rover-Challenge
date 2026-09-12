@@ -195,7 +195,8 @@ def _posicion_marcador(imagen, cfg, id_prueba):
     depende de dónde caiga el marcador en el cuadro, así que **no se cancela** al
     restar las dos posiciones de una medición, que es de lo que vive esta prueba.
     """
-    detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario)
+    detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario,
+                                     cfg.deteccion_marcadores.refinamiento_esquinas)
     if id_prueba not in detectados:
         return None, detectados
     return np.array(centro_de(detectados[id_prueba]), dtype=np.float64), detectados

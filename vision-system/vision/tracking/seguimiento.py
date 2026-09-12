@@ -52,13 +52,13 @@ try:  # como paquete
     from ..configuracion import ConfigVision
     from ..detectors.cubos import CuboDetectado
     from ..detectors.rovers import RoverDetectado
-    from ..mundo import CuboEnMundo, EstadoMundo, RoverEnMundo
+    from ..mundo import CuboEnMundo, EstadoMundo, RelojRonda, RoverEnMundo
 except ImportError:  # como script suelto
     from vision.configuracion import ConfigVision  # type: ignore[no-redef]
     from vision.detectors.cubos import CuboDetectado  # type: ignore[no-redef]
     from vision.detectors.rovers import RoverDetectado  # type: ignore[no-redef]
     from vision.mundo import (  # type: ignore[no-redef]
-        CuboEnMundo, EstadoMundo, RoverEnMundo,
+        CuboEnMundo, EstadoMundo, RelojRonda, RoverEnMundo,
     )
 
 
@@ -105,6 +105,7 @@ class Seguidor:
         fase: str,
         rovers: tuple[RoverDetectado, ...],
         cubos: tuple[CuboDetectado, ...],
+        reloj: RelojRonda = RelojRonda(),
     ) -> EstadoMundo:
         """Incorpora las detecciones de un cuadro y produce el estado del mundo."""
         vistos_rover = {r.id for r in rovers}
@@ -125,6 +126,7 @@ class Seguidor:
         return EstadoMundo(
             ts_ms=ts_ms,
             fase=fase,
+            reloj=reloj,
             rovers=tuple(
                 RoverEnMundo(id=id_rover, col=r.col, row=r.row,
                              theta_grados=r.theta_grados, age_ms=max(0, ts_ms - r.ts_ms))
@@ -152,6 +154,18 @@ class Seguidor:
             for k in viejos:
                 del memoria[k]
                 self.barridos += 1
+
+    def ultimas_poses_rover(self) -> dict[int, tuple[float, float]]:
+        """La última posición buena de cada rover, en celdas.
+
+        La usa la resolución de IDs duplicados: cuando dos marcadores dicen ser
+        el rover 10, el que está cerca de donde el rover 10 estaba hace 33 ms es
+        el rover 10, y el que apareció en la otra punta de la cancha es un
+        fantasma. Es la misma memoria que ya existe para la edad —no se guarda
+        nada nuevo—, y por eso vive acá y no en el detector: el detector mira un
+        cuadro y no sabe nada del anterior.
+        """
+        return {id_rover: (r.col, r.row) for id_rover, r in self._rovers.items()}
 
     @property
     def edades_ms(self) -> dict[str, int]:

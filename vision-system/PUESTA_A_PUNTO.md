@@ -51,9 +51,10 @@ error acá, no sigas: el problema es la instalación, no tu cámara.
 
 ## 1. Qué vas a hacer, y por qué
 
-Toda cámara con lente ancho **curva las líneas rectas**. Es física del lente, no
-un defecto: mirá una foto tuya con gran angular y vas a ver los bordes
-combados.
+**Toda** cámara curva las líneas rectas. Es física del lente, no un defecto: se
+ve exagerado en una foto con gran angular, donde los bordes quedan combados,
+pero pasa también en las que no lo son —la Logitech C270 del reto mide 47,1° ×
+27,6° y distorsiona igual—. Por eso hay que calibrar la tuya, sea cual sea.
 
 Eso es un problema para nosotros, porque el sistema calcula dónde está cada
 cosa **suponiendo que las líneas rectas se ven rectas**. Si el lente las curva,
@@ -492,7 +493,96 @@ ven con `--historial`.
 
 ---
 
-## 7. Si algo sale mal
+## 7. Los marcadores que el sistema inventa
+
+Con la cancha montada y la cámara puesta, el sistema **encuentra marcadores
+ArUco donde no hay ninguno**. No es un defecto de tu cámara ni algo que hayas
+hecho mal: el tablero está cubierto de una cuadrícula fina de blanco y negro,
+que es exactamente la materia prima con la que se dibuja un código ArUco, y de
+tanto en tanto un recorte de esa cuadrícula se parece lo suficiente a un código
+válido.
+
+### 7.1 — Cuántos son, y cómo se reconocen
+
+Medido sobre la cancha real, en corridas de dos minutos:
+
+| | |
+|---|---|
+| Cuántos | entre **28 y 54 por minuto**, según la luz y la escena |
+| Cuánto miden | **13 a 18 mm** de lado, siempre |
+| Cuánto duran | **1 o 2 cuadros**, y saltan a otro lado |
+| Dónde caen | sobre todo en la **franja del borde del tablero** |
+
+Compará con un marcador de verdad: el de una esquina mide **100 mm** y el del
+rover **40**, y se detectan **cuadro tras cuadro sin interrumpirse** —medido:
+3095 cuadros seguidos—. Un fantasma no se parece en nada a eso, y en esa
+diferencia se apoyan las defensas del sistema.
+
+### 7.2 — Qué hace el sistema, sin que tengas que tocar nada
+
+Antes que nada, **afina las esquinas**: el refinamiento subpíxel corrige el sesgo
+con que se localizan, y es lo que hace confiable la medida de tamaño en la que se
+apoya todo lo demás. Sin él, el marcador del rover se medía 39,2 mm contra 41,6
+esperados; con él, la dispersión de cada esquina cae a un tercio. Se activa en
+`deteccion_marcadores.refinamiento_esquinas` y ya viene puesto.
+
+Después:
+
+1. **Los mide.** Con la homografía sabe cuánto mide cada marcador detectado
+   **en milímetros sobre el tablero**, y rechaza lo que no se parezca al tamaño
+   que corresponde a ese ID. El tamaño esperado no está escrito a mano: se
+   deriva de la medida del marcador y de la altura a la que está montado.
+2. **Los ubica.** Lo que caiga fuera de la cancha, con un margen, no puede ser
+   un marcador y se descarta.
+3. **Resuelve las colisiones.** El caso peligroso es un fantasma que decodifica
+   con el ID de un marcador de verdad: no se suma, **compite** con él. El
+   sistema mide los dos candidatos y se queda con el que se parece al marcador
+   que espera; si no puede decidir, descarta el cuadro y conserva el último
+   estado bueno.
+4. **Les exige que se sostengan.** Un robot que entra a la cancha tiene que
+   verse **5 cuadros seguidos** —unos 166 ms— antes de que el sistema acepte que
+   existe. Un fantasma no lo consigue: dura 1 o 2 cuadros y salta a otro lado.
+   Lo vas a notar una sola vez, al poner el robot: después, aunque se tape y
+   reaparezca, entra de inmediato, porque ya está en la memoria del sistema.
+
+Las tres primeras dependen de umbrales medidos **en esta cancha, con esta luz y
+esta altura de cámara**; la cuarta no depende de ninguno, y por eso está.
+
+### 7.3 — Qué mirar vos
+
+En la línea de estado que el sistema imprime cada cinco segundos:
+
+```
+[estado] fase=IDLE cuadros=3001 fallos=1 ... duplicados=26 rechazados=100
+```
+
+- **`rechazados`** son los fantasmas que el filtro atajó. Que suba es normal.
+- **`duplicados`** son las veces que un fantasma tomó el ID de un marcador real.
+
+Si además aparece un aviso diciendo que se rechazó un marcador **del tamaño
+correcto**, prestale atención: eso ya no es un fantasma de la cuadrícula.
+
+### 7.4 — Si los números se disparan
+
+| Qué ves | Qué probar |
+|---|---|
+| Muchos más rechazos que de costumbre | Mirá la luz: un reflejo fuerte sobre el tablero multiplica los fantasmas |
+| Se concentran en una zona | Es un rasgo físico de ahí —un borde, una sombra, un brillo—: tapalo o corré la luz |
+| El sistema descarta cuadros por no poder decidir | Avisá: significa que hay dos candidatos igual de plausibles para un mismo ID |
+
+Para medirlos vos mismo, con la cancha vacía y dos minutos:
+
+```bash
+.venv/bin/python -m vision.tools.diagnostico_falsos_positivos --minutos 2 --guardar
+```
+
+Te informa cuántos hubo, de qué tamaño, cuánto duraron y en qué zona del tablero
+cayeron, y con `--guardar` deja los datos crudos en `vision/mediciones/` para
+poder compararlos con los de otro día.
+
+---
+
+## 8. Si algo sale mal
 
 | Síntoma | Causa más probable | Qué hacer |
 |---|---|---|
@@ -504,6 +594,7 @@ ven con `--historial`.
 | La calibración da **MALA** y el patrón está plano | Poca variedad de vistas | Repetí cubriendo las nueve zonas y las cuatro inclinaciones |
 | A la derecha se ve **peor** que a la izquierda | Cargaste el perfil de otra cámara | Poné tu nombre exacto en `--camara` |
 | `faltan marcadores de esquina` | Uno tapado, cortado o mal iluminado | Ver [`MONTAJE.md`](MONTAJE.md), sección 2 |
+| **No me deja preparar la ronda** (apretás `r` y no pasa nada) | O no se ven las coordenadas, o el perfil cargado no es el de esta cámara | El panel dice cuál de las dos. Ver [`OPERACION.md`](OPERACION.md), sección 4 |
 
 **Regla general:** si un paso no da lo que este manual dice que tiene que dar,
 **no sigas al siguiente**. Cada paso se apoya en el anterior, y un error
@@ -519,6 +610,7 @@ curiosidad o si algo no salió como esperabas.
 | Si querés saber… | Leé |
 |---|---|
 | Dónde va cada marcador y por qué el orden importa | [`MONTAJE.md`](MONTAJE.md) |
+| Cómo se corre una ronda: comandos, cronómetro, guardas y acta | [`OPERACION.md`](OPERACION.md) |
 | Todas las opciones de cada herramienta, y el porqué de cada decisión | [`vision/tools/README.md`](vision/tools/README.md) |
 | Cómo funciona por dentro el sistema de perfiles y la corrección del lente | [`vision/geometry/README.md`](vision/geometry/README.md) |
 | Cómo elige el sistema qué cámara abrir | [`vision/sources/README.md`](vision/sources/README.md) |

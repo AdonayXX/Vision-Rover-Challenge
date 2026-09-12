@@ -1,0 +1,940 @@
+{
+ "cuando": "2026-09-11T19:31:33",
+ "nota": "CENSO CON TABLERO VACÍO, con la altura del marcador ya corregida a 80 mm. Se había planificado como la medición del rover en cinco posiciones, pero el rover NO estuvo en la cancha en ningún momento: cero detecciones del marcador legítimo en 2828 cuadros. Las 19 apariciones del ID 10 son fantasmas, de 13,3 a 17,4 mm. Queda como tercer censo del tablero vacío; la medición de las cinco posiciones está pendiente.",
+ "sintetico": false,
+ "duracion_s": 120.1,
+ "cuadros": 2828,
+ "cuadros_sin_geometria": 25,
+ "diccionario": "DICT_4X4_50",
+ "cancha": {
+  "cols": 43,
+  "rows": 43,
+  "cell_mm": 20.0
+ },
+ "esperado_mm": {
+  "esquina": 100.0,
+  "rover_nominal": 40.0,
+  "factor_paralaje_mediano": 1.0404
+ },
+ "detecciones": [
+  {
+   "cuadro": 39,
+   "id": 37,
+   "grupo": "falso",
+   "col": 4.0288,
+   "row": 40.0051,
+   "lado_mm": 13.893,
+   "cuadratura_pct": 19.42
+  },
+  {
+   "cuadro": 64,
+   "id": 37,
+   "grupo": "falso",
+   "col": 28.0512,
+   "row": 36.0184,
+   "lado_mm": 13.35,
+   "cuadratura_pct": 10.143
+  },
+  {
+   "cuadro": 98,
+   "id": 37,
+   "grupo": "falso",
+   "col": 30.0204,
+   "row": 37.9887,
+   "lado_mm": 16.832,
+   "cuadratura_pct": 0.86
+  },
+  {
+   "cuadro": 102,
+   "id": 17,
+   "grupo": "falso",
+   "col": 43.0277,
+   "row": 20.9916,
+   "lado_mm": 14.102,
+   "cuadratura_pct": 0.795
+  },
+  {
+   "cuadro": 131,
+   "id": 10,
+   "grupo": "falso",
+   "col": 8.9693,
+   "row": 0.9126,
+   "lado_mm": 13.873,
+   "cuadratura_pct": 0.484
+  },
+  {
+   "cuadro": 134,
+   "id": 10,
+   "grupo": "falso",
+   "col": 12.0042,
+   "row": 34.009,
+   "lado_mm": 17.367,
+   "cuadratura_pct": 7.94
+  },
+  {
+   "cuadro": 170,
+   "id": 37,
+   "grupo": "falso",
+   "col": 28.0395,
+   "row": 37.982,
+   "lado_mm": 13.7,
+   "cuadratura_pct": 10.407
+  },
+  {
+   "cuadro": 185,
+   "id": 10,
+   "grupo": "falso",
+   "col": 9.9798,
+   "row": 34.0371,
+   "lado_mm": 17.361,
+   "cuadratura_pct": 7.912
+  },
+  {
+   "cuadro": 195,
+   "id": 37,
+   "grupo": "falso",
+   "col": 42.987,
+   "row": 8.9346,
+   "lado_mm": 13.359,
+   "cuadratura_pct": 11.604
+  },
+  {
+   "cuadro": 244,
+   "id": 37,
+   "grupo": "falso",
+   "col": 21.0248,
+   "row": 44.9765,
+   "lado_mm": 16.78,
+   "cuadratura_pct": 0.879
+  },
+  {
+   "cuadro": 268,
+   "id": 37,
+   "grupo": "falso",
+   "col": 27.06,
+   "row": 18.9294,
+   "lado_mm": 17.166,
+   "cuadratura_pct": 16.595
+  },
+  {
+   "cuadro": 288,
+   "id": 37,
+   "grupo": "falso",
+   "col": 21.9975,
+   "row": -2.0271,
+   "lado_mm": 13.696,
+   "cuadratura_pct": 28.996
+  },
+  {
+   "cuadro": 308,
+   "id": 37,
+   "grupo": "falso",
+   "col": 27.0206,
+   "row": 42.9901,
+   "lado_mm": 16.814,
+   "cuadratura_pct": 0.89
+  },
+  {
+   "cuadro": 333,
+   "id": 34,
+   "grupo": "falso",
+   "col": 36.075,
+   "row": 5.9422,
+   "lado_mm": 17.163,
+   "cuadratura_pct": 8.093
+  },
+  {
+   "cuadro": 388,
+   "id": 8,
+   "grupo": "falso",
+   "col": 9.998,
+   "row": 40.0237,
+   "lado_mm": 13.669,
+   "cuadratura_pct": 11.176
+  },
+  {
+   "cuadro": 403,
+   "id": 37,
+   "grupo": "falso",
+   "col": 20.0196,
+   "row": 41.9241,
+   "lado_mm": 13.743,
+   "cuadratura_pct": 11.818
+  },
+  {
+   "cuadro": 499,
+   "id": 37,
+   "grupo": "falso",
+   "col": 19.029,
+   "row": 40.9719,
+   "lado_mm": 13.683,
+   "cuadratura_pct": 10.137
+  },
+  {
+   "cuadro": 576,
+   "id": 10,
+   "grupo": "falso",
+   "col": 33.9936,
+   "row": 44.008,
+   "lado_mm": 16.867,
+   "cuadratura_pct": 0.997
+  },
+  {
+   "cuadro": 579,
+   "id": 37,
+   "grupo": "falso",
+   "col": 26.0165,
+   "row": 39.9682,
+   "lado_mm": 13.363,
+   "cuadratura_pct": 10.493
+  },
+  {
+   "cuadro": 589,
+   "id": 10,
+   "grupo": "falso",
+   "col": 9.0033,
+   "row": 44.9945,
+   "lado_mm": 13.982,
+   "cuadratura_pct": 0.633
+  },
+  {
+   "cuadro": 613,
+   "id": 10,
+   "grupo": "falso",
+   "col": 30.0365,
+   "row": 29.974,
+   "lado_mm": 13.687,
+   "cuadratura_pct": 10.192
+  },
+  {
+   "cuadro": 619,
+   "id": 37,
+   "grupo": "falso",
+   "col": 18.0498,
+   "row": 41.9496,
+   "lado_mm": 13.299,
+   "cuadratura_pct": 10.944
+  },
+  {
+   "cuadro": 639,
+   "id": 10,
+   "grupo": "falso",
+   "col": 19.9891,
+   "row": 3.9289,
+   "lado_mm": 13.652,
+   "cuadratura_pct": 19.818
+  },
+  {
+   "cuadro": 790,
+   "id": 37,
+   "grupo": "falso",
+   "col": 43.0152,
+   "row": 8.9435,
+   "lado_mm": 13.368,
+   "cuadratura_pct": 11.589
+  },
+  {
+   "cuadro": 803,
+   "id": 5,
+   "grupo": "falso",
+   "col": 4.0354,
+   "row": 44.0381,
+   "lado_mm": 14.588,
+   "cuadratura_pct": 10.018
+  },
+  {
+   "cuadro": 816,
+   "id": 21,
+   "grupo": "falso",
+   "col": 4.0056,
+   "row": -0.0173,
+   "lado_mm": 13.83,
+   "cuadratura_pct": 0.61
+  },
+  {
+   "cuadro": 816,
+   "id": 34,
+   "grupo": "falso",
+   "col": 22.0252,
+   "row": 40.0267,
+   "lado_mm": 17.133,
+   "cuadratura_pct": 8.258
+  },
+  {
+   "cuadro": 866,
+   "id": 17,
+   "grupo": "falso",
+   "col": -0.0548,
+   "row": 22.0076,
+   "lado_mm": 16.914,
+   "cuadratura_pct": 8.134
+  },
+  {
+   "cuadro": 890,
+   "id": 10,
+   "grupo": "falso",
+   "col": 43.0665,
+   "row": 24.9916,
+   "lado_mm": 17.255,
+   "cuadratura_pct": 9.04
+  },
+  {
+   "cuadro": 914,
+   "id": 10,
+   "grupo": "falso",
+   "col": 16.0299,
+   "row": 37.9961,
+   "lado_mm": 13.631,
+   "cuadratura_pct": 10.139
+  },
+  {
+   "cuadro": 922,
+   "id": 37,
+   "grupo": "falso",
+   "col": 0.0002,
+   "row": 38.0184,
+   "lado_mm": 13.869,
+   "cuadratura_pct": 19.183
+  },
+  {
+   "cuadro": 950,
+   "id": 37,
+   "grupo": "falso",
+   "col": 27.0447,
+   "row": 35.0151,
+   "lado_mm": 16.797,
+   "cuadratura_pct": 0.678
+  },
+  {
+   "cuadro": 973,
+   "id": 10,
+   "grupo": "falso",
+   "col": 13.038,
+   "row": 39.017,
+   "lado_mm": 13.297,
+   "cuadratura_pct": 10.165
+  },
+  {
+   "cuadro": 1071,
+   "id": 10,
+   "grupo": "falso",
+   "col": 36.9756,
+   "row": 42.9807,
+   "lado_mm": 16.88,
+   "cuadratura_pct": 0.807
+  },
+  {
+   "cuadro": 1131,
+   "id": 17,
+   "grupo": "falso",
+   "col": 23.0473,
+   "row": 22.9676,
+   "lado_mm": 17.091,
+   "cuadratura_pct": 8.118
+  },
+  {
+   "cuadro": 1147,
+   "id": 37,
+   "grupo": "falso",
+   "col": 45.0142,
+   "row": 21.0337,
+   "lado_mm": 13.771,
+   "cuadratura_pct": 10.984
+  },
+  {
+   "cuadro": 1214,
+   "id": 32,
+   "grupo": "falso",
+   "col": 27.0247,
+   "row": 42.9901,
+   "lado_mm": 16.821,
+   "cuadratura_pct": 0.967
+  },
+  {
+   "cuadro": 1251,
+   "id": 37,
+   "grupo": "falso",
+   "col": 18.0441,
+   "row": 41.9358,
+   "lado_mm": 13.287,
+   "cuadratura_pct": 10.956
+  },
+  {
+   "cuadro": 1293,
+   "id": 37,
+   "grupo": "falso",
+   "col": 24.0379,
+   "row": 35.9594,
+   "lado_mm": 13.306,
+   "cuadratura_pct": 10.977
+  },
+  {
+   "cuadro": 1312,
+   "id": 10,
+   "grupo": "falso",
+   "col": 34.9743,
+   "row": 44.9552,
+   "lado_mm": 16.859,
+   "cuadratura_pct": 0.98
+  },
+  {
+   "cuadro": 1365,
+   "id": 37,
+   "grupo": "falso",
+   "col": 28.0043,
+   "row": 44.0002,
+   "lado_mm": 13.394,
+   "cuadratura_pct": 10.317
+  },
+  {
+   "cuadro": 1499,
+   "id": 13,
+   "grupo": "falso",
+   "col": 3.9972,
+   "row": 40.0084,
+   "lado_mm": 13.904,
+   "cuadratura_pct": 19.375
+  },
+  {
+   "cuadro": 1532,
+   "id": 10,
+   "grupo": "falso",
+   "col": 23.9905,
+   "row": 43.9766,
+   "lado_mm": 16.806,
+   "cuadratura_pct": 0.872
+  },
+  {
+   "cuadro": 1556,
+   "id": 37,
+   "grupo": "falso",
+   "col": 30.0159,
+   "row": 41.9887,
+   "lado_mm": 16.847,
+   "cuadratura_pct": 0.98
+  },
+  {
+   "cuadro": 1566,
+   "id": 10,
+   "grupo": "falso",
+   "col": 29.0246,
+   "row": 4.9355,
+   "lado_mm": 13.317,
+   "cuadratura_pct": 9.7
+  },
+  {
+   "cuadro": 1618,
+   "id": 37,
+   "grupo": "falso",
+   "col": 18.0317,
+   "row": 41.9395,
+   "lado_mm": 13.3,
+   "cuadratura_pct": 10.945
+  },
+  {
+   "cuadro": 1632,
+   "id": 34,
+   "grupo": "falso",
+   "col": 32.0187,
+   "row": 11.9657,
+   "lado_mm": 14.05,
+   "cuadratura_pct": 0.709
+  },
+  {
+   "cuadro": 1661,
+   "id": 37,
+   "grupo": "falso",
+   "col": 18.0544,
+   "row": 41.9503,
+   "lado_mm": 13.295,
+   "cuadratura_pct": 10.947
+  },
+  {
+   "cuadro": 1662,
+   "id": 37,
+   "grupo": "falso",
+   "col": 42.038,
+   "row": 17.9946,
+   "lado_mm": 14.124,
+   "cuadratura_pct": 0.906
+  },
+  {
+   "cuadro": 1687,
+   "id": 37,
+   "grupo": "falso",
+   "col": 26.0285,
+   "row": 41.9798,
+   "lado_mm": 13.382,
+   "cuadratura_pct": 10.508
+  },
+  {
+   "cuadro": 1706,
+   "id": 38,
+   "grupo": "falso",
+   "col": 27.0654,
+   "row": 18.9258,
+   "lado_mm": 16.787,
+   "cuadratura_pct": 15.953
+  },
+  {
+   "cuadro": 1706,
+   "id": 37,
+   "grupo": "falso",
+   "col": 27.0021,
+   "row": 38.9565,
+   "lado_mm": 13.355,
+   "cuadratura_pct": 10.975
+  },
+  {
+   "cuadro": 1742,
+   "id": 37,
+   "grupo": "falso",
+   "col": 20.0656,
+   "row": 31.9767,
+   "lado_mm": 13.653,
+   "cuadratura_pct": 10.139
+  },
+  {
+   "cuadro": 1764,
+   "id": 37,
+   "grupo": "falso",
+   "col": 24.0191,
+   "row": 38.016,
+   "lado_mm": 13.677,
+   "cuadratura_pct": 10.163
+  },
+  {
+   "cuadro": 1794,
+   "id": 37,
+   "grupo": "falso",
+   "col": 27.0026,
+   "row": 42.9676,
+   "lado_mm": 16.797,
+   "cuadratura_pct": 0.74
+  },
+  {
+   "cuadro": 1801,
+   "id": 10,
+   "grupo": "falso",
+   "col": 23.0354,
+   "row": 40.9453,
+   "lado_mm": 13.679,
+   "cuadratura_pct": 10.155
+  },
+  {
+   "cuadro": 1862,
+   "id": 37,
+   "grupo": "falso",
+   "col": 45.0226,
+   "row": 23.0254,
+   "lado_mm": 16.891,
+   "cuadratura_pct": 0.971
+  },
+  {
+   "cuadro": 1885,
+   "id": 37,
+   "grupo": "falso",
+   "col": 11.9813,
+   "row": 19.9289,
+   "lado_mm": 17.691,
+   "cuadratura_pct": 8.1
+  },
+  {
+   "cuadro": 1890,
+   "id": 37,
+   "grupo": "falso",
+   "col": 24.9789,
+   "row": 36.9975,
+   "lado_mm": 13.678,
+   "cuadratura_pct": 10.328
+  },
+  {
+   "cuadro": 1915,
+   "id": 10,
+   "grupo": "falso",
+   "col": 2.9642,
+   "row": 39.0557,
+   "lado_mm": 13.94,
+   "cuadratura_pct": 0.524
+  },
+  {
+   "cuadro": 1921,
+   "id": 37,
+   "grupo": "falso",
+   "col": 14.0526,
+   "row": 41.9776,
+   "lado_mm": 13.622,
+   "cuadratura_pct": 10.141
+  },
+  {
+   "cuadro": 1928,
+   "id": 37,
+   "grupo": "falso",
+   "col": 45.0236,
+   "row": 23.0396,
+   "lado_mm": 16.89,
+   "cuadratura_pct": 1.111
+  },
+  {
+   "cuadro": 2013,
+   "id": 34,
+   "grupo": "falso",
+   "col": 33.0526,
+   "row": 12.9792,
+   "lado_mm": 17.111,
+   "cuadratura_pct": 8.104
+  },
+  {
+   "cuadro": 2028,
+   "id": 34,
+   "grupo": "falso",
+   "col": 2.9643,
+   "row": 14.9572,
+   "lado_mm": 17.249,
+   "cuadratura_pct": 8.117
+  },
+  {
+   "cuadro": 2053,
+   "id": 37,
+   "grupo": "falso",
+   "col": 23.0617,
+   "row": 40.9276,
+   "lado_mm": 13.312,
+   "cuadratura_pct": 10.957
+  },
+  {
+   "cuadro": 2054,
+   "id": 37,
+   "grupo": "falso",
+   "col": 27.0706,
+   "row": 18.9464,
+   "lado_mm": 16.763,
+   "cuadratura_pct": 16.062
+  },
+  {
+   "cuadro": 2056,
+   "id": 37,
+   "grupo": "falso",
+   "col": 28.0606,
+   "row": 37.9776,
+   "lado_mm": 13.35,
+   "cuadratura_pct": 10.967
+  },
+  {
+   "cuadro": 2065,
+   "id": 37,
+   "grupo": "falso",
+   "col": 27.0212,
+   "row": 38.9479,
+   "lado_mm": 13.326,
+   "cuadratura_pct": 10.973
+  },
+  {
+   "cuadro": 2107,
+   "id": 37,
+   "grupo": "falso",
+   "col": 24.0197,
+   "row": 39.956,
+   "lado_mm": 13.692,
+   "cuadratura_pct": 10.181
+  },
+  {
+   "cuadro": 2118,
+   "id": 37,
+   "grupo": "falso",
+   "col": 26.9755,
+   "row": 4.9783,
+   "lado_mm": 13.251,
+   "cuadratura_pct": 11.126
+  },
+  {
+   "cuadro": 2123,
+   "id": 37,
+   "grupo": "falso",
+   "col": 20.0668,
+   "row": 31.9756,
+   "lado_mm": 13.641,
+   "cuadratura_pct": 10.233
+  },
+  {
+   "cuadro": 2140,
+   "id": 37,
+   "grupo": "falso",
+   "col": 43.021,
+   "row": 5.0001,
+   "lado_mm": 14.085,
+   "cuadratura_pct": 1.07
+  },
+  {
+   "cuadro": 2143,
+   "id": 37,
+   "grupo": "falso",
+   "col": 20.0508,
+   "row": 31.9597,
+   "lado_mm": 13.968,
+   "cuadratura_pct": 19.914
+  },
+  {
+   "cuadro": 2168,
+   "id": 34,
+   "grupo": "falso",
+   "col": 3.9454,
+   "row": 25.9993,
+   "lado_mm": 17.978,
+   "cuadratura_pct": 0.264
+  },
+  {
+   "cuadro": 2181,
+   "id": 37,
+   "grupo": "falso",
+   "col": 42.0285,
+   "row": 5.9424,
+   "lado_mm": 16.824,
+   "cuadratura_pct": 1.079
+  },
+  {
+   "cuadro": 2228,
+   "id": 34,
+   "grupo": "falso",
+   "col": 27.0743,
+   "row": 18.9421,
+   "lado_mm": 16.771,
+   "cuadratura_pct": 16.065
+  },
+  {
+   "cuadro": 2231,
+   "id": 37,
+   "grupo": "falso",
+   "col": 20.0075,
+   "row": 33.9601,
+   "lado_mm": 13.644,
+   "cuadratura_pct": 10.173
+  },
+  {
+   "cuadro": 2259,
+   "id": 37,
+   "grupo": "falso",
+   "col": 20.0558,
+   "row": 31.9744,
+   "lado_mm": 13.64,
+   "cuadratura_pct": 10.209
+  },
+  {
+   "cuadro": 2287,
+   "id": 20,
+   "grupo": "falso",
+   "col": 1.9379,
+   "row": 25.976,
+   "lado_mm": 17.303,
+   "cuadratura_pct": 8.35
+  },
+  {
+   "cuadro": 2287,
+   "id": 34,
+   "grupo": "falso",
+   "col": 34.9919,
+   "row": -1.0263,
+   "lado_mm": 16.74,
+   "cuadratura_pct": 0.984
+  },
+  {
+   "cuadro": 2316,
+   "id": 17,
+   "grupo": "falso",
+   "col": 43.0153,
+   "row": 22.996,
+   "lado_mm": 17.218,
+   "cuadratura_pct": 8.144
+  },
+  {
+   "cuadro": 2316,
+   "id": 34,
+   "grupo": "falso",
+   "col": 18.008,
+   "row": 21.971,
+   "lado_mm": 17.373,
+   "cuadratura_pct": 7.793
+  },
+  {
+   "cuadro": 2329,
+   "id": 10,
+   "grupo": "falso",
+   "col": 42.0658,
+   "row": 7.9664,
+   "lado_mm": 16.844,
+   "cuadratura_pct": 1.156
+  },
+  {
+   "cuadro": 2446,
+   "id": 10,
+   "grupo": "falso",
+   "col": 29.0197,
+   "row": 28.9864,
+   "lado_mm": 13.322,
+   "cuadratura_pct": 11.077
+  },
+  {
+   "cuadro": 2461,
+   "id": 42,
+   "grupo": "falso",
+   "col": 29.9998,
+   "row": -2.0713,
+   "lado_mm": 13.353,
+   "cuadratura_pct": 21.469
+  },
+  {
+   "cuadro": 2482,
+   "id": 37,
+   "grupo": "falso",
+   "col": 23.0627,
+   "row": 40.9284,
+   "lado_mm": 13.309,
+   "cuadratura_pct": 10.963
+  },
+  {
+   "cuadro": 2502,
+   "id": 37,
+   "grupo": "falso",
+   "col": 21.0164,
+   "row": 44.9573,
+   "lado_mm": 16.765,
+   "cuadratura_pct": 0.792
+  },
+  {
+   "cuadro": 2503,
+   "id": 37,
+   "grupo": "falso",
+   "col": 26.0736,
+   "row": 23.9851,
+   "lado_mm": 17.116,
+   "cuadratura_pct": 8.114
+  },
+  {
+   "cuadro": 2517,
+   "id": 10,
+   "grupo": "falso",
+   "col": 36.0191,
+   "row": 6.0001,
+   "lado_mm": 16.748,
+   "cuadratura_pct": 0.875
+  },
+  {
+   "cuadro": 2527,
+   "id": 37,
+   "grupo": "falso",
+   "col": 26.9972,
+   "row": 38.9633,
+   "lado_mm": 16.797,
+   "cuadratura_pct": 0.748
+  },
+  {
+   "cuadro": 2620,
+   "id": 37,
+   "grupo": "falso",
+   "col": 19.0699,
+   "row": 40.984,
+   "lado_mm": 13.668,
+   "cuadratura_pct": 10.138
+  },
+  {
+   "cuadro": 2653,
+   "id": 37,
+   "grupo": "falso",
+   "col": 18.0353,
+   "row": 41.9396,
+   "lado_mm": 13.299,
+   "cuadratura_pct": 10.941
+  },
+  {
+   "cuadro": 2727,
+   "id": 32,
+   "grupo": "falso",
+   "col": 9.9857,
+   "row": 13.9476,
+   "lado_mm": 13.225,
+   "cuadratura_pct": 10.313
+  },
+  {
+   "cuadro": 2747,
+   "id": 37,
+   "grupo": "falso",
+   "col": 10.0096,
+   "row": 17.9568,
+   "lado_mm": 13.618,
+   "cuadratura_pct": 11.636
+  },
+  {
+   "cuadro": 2781,
+   "id": 24,
+   "grupo": "falso",
+   "col": 23.9756,
+   "row": -0.0386,
+   "lado_mm": 13.281,
+   "cuadratura_pct": 9.619
+  },
+  {
+   "cuadro": 2790,
+   "id": 37,
+   "grupo": "falso",
+   "col": 20.0505,
+   "row": 41.9176,
+   "lado_mm": 13.666,
+   "cuadratura_pct": 20.847
+  }
+ ],
+ "esquinas_resumen": {
+  "0": {
+   "n": 2803,
+   "lado_mm": {
+    "min": 97.009,
+    "mediana": 97.607,
+    "max": 98.124
+   },
+   "cuadratura_pct": {
+    "min": 0.493,
+    "mediana": 2.021,
+    "max": 2.986
+   }
+  },
+  "1": {
+   "n": 2803,
+   "lado_mm": {
+    "min": 97.601,
+    "mediana": 98.347,
+    "max": 98.959
+   },
+   "cuadratura_pct": {
+    "min": 1.159,
+    "mediana": 1.737,
+    "max": 4.231
+   }
+  },
+  "2": {
+   "n": 2803,
+   "lado_mm": {
+    "min": 97.952,
+    "mediana": 98.402,
+    "max": 98.683
+   },
+   "cuadratura_pct": {
+    "min": 1.472,
+    "mediana": 1.504,
+    "max": 2.716
+   }
+  },
+  "3": {
+   "n": 2803,
+   "lado_mm": {
+    "min": 97.476,
+    "mediana": 97.976,
+    "max": 98.506
+   },
+   "cuadratura_pct": {
+    "min": 0.578,
+    "mediana": 1.559,
+    "max": 3.886
+   }
+  }
+ },
+ "_QUE_SE_GUARDA_Y_QUE_NO": "Se conservan COMPLETAS las detecciones de fantasmas y del marcador del rover, que es donde vive toda pregunta que se le haya hecho a estos datos: tamaños, posiciones, dentro o fuera de la cancha, agrupamiento por posición, rachas. Las de los cuatro marcadores de ESQUINA se guardan resumidas por ID —n, lado y cuadratura— porque son 11212 filas que repiten cuadro tras cuadro casi lo mismo y se usan como VARA, no como dato: de una vara alcanza con su distribución. Eso baja el archivo de megabytes a kilobytes, en una carpeta donde el resto de las sesiones pesa 3 o 4 KB."
+}

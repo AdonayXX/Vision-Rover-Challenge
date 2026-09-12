@@ -33,6 +33,7 @@ Los cuatro escenarios
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import math
 import sys
 
@@ -117,6 +118,23 @@ def escenario_barrido() -> tuple[RoverDemo, ...]:
             rovers.append(RoverDemo(id=4 + k, col=col, row=row, theta=float(k * 10)))
             k += 1
     return tuple(rovers)
+
+
+def cfg_que_acepta(cfg, rovers):
+    """Una configuración cuya lista de rovers cubre los IDs de este escenario.
+
+    `deteccion_rovers.ids_rover` es una lista explícita —solo esos IDs se
+    aceptan— y los escenarios de acá usan muchos más que los dos de la cancha,
+    a propósito: barrer 36 ángulos o probar cinco identidades no se puede hacer
+    con dos marcadores.
+
+    Lo que se verifica en este archivo es la GEOMETRÍA del detector, no la
+    política de la lista. Para eso está el escenario de marcadores desconocidos,
+    que sí corre con la configuración real.
+    """
+    ids = frozenset(r.id for r in rovers)
+    return dataclasses.replace(
+        cfg, deteccion_rovers=dataclasses.replace(cfg.deteccion_rovers, ids_rover=ids))
 
 
 def escenarios(cfg) -> list[tuple[str, tuple[RoverDemo, ...], bool, tuple | None]]:
@@ -289,12 +307,14 @@ def correr_modo(cfg, con_perspectiva: bool, umbral_mm: float, umbral_grados: flo
     print("  " + "-" * 96)
 
     for nombre, rovers_demo, con_cuerpo, cubos in escenarios(cfg):
+        cfg_escenario = cfg_que_acepta(cfg, rovers_demo)
         imagen, verdad = generar(cfg, rovers=rovers_demo, perspectiva=persp,
                                  con_cuerpo=con_cuerpo, cubos=cubos)
-        detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario)
+        detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario,
+                                         cfg.deteccion_marcadores.refinamiento_esquinas)
         try:
             # Se le pasa la detección ya hecha: un solo paso del detector por cuadro.
-            sistema = construir_sistema(imagen, cfg, detectados)
+            sistema = construir_sistema(imagen, cfg_escenario, detectados)
         except ErrorGeometria as exc:
             print("  {:<40} ERROR DE GEOMETRÍA: {}".format(nombre, exc))
             todo_bien = False
@@ -302,7 +322,7 @@ def correr_modo(cfg, con_perspectiva: bool, umbral_mm: float, umbral_grados: flo
 
         # La pose sale de los mismos cuatro marcadores; nadie la declara.
         pose = pose_camara(sistema, verdad.camara.matriz)
-        rovers = detectar_rovers(detectados, sistema, cfg, pose)
+        rovers = detectar_rovers(detectados, sistema, cfg_escenario, pose)
         r = medir(verdad, rovers, ids_esquina, corregido=True)
 
         paso = (r.completo and not r.esquinas_coladas and r.identidades_ok
@@ -334,6 +354,8 @@ def correr_modo(cfg, con_perspectiva: bool, umbral_mm: float, umbral_grados: flo
     if resultado_angular is not None:
         imprimir_detalle_angular(resultado_angular)
 
+    todo_bien = verificar_lista_explicita(cfg, persp) and todo_bien
+
     print("\n  umbrales: posición {:.2f} mm ({:.4f} celdas)  |  orientación {:.2f}°".format(
         umbral_mm, umbral_celdas, umbral_grados))
     print("  esquinas {} reservadas y nunca reportadas como rover".format(ids_esquina))
@@ -345,6 +367,43 @@ def correr_modo(cfg, con_perspectiva: bool, umbral_mm: float, umbral_grados: flo
         print("  imagen guardada en: {}".format(salida))
     print()
     return todo_bien
+
+
+def verificar_lista_explicita(cfg, persp) -> bool:
+    """Que un marcador NO declarado se descarte, aunque se detecte perfecto.
+
+    Es la regla que reemplazó a "es rover todo lo que no sea esquina", después
+    de que la cancha real mostrara que la cuadrícula impresa del tablero produce
+    detecciones ArUco espurias. Con la regla vieja, cada falsa se publicaba como
+    un rover fantasma.
+
+    Acá se pone un marcador legítimo con un ID que no está declarado —el 20, que
+    es el de la prueba de precisión y existe físicamente— y se exige que **no
+    aparezca**, mientras los declarados sí.
+    """
+    print("\n  la lista explícita: un marcador no declarado NO es un rover\n")
+    declarados = tuple(sorted(cfg.deteccion_rovers.ids_rover))
+    intrusos = (20, 7)
+    rovers = tuple(RoverDemo(id=i, col=10.0 + 8 * k, row=12.0, theta=0.0)
+                   for k, i in enumerate(declarados + intrusos))
+
+    imagen, verdad = generar(cfg, rovers=rovers, perspectiva=persp, cubos=())
+    detectados = detectar_marcadores(imagen, cfg.marcadores_esquina.nombre_diccionario,
+                                     cfg.deteccion_marcadores.refinamiento_esquinas)
+    sistema = construir_sistema(imagen, cfg, detectados)
+    vistos = detectar_rovers(detectados, sistema, cfg,
+                             pose_camara(sistema, verdad.camara.matriz))
+    reportados = sorted(r.id for r in vistos)
+
+    en_imagen = sorted(set(detectados) - cfg.marcadores_esquina.ids_esperados)
+    paso = reportados == list(declarados)
+    print("    declarados en la configuración : {}".format(list(declarados)))
+    print("    marcadores en la imagen        : {}".format(en_imagen))
+    print("    reportados como rover          : {}  -> {}".format(
+        reportados, "OK" if paso else "MAL: se coló uno no declarado"))
+    print("    descartados                    : {}".format(
+        sorted(set(en_imagen) - set(reportados))))
+    return paso
 
 
 def main(argv: list[str] | None = None) -> int:
