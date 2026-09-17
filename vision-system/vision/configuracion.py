@@ -225,6 +225,7 @@ class Seguimiento:
     """
 
     edad_maxima_ms: int
+    velocidad_maxima_rover_mm_s: float
     refrescar_con_cubos_no_confiables: bool
 
 
@@ -415,12 +416,12 @@ class DeteccionCubos:
     la iluminación: un cubo rojo a la sombra sigue teniendo matiz de rojo.
 
     El amarillo está entre los matices de referencia aunque esta edición no
-    tenga obstáculos, y **no es un cubo**: es una clase de exclusión. Verde y
-    amarillo están a solo 33° —el par más ajustado—, así que sin ella cualquier
-    objeto amarillo suelto se leería como cubo verde.
+    tenga obstáculos, y **no es un cubo**: es una clase de exclusión.
     """
 
     croma_minimo: float
+    croma_minimo_por_color: dict[str, float]
+    matiz_tolerancia_recuperacion_grados: float
     matices_grados: dict[str, float]
     matiz_tolerancia_grados: float
     area_minima_relativa: float
@@ -819,6 +820,7 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
     sg = d["seguimiento"]
     seguimiento = Seguimiento(
         edad_maxima_ms=int(sg["edad_maxima_ms"]),
+        velocidad_maxima_rover_mm_s=float(sg["velocidad_maxima_rover_mm_s"]),
         refrescar_con_cubos_no_confiables=bool(sg["refrescar_con_cubos_no_confiables"]),
     )
 
@@ -869,6 +871,12 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
     dc = d["deteccion_cubos"]
     deteccion_cubos = DeteccionCubos(
         croma_minimo=float(dc["croma_minimo"]),
+        croma_minimo_por_color={
+            k: float(v) for k, v in dc.get("croma_minimo_por_color", {}).items()
+        },
+        matiz_tolerancia_recuperacion_grados=float(
+            dc.get("matiz_tolerancia_recuperacion_grados", dc["matiz_tolerancia_grados"])
+        ),
         matices_grados={k: float(v) for k, v in dc["matices_lab_grados"].items()},
         matiz_tolerancia_grados=float(dc["matiz_tolerancia_grados"]),
         area_minima_relativa=float(dc["area_minima_relativa"]),
@@ -1327,6 +1335,8 @@ def revisar_config(cfg: ConfigVision) -> str | None:
         )
     if cfg.seguimiento.edad_maxima_ms <= 0:
         return "seguimiento.edad_maxima_ms debe ser > 0"
+    if cfg.seguimiento.velocidad_maxima_rover_mm_s <= 0:
+        return "seguimiento.velocidad_maxima_rover_mm_s debe ser > 0"
     if not (0 < cfg.publicacion.puerto < 65536):
         return "publicacion.puerto fuera de rango"
     if cfg.publicacion.hz <= 0:
@@ -1365,13 +1375,33 @@ def revisar_config(cfg: ConfigVision) -> str | None:
     if "yellow" not in dc_cfg.matices_grados:
         return (
             "deteccion_cubos.matices_lab_grados debe incluir 'yellow' como clase de "
-            "EXCLUSIÓN: está a 33° del verde, y sin ella un objeto amarillo se leería "
-            "como cubo verde"
+            "EXCLUSIÓN, para que un objeto amarillo no se fuerce a uno de los colores "
+            "de cubo"
         )
     if not (0.0 < dc_cfg.recorte_robusto <= 1.0):
         return "deteccion_cubos.recorte_robusto debe estar en (0, 1]"
     if dc_cfg.croma_minimo <= 0:
         return "deteccion_cubos.croma_minimo debe ser > 0"
+    if not (0.0 < dc_cfg.matiz_tolerancia_recuperacion_grados <= dc_cfg.matiz_tolerancia_grados):
+        return (
+            "deteccion_cubos.matiz_tolerancia_recuperacion_grados debe estar en "
+            "(0, matiz_tolerancia_grados]"
+        )
+    for color, minimo in dc_cfg.croma_minimo_por_color.items():
+        if color not in dc_cfg.matices_grados:
+            return (
+                "deteccion_cubos.croma_minimo_por_color contiene {!r}, pero no hay "
+                "matiz de referencia para ese color".format(color)
+            )
+        if minimo <= 0:
+            return (
+                "deteccion_cubos.croma_minimo_por_color.{0} debe ser > 0".format(color)
+            )
+        if minimo > dc_cfg.croma_minimo:
+            return (
+                "deteccion_cubos.croma_minimo_por_color.{0} ({1}) no puede superar "
+                "croma_minimo ({2})".format(color, minimo, dc_cfg.croma_minimo)
+            )
     colores_dibujo = set(cfg.sintetico.colores_cubo_bgr)
     faltan_colores = sorted(set(cfg.elementos.cubos.colores) - colores_dibujo)
     if faltan_colores:

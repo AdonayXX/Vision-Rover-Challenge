@@ -1,0 +1,9 @@
+{
+  "robot_radius_mm": 85,
+  "peer_radius_mm": 85,
+  "clearance_mm": 15,
+  "obstacle_side_mm": 100,
+  "step_cells": 1,
+  "max_nodes": 4096,
+  "required_colors": ["red", "green", "blue"]
+}

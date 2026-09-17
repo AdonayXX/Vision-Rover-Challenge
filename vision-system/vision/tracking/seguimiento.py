@@ -47,6 +47,7 @@ el equipo necesita para decidir si frenar.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 try:  # como paquete
     from ..configuracion import ConfigVision
@@ -97,6 +98,7 @@ class Seguidor:
         # porque no se vio el objeto. Es la medida de cuánta oclusión hubo.
         self.conservados_rover = 0
         self.conservados_cubo = 0
+        self.rechazos_salto_rover = 0
         self.barridos = 0
 
     def actualizar(
@@ -108,9 +110,19 @@ class Seguidor:
         reloj: RelojRonda = RelojRonda(),
     ) -> EstadoMundo:
         """Incorpora las detecciones de un cuadro y produce el estado del mundo."""
-        vistos_rover = {r.id for r in rovers}
+        vistos_rover = set()
+        cell_mm = self._cfg.tablero.cell_mm
+        vmax = self._cfg.seguimiento.velocidad_maxima_rover_mm_s
         for r in rovers:
+            anterior = self._rovers.get(r.id)
+            if anterior is not None and ts_ms > anterior.ts_ms:
+                dt_s = (ts_ms - anterior.ts_ms) / 1000.0
+                distancia_mm = math.hypot(r.col - anterior.col, r.row - anterior.row) * cell_mm
+                if distancia_mm > vmax * dt_s:
+                    self.rechazos_salto_rover += 1
+                    continue
             self._rovers[r.id] = _Recuerdo(r.col, r.row, r.theta_grados, ts_ms)
+            vistos_rover.add(r.id)
 
         refrescar_dudosos = self._cfg.seguimiento.refrescar_con_cubos_no_confiables
         vistos_cubo = set()

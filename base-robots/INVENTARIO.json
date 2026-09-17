@@ -1,0 +1,1056 @@
+{
+  "commit_origen": "cb6659153792bda421e1ec4ce7271b5069e189b2",
+  "criterio": "sha256 conserva el hash de origen; sha256_actual describe la entrega corregida. Rutas destino relativas a base-robots. Archivos nuevos sin origen; el inventario no se incluye a si mismo.",
+  "archivos": [
+    {
+      "origen": null,
+      "destino": ".gitignore",
+      "sha256": null,
+      "sha256_actual": "b8010cbab7e1a7d7fd26ccaf0ba46a345adf19d6747a357b02f9c761e7b20852",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "README.md",
+      "sha256": null,
+      "sha256_actual": "a448a91d12167da249391fce04f062a016ee752a458c9fcf106e1d0c1b08391c",
+      "estado": "agregado"
+    },
+    {
+      "origen": "el_reto.md",
+      "destino": "documentacion/el_reto.md",
+      "sha256": "58ad7c9cae49998f08eb235a36b57ade55be91301469e85517f50208c28fa899",
+      "sha256_actual": "58ad7c9cae49998f08eb235a36b57ade55be91301469e85517f50208c28fa899",
+      "estado": "conservado"
+    },
+    {
+      "origen": "programacion/README.md",
+      "destino": "documentacion/programacion/README.md",
+      "sha256": "c6a5e70a3a3fdf44dc4d2ea4d998fbfd9c7a71cb819e3a63e6b5c744ebaa5bf2",
+      "sha256_actual": "c6a5e70a3a3fdf44dc4d2ea4d998fbfd9c7a71cb819e3a63e6b5c744ebaa5bf2",
+      "estado": "conservado"
+    },
+    {
+      "origen": "reglamento.md",
+      "destino": "documentacion/reglamento.md",
+      "sha256": "c355bfd9c09f7ad1d5b8f4d79bc9eec76ba8179c2505f989d2da0ce6a4fd4570",
+      "sha256_actual": "c355bfd9c09f7ad1d5b8f4d79bc9eec76ba8179c2505f989d2da0ce6a4fd4570",
+      "estado": "conservado"
+    },
+    {
+      "origen": "robot.md",
+      "destino": "documentacion/robot.md",
+      "sha256": "de48fbc5ec7a749ebd53deacfe7e3954d8af767bbb68f5af7aff825eb97bb0d7",
+      "sha256_actual": "de48fbc5ec7a749ebd53deacfe7e3954d8af767bbb68f5af7aff825eb97bb0d7",
+      "estado": "conservado"
+    },
+    {
+      "origen": "archivos_fabricacion/CENFOBOT_Rover_Rev1.dxf",
+      "destino": "hardware/archivos_fabricacion/CENFOBOT_Rover_Rev1.dxf",
+      "sha256": "1d97c23e2d249bc7c29a6286b4d70d17387ca260e71fdc63d9e98996396000aa",
+      "sha256_actual": "1d97c23e2d249bc7c29a6286b4d70d17387ca260e71fdc63d9e98996396000aa",
+      "estado": "conservado"
+    },
+    {
+      "origen": "archivos_fabricacion/CENFOBOT_Rover_Rev1.svg",
+      "destino": "hardware/archivos_fabricacion/CENFOBOT_Rover_Rev1.svg",
+      "sha256": "c0ff054554e75995c1535b25e47bd6616749cc8a8e3659bfb92b4e7ce300f251",
+      "sha256_actual": "c0ff054554e75995c1535b25e47bd6616749cc8a8e3659bfb92b4e7ce300f251",
+      "estado": "conservado"
+    },
+    {
+      "origen": "archivos_fabricacion/Cuadricula 1mx1m ArUco.pdf",
+      "destino": "hardware/archivos_fabricacion/Cuadricula 1mx1m ArUco.pdf",
+      "sha256": "51811954d8466bfe079e1dfdcd75d53d69c069a908205d554b32588d6c3ae5b6",
+      "sha256_actual": "51811954d8466bfe079e1dfdcd75d53d69c069a908205d554b32588d6c3ae5b6",
+      "estado": "conservado"
+    },
+    {
+      "origen": "archivos_fabricacion/README.md",
+      "destino": "hardware/archivos_fabricacion/README.md",
+      "sha256": "e1435c3e1a717df42f92d27f50a4ec0652edfd625cff44c12ca6416841e6491d",
+      "sha256_actual": "e1435c3e1a717df42f92d27f50a4ec0652edfd625cff44c12ca6416841e6491d",
+      "estado": "conservado"
+    },
+    {
+      "origen": "archivos_fabricacion/cuadricula_1m_2cm_bn.svg",
+      "destino": "hardware/archivos_fabricacion/cuadricula_1m_2cm_bn.svg",
+      "sha256": "4f6083edb9f1bdc0800f29307d9d8523bb6c718c04e68188cd1d4511f7225e48",
+      "sha256_actual": "4f6083edb9f1bdc0800f29307d9d8523bb6c718c04e68188cd1d4511f7225e48",
+      "estado": "conservado"
+    },
+    {
+      "origen": "archivos_fabricacion/cubos.dxf",
+      "destino": "hardware/archivos_fabricacion/cubos.dxf",
+      "sha256": "18032f78d9de7e2903aa0e86c4e711a1a49fdbe2d36f18690ab1681a366a684e",
+      "sha256_actual": "18032f78d9de7e2903aa0e86c4e711a1a49fdbe2d36f18690ab1681a366a684e",
+      "estado": "conservado"
+    },
+    {
+      "origen": "armado/README.md",
+      "destino": "hardware/armado/README.md",
+      "sha256": "abf9bfc8863b881b86235974661be9db3440a7727756883f8af47c8344ad6904",
+      "sha256_actual": "abf9bfc8863b881b86235974661be9db3440a7727756883f8af47c8344ad6904",
+      "estado": "conservado"
+    },
+    {
+      "origen": "armado/armado.jpeg",
+      "destino": "hardware/armado/armado.jpeg",
+      "sha256": "4cd2ed3829e8343738472a5eb983bee4f0b989a635f7d03ab3bd44be88b5c2b8",
+      "sha256_actual": "4cd2ed3829e8343738472a5eb983bee4f0b989a635f7d03ab3bd44be88b5c2b8",
+      "estado": "conservado"
+    },
+    {
+      "origen": "aruco/README.md",
+      "destino": "hardware/aruco/README.md",
+      "sha256": "81be65e476351b2341d41b0d8712367f17bcadde8956ff07cc7bc6c9fe1d985f",
+      "sha256_actual": "81be65e476351b2341d41b0d8712367f17bcadde8956ff07cc7bc6c9fe1d985f",
+      "estado": "conservado"
+    },
+    {
+      "origen": "aruco/aruco_id0_negro10cm.pdf",
+      "destino": "hardware/aruco/aruco_id0_negro10cm.pdf",
+      "sha256": "ae7d9bdfaac8d6f70c5756fc72bc137f5c161b6cba39f247602aa110f6c8431f",
+      "sha256_actual": "ae7d9bdfaac8d6f70c5756fc72bc137f5c161b6cba39f247602aa110f6c8431f",
+      "estado": "conservado"
+    },
+    {
+      "origen": "aruco/aruco_id1_negro10cm.pdf",
+      "destino": "hardware/aruco/aruco_id1_negro10cm.pdf",
+      "sha256": "e7a3ef2feeaeafaba08062bd582a30f9f195f4db74147210af354339e671da57",
+      "sha256_actual": "e7a3ef2feeaeafaba08062bd582a30f9f195f4db74147210af354339e671da57",
+      "estado": "conservado"
+    },
+    {
+      "origen": "aruco/aruco_id2_negro10cm.pdf",
+      "destino": "hardware/aruco/aruco_id2_negro10cm.pdf",
+      "sha256": "fd45b61202d9de13f16b5f755377131012452688eed7b966d6ba65f66fe42a27",
+      "sha256_actual": "fd45b61202d9de13f16b5f755377131012452688eed7b966d6ba65f66fe42a27",
+      "estado": "conservado"
+    },
+    {
+      "origen": "aruco/aruco_id3_negro10cm.pdf",
+      "destino": "hardware/aruco/aruco_id3_negro10cm.pdf",
+      "sha256": "4fcf19aefa74dcda894ce6c50c9ec83e58b4b5e854dc740de9495669917c74fd",
+      "sha256_actual": "4fcf19aefa74dcda894ce6c50c9ec83e58b4b5e854dc740de9495669917c74fd",
+      "estado": "conservado"
+    },
+    {
+      "origen": "aruco/aruco_robot_id10_negro40mm-1.pdf",
+      "destino": "hardware/aruco/aruco_robot_id10_negro40mm-1.pdf",
+      "sha256": "5fb97e587e5496c77f189b21a1c5e71aad30c63b89459768674bacb41a5d60c5",
+      "sha256_actual": "5fb97e587e5496c77f189b21a1c5e71aad30c63b89459768674bacb41a5d60c5",
+      "estado": "conservado"
+    },
+    {
+      "origen": "aruco/aruco_robot_id11_negro40mm.pdf",
+      "destino": "hardware/aruco/aruco_robot_id11_negro40mm.pdf",
+      "sha256": "d1e948f7343ad2c1b30d5b639b7e47e267456b90ea79cc480358e8ec7a3d5247",
+      "sha256_actual": "d1e948f7343ad2c1b30d5b639b7e47e267456b90ea79cc480358e8ec7a3d5247",
+      "estado": "conservado"
+    },
+    {
+      "origen": "conexiones/README.md",
+      "destino": "hardware/conexiones/README.md",
+      "sha256": "1c609a4d7546ba9f4be2c7e9d5cb480b7136cc89ab9035faa5db75fbf0ef87f4",
+      "sha256_actual": "1c609a4d7546ba9f4be2c7e9d5cb480b7136cc89ab9035faa5db75fbf0ef87f4",
+      "estado": "conservado"
+    },
+    {
+      "origen": "conexiones/sensorcolor2.png",
+      "destino": "hardware/conexiones/sensorcolor2.png",
+      "sha256": "097f607b062cad3dd08c2f3066a0e2b1e012b9e4f5e40a8dfa7a01cb43dec8d7",
+      "sha256_actual": "097f607b062cad3dd08c2f3066a0e2b1e012b9e4f5e40a8dfa7a01cb43dec8d7",
+      "estado": "conservado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/ASIGNACION.md",
+      "sha256": null,
+      "sha256_actual": "1596f8d491d900b2144dd0552bea3ccf99738f5cf3ad91cae7e78ed4f636b57c",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/COORDINACION.md",
+      "sha256": null,
+      "sha256_actual": "fb55b77d01137f03682fc4e88187916999886f462a29843b5cca4395b9d6ff71",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/CORRECCIONES.md",
+      "sha256": null,
+      "sha256_actual": "f9daf3fbced8c4a8ae6a1b34d38f8a30119408d9b72ca5695f9eea3e0ff7afe3",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/NAVEGACION.md",
+      "sha256": null,
+      "sha256_actual": "6351dd151c3e09b9c03a93ca8d1c59dfae03d13852c8e92b266a1c48a64a95ab",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/PRIMERA_PRUEBA.md",
+      "sha256": null,
+      "sha256_actual": "73f6871a45bf4d9dab89d60e855cbfeebcba37349cbc2bbc4237da6f4bf3001b",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/PRUEBAS_PC.md",
+      "sha256": null,
+      "sha256_actual": "2deda8f0d942208b0026c82a6e9a8da9236e6c36e9a1a6dbe67af598a3e25875",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/README.md",
+      "sha256": null,
+      "sha256_actual": "e704114bc86d2bf201676ce6bcc45f48437c4c2f01577ae4d9642e0733123fbc",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/RUTAS.md",
+      "sha256": null,
+      "sha256_actual": "8cddc6e7ad1a8628c6141b67bd0df094373453790d1dba916e8ac2581370e079",
+      "estado": "agregado"
+    },
+    {
+      "origen": "codigos/ESPNOW/README.md",
+      "destino": "robots/codigos/ESPNOW/README.md",
+      "sha256": "aa68f5278cc7158847b6c328b4f296fd50e3fda6df8f072c2d724c604d251e07",
+      "sha256_actual": "aa68f5278cc7158847b6c328b4f296fd50e3fda6df8f072c2d724c604d251e07",
+      "estado": "conservado"
+    },
+    {
+      "origen": "codigos/README.md",
+      "destino": "robots/codigos/README.md",
+      "sha256": "791cc528dbaccd5298b7bbdb35e87f67862c0e8dbcc66490fd230d62c2eda1ea",
+      "sha256_actual": "791cc528dbaccd5298b7bbdb35e87f67862c0e8dbcc66490fd230d62c2eda1ea",
+      "estado": "conservado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/codigos/asignacion.py",
+      "sha256": null,
+      "sha256_actual": "8ce0eda3f050e5676871d511fb2ba8b4bedd5d8a99fa21228d94983ed4b98a0c",
+      "estado": "agregado"
+    },
+    {
+      "origen": "codigos/code_4IR.py",
+      "destino": "robots/codigos/code_4IR.py",
+      "sha256": "a6096e0024edf5d88d1acf28fbb40fc515e537424a9e42eeb8b2218780cd3568",
+      "sha256_actual": "a6096e0024edf5d88d1acf28fbb40fc515e537424a9e42eeb8b2218780cd3568",
+      "estado": "conservado"
+    },
+    {
+      "origen": "codigos/code_PID.py",
+      "destino": "robots/codigos/code_PID.py",
+      "sha256": "9d7a8c8222597c488c40199450b90d7f67a76eeb56874b0bdaf464ee9a6aae67",
+      "sha256_actual": "9d7a8c8222597c488c40199450b90d7f67a76eeb56874b0bdaf464ee9a6aae67",
+      "estado": "conservado"
+    },
+    {
+      "origen": "codigos/code_acc.py",
+      "destino": "robots/codigos/code_acc.py",
+      "sha256": "32bcbce789c1dae4b4863aee402895bba885b4a2402a5239ce2cd4e984590f3c",
+      "sha256_actual": "32bcbce789c1dae4b4863aee402895bba885b4a2402a5239ce2cd4e984590f3c",
+      "estado": "conservado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/codigos/code_banco.py",
+      "sha256": null,
+      "sha256_actual": "291580ae257e2b3fa11fada3a32920a520c9c8dff51a0a52daccb5c90a3f1cdf",
+      "estado": "agregado"
+    },
+    {
+      "origen": "codigos/code_storage.py",
+      "destino": "robots/codigos/code_storage.py",
+      "sha256": "efa74d456b16fcc144e310f0e5b87b15fa2407d2caf1c5ed729aaabccd4de9dc",
+      "sha256_actual": "efa74d456b16fcc144e310f0e5b87b15fa2407d2caf1c5ed729aaabccd4de9dc",
+      "estado": "conservado"
+    },
+    {
+      "origen": "codigos/code_ultrasonic.py",
+      "destino": "robots/codigos/code_ultrasonic.py",
+      "sha256": "883bd8d6954b930b3fac0dfdb01e737badf71875658fdc3fe590f8562e7443e1",
+      "sha256_actual": "883bd8d6954b930b3fac0dfdb01e737badf71875658fdc3fe590f8562e7443e1",
+      "estado": "conservado"
+    },
+    {
+      "origen": "codigos/color_detect.py",
+      "destino": "robots/codigos/color_detect.py",
+      "sha256": "ede8875ac4ae5e61022a9d2f84668974af788a475a614b7a5c6ef967069ae0c0",
+      "sha256_actual": "ede8875ac4ae5e61022a9d2f84668974af788a475a614b7a5c6ef967069ae0c0",
+      "estado": "conservado"
+    },
+    {
+      "origen": "codigos/command_protocol.py",
+      "destino": "robots/codigos/command_protocol.py",
+      "sha256": "babc8a906a2604fa8476b8b6e7809bc88373c2d33735a4d89d051fae90bd6b73",
+      "sha256_actual": "7c59889276ba7fac48198eda6b24ab42701f1929a184351540cb49c700bca577",
+      "estado": "modificado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/codigos/config_banco.example.json",
+      "sha256": null,
+      "sha256_actual": "85573cff01fd14a66d4f8fa44f1060ef6b530af14b9d5740a0f3a18e556af39e",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/codigos/config_robot.example.json",
+      "sha256": null,
+      "sha256_actual": "193430a2b9f1ea3ccd085c54b28072463d2578f08940367643fc6746e34c983c",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/codigos/control_movimiento.py",
+      "sha256": null,
+      "sha256_actual": "3cd8ee901c448a8c624c6b2fec82572cd34e3ea86b3de53ac0183effe704d338",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/codigos/coordinacion.py",
+      "sha256": null,
+      "sha256_actual": "08c3711a39085ff8c8733bb0b80910cfd73ef95023c3176d327500a6e52c79ab",
+      "estado": "agregado"
+    },
+    {
+      "origen": "codigos/espnow_bidirectional.py",
+      "destino": "robots/codigos/espnow_bidirectional.py",
+      "sha256": "6f70fb6262ee3f27ce44154406bb5835788f780320443e85b4e082d7aad6b67f",
+      "sha256_actual": "6f70fb6262ee3f27ce44154406bb5835788f780320443e85b4e082d7aad6b67f",
+      "estado": "conservado"
+    },
+    {
+      "origen": "codigos/ideaboard.py",
+      "destino": "robots/codigos/ideaboard.py",
+      "sha256": "def3c7257663c6c12325f95aad1e71c9e781707fc0263c1fe1306ac111fec593",
+      "sha256_actual": "6936a78623142f214440c1439722bf887dee6732e4862f3c1842024efd959f0b",
+      "estado": "modificado"
+    },
+    {
+      "origen": "codigos/motor_calibration.py",
+      "destino": "robots/codigos/motor_calibration.py",
+      "sha256": "6c8b84dbed851d110d6cce188fe0d60272b1ef09327be4c64e247c6f386b7afa",
+      "sha256_actual": "6c8b84dbed851d110d6cce188fe0d60272b1ef09327be4c64e247c6f386b7afa",
+      "estado": "conservado"
+    },
+    {
+      "origen": "codigos/move_heading.py",
+      "destino": "robots/codigos/move_heading.py",
+      "sha256": "128ffb0cf3d626a5067d0d45adcf762b4dfa5cd3e1b5f4748381f6857f13cac8",
+      "sha256_actual": "30738f7cd1cbbeec4f22bc447c7514c446453a2af910e5d5e6e6f74b1f897f99",
+      "estado": "modificado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/codigos/navegacion.py",
+      "sha256": null,
+      "sha256_actual": "ef61d622514811cf36fc801b623a8db2e922896f88231ccb171871d987c67cfc",
+      "estado": "agregado"
+    },
+    {
+      "origen": "codigos/robot_state.py",
+      "destino": "robots/codigos/robot_state.py",
+      "sha256": "db8d71036e1f94c8987769615e85dca7e81c9918a2486e94e489e77d96c500fd",
+      "sha256_actual": "0dfd1b7433c3cce70017a2cb6ee88788328ef84c2106e1cd28871886dc3354b0",
+      "estado": "modificado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/codigos/rutas.py",
+      "sha256": null,
+      "sha256_actual": "ff6829b195aa0d208e68d4167a48bfe01a5a6ed0a9e15229dc6a133658e01fd4",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/codigos/sesion_comandos.py",
+      "sha256": null,
+      "sha256_actual": "c0feaf1090c979044c3bb94b42c88aedf170cbe61e7e69c4374ca993b1462d5f",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/codigos/telemetria.py",
+      "sha256": null,
+      "sha256_actual": "18c4a740a3d5eeb03bfe1191604d1212ddd8a40c529fb0630ea93432f1124203",
+      "estado": "agregado"
+    },
+    {
+      "origen": "codigos/test_motores.py",
+      "destino": "robots/codigos/test_motores.py",
+      "sha256": "a66a8179ea727f142aee7bfdc30c5706d5f160454bee8b9de93475920e3554d4",
+      "sha256_actual": "a66a8179ea727f142aee7bfdc30c5706d5f160454bee8b9de93475920e3554d4",
+      "estado": "conservado"
+    },
+    {
+      "origen": "codigos/turn_angle.py",
+      "destino": "robots/codigos/turn_angle.py",
+      "sha256": "74d610bb3ceb95581dd72529b685f88e1eb08b2767a30d5f4e86bf5ff383b544",
+      "sha256_actual": "080528a5aba4f6020a10df8dbe22949e838036400ee86142e0496e1f2effb124",
+      "estado": "modificado"
+    },
+    {
+      "origen": "codigos/wifi_command_receiver.py",
+      "destino": "robots/codigos/wifi_command_receiver.py",
+      "sha256": "3523aa754dc565e27b3c310e7fda09e7c5c3fccfac9254793ed30d098682d178",
+      "sha256_actual": "3af54e55958bd2af30107660768868cd0abe7f832924fb2ba08aea6cb4d428d0",
+      "estado": "modificado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/pc/cliente_vision.py",
+      "sha256": null,
+      "sha256_actual": "4e14d7d4a65c082d88638209eea0c7a802773b3a1bfc50327b25ec63152f677d",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/pc/demo_asignacion.py",
+      "sha256": null,
+      "sha256_actual": "c4706ef2b732f66ad0355dbb9f43e3d4a52ab36af15d89bbabdde49893da5b3b",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/pc/demo_coordinacion.py",
+      "sha256": null,
+      "sha256_actual": "36a13bac9013d06a2f02e6ee74b93f39739a0d4d28901d1210f6b56cde0956af",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/pc/demo_navegacion.py",
+      "sha256": null,
+      "sha256_actual": "729cb860fa5813a225fe58dfc71e55850707d8201b36666d990424413c85278c",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/pc/demo_rutas.py",
+      "sha256": null,
+      "sha256_actual": "700c1a0ff34597a78bd5f1642bf1426165c4bb43515ae2a436561f049e74d110",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/pc/demo_vision.py",
+      "sha256": null,
+      "sha256_actual": "149042fb46bf2fcc6900cec2250195b99768ce789ff3344c771843e2cca57a8a",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/pc/prueba_banco.py",
+      "sha256": null,
+      "sha256_actual": "ef396f256651cf3bb2db52b083b7ca11fd1c35607252c97f7c4ddffc87e1555f",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/pc/rutas.example.json",
+      "sha256": null,
+      "sha256_actual": "55d0b59557f8fb381684b79b646ac022416ccff9ba80eb754fe18ad9f8272617",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/tests/test_asignacion.py",
+      "sha256": null,
+      "sha256_actual": "7ed4a222f17e41b29adc1871e730de8621e4c3c1214805dd7fb01d9bd53cb7f8",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/tests/test_banco.py",
+      "sha256": null,
+      "sha256_actual": "3de9f83d3f73ee4891d830edec98698f96d8c515fa7c2957a09be6df89558ee6",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/tests/test_control.py",
+      "sha256": null,
+      "sha256_actual": "14ecc658b0ebc14a2ac74e470c30d1cfa7ecc64b10aca54670e190f3f2ea55e8",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/tests/test_coordinacion.py",
+      "sha256": null,
+      "sha256_actual": "2c8e87e482da7db59ca9fcc4e2044b819a2c402da8e2e6caabbc644401709d84",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/tests/test_navegacion.py",
+      "sha256": null,
+      "sha256_actual": "8d3d1a32d2b7333ea5f632c1b89bfb6c28fd13d1706b6fed5292037b18f89b8f",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/tests/test_rutas.py",
+      "sha256": null,
+      "sha256_actual": "07c1f300769a46a5b8abbf0800ba935cc13120206110f46477e5359ea855bba1",
+      "estado": "agregado"
+    },
+    {
+      "origen": null,
+      "destino": "robots/tests/test_telemetria.py",
+      "sha256": null,
+      "sha256_actual": "23284863e68bb21f5518bdc2f3330a1886a5778a9878380c2ca69c395f45d19e",
+      "estado": "agregado"
+    },
+    {
+      "origen": "vision-system/.gitignore",
+      "destino": "vision-system/.gitignore",
+      "sha256": "d209164c7c6e8ef86bc05f97dc99650341457a6cd407ed1dfae17e75bdf85109",
+      "sha256_actual": "d209164c7c6e8ef86bc05f97dc99650341457a6cd407ed1dfae17e75bdf85109",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/CLAUDE.md",
+      "destino": "vision-system/CLAUDE.md",
+      "sha256": "dadeb85d933645073df64dc07fb6a377fae697ef399c3a598bd6a1ca40145428",
+      "sha256_actual": "dadeb85d933645073df64dc07fb6a377fae697ef399c3a598bd6a1ca40145428",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/MONTAJE.md",
+      "destino": "vision-system/MONTAJE.md",
+      "sha256": "3e0f99d5c70b1e4fb8de74e283992bb058d26dc02c3039a9d51f5c7841790751",
+      "sha256_actual": "3e0f99d5c70b1e4fb8de74e283992bb058d26dc02c3039a9d51f5c7841790751",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/OPERACION.md",
+      "destino": "vision-system/OPERACION.md",
+      "sha256": "96d826160db949e064f6a2ce9ef43889aafe8dd823c86a408d54929fbeef6cdb",
+      "sha256_actual": "96d826160db949e064f6a2ce9ef43889aafe8dd823c86a408d54929fbeef6cdb",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/PUESTA_A_PUNTO.md",
+      "destino": "vision-system/PUESTA_A_PUNTO.md",
+      "sha256": "4367f020e5a47c0f8f6d247a8782e2e4e3a86b9fb20636d477b80de240102754",
+      "sha256_actual": "4367f020e5a47c0f8f6d247a8782e2e4e3a86b9fb20636d477b80de240102754",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/README.md",
+      "destino": "vision-system/README.md",
+      "sha256": "c14f81855edfed461604aa550d0ba4b225f6c5aad9d2943be2e665e1fd030633",
+      "sha256_actual": "c14f81855edfed461604aa550d0ba4b225f6c5aad9d2943be2e665e1fd030633",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/contrato/CONTRATO.md",
+      "destino": "vision-system/contrato/CONTRATO.md",
+      "sha256": "b16880ee3860ba96bf2428d48bc4217cdd56be009d1d58475563d0531d857182",
+      "sha256_actual": "b16880ee3860ba96bf2428d48bc4217cdd56be009d1d58475563d0531d857182",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/contrato/README.md",
+      "destino": "vision-system/contrato/README.md",
+      "sha256": "76f02a4db22ebe922ea8f0c56d2002c197a2255403297adef02934d7a0c7a550",
+      "sha256_actual": "76f02a4db22ebe922ea8f0c56d2002c197a2255403297adef02934d7a0c7a550",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/contrato/__init__.py",
+      "destino": "vision-system/contrato/__init__.py",
+      "sha256": "430088b81487313ae8a1f745e409ada26d1854bdc5418df143ee925901fee5c3",
+      "sha256_actual": "430088b81487313ae8a1f745e409ada26d1854bdc5418df143ee925901fee5c3",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/contrato/config_simulador.json",
+      "destino": "vision-system/contrato/config_simulador.json",
+      "sha256": "23277ac187aaa6e063f3e282dc250587c567ff2229a262cad257c39d4b9b450f",
+      "sha256_actual": "23277ac187aaa6e063f3e282dc250587c567ff2229a262cad257c39d4b9b450f",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/contrato/mock_publisher.py",
+      "destino": "vision-system/contrato/mock_publisher.py",
+      "sha256": "9ca97b56f6d37ba6180a3037ccd253b2668686066f6bc8f89af8de56ca0293e4",
+      "sha256_actual": "9ca97b56f6d37ba6180a3037ccd253b2668686066f6bc8f89af8de56ca0293e4",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/contrato/publicador.py",
+      "destino": "vision-system/contrato/publicador.py",
+      "sha256": "d4225a2a98c71969a16ae45b7f80b22818ae8779b711290f3f58be4e95a566e2",
+      "sha256_actual": "d4225a2a98c71969a16ae45b7f80b22818ae8779b711290f3f58be4e95a566e2",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/contrato/requirements.txt",
+      "destino": "vision-system/contrato/requirements.txt",
+      "sha256": "25a1c583977760d1f9b059690ff8b544f48d9adc7146f19aac630396299b2e2f",
+      "sha256_actual": "25a1c583977760d1f9b059690ff8b544f48d9adc7146f19aac630396299b2e2f",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/contrato/schema.py",
+      "destino": "vision-system/contrato/schema.py",
+      "sha256": "ff486774bb2f6ad02f5d9124af69ae8e8cd165e12b5f835f36a721d3eb04d189",
+      "sha256_actual": "ff486774bb2f6ad02f5d9124af69ae8e8cd165e12b5f835f36a721d3eb04d189",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/contrato/test_client.py",
+      "destino": "vision-system/contrato/test_client.py",
+      "sha256": "ba1bf70b2d652384c0239dca7de265ac0669dc1b87472799a49ba45e2c2dcf61",
+      "sha256_actual": "ba1bf70b2d652384c0239dca7de265ac0669dc1b87472799a49ba45e2c2dcf61",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/README.md",
+      "destino": "vision-system/vision/README.md",
+      "sha256": "5b2e14e5eef35dbf7b9b37db73d499906c9f49c753240f85166ad43f594470cf",
+      "sha256_actual": "5b2e14e5eef35dbf7b9b37db73d499906c9f49c753240f85166ad43f594470cf",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/__init__.py",
+      "destino": "vision-system/vision/__init__.py",
+      "sha256": "51d086f41f54186190d7faa55059dbbc652311c4632d820b28217bdd000a2315",
+      "sha256_actual": "51d086f41f54186190d7faa55059dbbc652311c4632d820b28217bdd000a2315",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/calibraciones/argomtech_cam40.json",
+      "destino": "vision-system/vision/calibraciones/argomtech_cam40.json",
+      "sha256": "eb23cfce7410fd94b9da0ef6f621a0283746701d6b9fc54d227e5df100c00030",
+      "sha256_actual": "eb23cfce7410fd94b9da0ef6f621a0283746701d6b9fc54d227e5df100c00030",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/calibraciones/logitech_c270.json",
+      "destino": "vision-system/vision/calibraciones/logitech_c270.json",
+      "sha256": "9db2b00fe0831c4247f1cba8d188cdcbb9671b41970c30d6d7a438ab49ec0fd4",
+      "sha256_actual": "9db2b00fe0831c4247f1cba8d188cdcbb9671b41970c30d6d7a438ab49ec0fd4",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/config_vision.json",
+      "destino": "vision-system/vision/config_vision.json",
+      "sha256": "dbc15f547c10db2cea193ef91c3292e0e7b2115e2f88d19cb7498e69b367f8df",
+      "sha256_actual": "dbc15f547c10db2cea193ef91c3292e0e7b2115e2f88d19cb7498e69b367f8df",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/configuracion.py",
+      "destino": "vision-system/vision/configuracion.py",
+      "sha256": "a7dcd5de412a5ecac63d630cf22195b4d9608abdd83ddc1967a471e8976087f2",
+      "sha256_actual": "a7dcd5de412a5ecac63d630cf22195b4d9608abdd83ddc1967a471e8976087f2",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/detectors/README.md",
+      "destino": "vision-system/vision/detectors/README.md",
+      "sha256": "1016a128c444714795c8b93cd2eaf713f1ed0bc728dd940210a81e94244efd2c",
+      "sha256_actual": "1016a128c444714795c8b93cd2eaf713f1ed0bc728dd940210a81e94244efd2c",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/detectors/__init__.py",
+      "destino": "vision-system/vision/detectors/__init__.py",
+      "sha256": "79c6ce328cc4c0cc918e336f9b41a3fb70300cc01fa133e12229091371efba65",
+      "sha256_actual": "79c6ce328cc4c0cc918e336f9b41a3fb70300cc01fa133e12229091371efba65",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/detectors/cubos.py",
+      "destino": "vision-system/vision/detectors/cubos.py",
+      "sha256": "785df0962950a6878e6740ad83018ed87e0e7b7ab3dd5db91f90081c4346e4ca",
+      "sha256_actual": "785df0962950a6878e6740ad83018ed87e0e7b7ab3dd5db91f90081c4346e4ca",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/detectors/rovers.py",
+      "destino": "vision-system/vision/detectors/rovers.py",
+      "sha256": "0dee6a4904072f650921d4d37700f20169a4ee7d968fd86f4dce98208d43aba0",
+      "sha256_actual": "0dee6a4904072f650921d4d37700f20169a4ee7d968fd86f4dce98208d43aba0",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/geometry/README.md",
+      "destino": "vision-system/vision/geometry/README.md",
+      "sha256": "e12731cb2bb304389a8212a993a13adb98b3659b5870873cb2681441f1f008c0",
+      "sha256_actual": "e12731cb2bb304389a8212a993a13adb98b3659b5870873cb2681441f1f008c0",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/geometry/__init__.py",
+      "destino": "vision-system/vision/geometry/__init__.py",
+      "sha256": "6dce6ae01d140ef7751af6f5f0dfe99f50a6df6ba23a2fb3ef4ca7b1acd52324",
+      "sha256_actual": "6dce6ae01d140ef7751af6f5f0dfe99f50a6df6ba23a2fb3ef4ca7b1acd52324",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/geometry/coordenadas.py",
+      "destino": "vision-system/vision/geometry/coordenadas.py",
+      "sha256": "b6a1f442107b26e39ad4c3e3635624d57acb4aab7a722a3d8c5a86dfbbd6a61c",
+      "sha256_actual": "b6a1f442107b26e39ad4c3e3635624d57acb4aab7a722a3d8c5a86dfbbd6a61c",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/geometry/distorsion.py",
+      "destino": "vision-system/vision/geometry/distorsion.py",
+      "sha256": "fbc0863eb9f218cd59ba911fdcf9b8e62f04478116f322ab9887477657a2e737",
+      "sha256_actual": "fbc0863eb9f218cd59ba911fdcf9b8e62f04478116f322ab9887477657a2e737",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/mediciones/argomtech_cam40_20260804_1934.json",
+      "destino": "vision-system/vision/mediciones/argomtech_cam40_20260804_1934.json",
+      "sha256": "b46c4a02b7e5a32721c8821328f5f49c39ecc6f2f44950dda493c48dfbe47aff",
+      "sha256_actual": "b46c4a02b7e5a32721c8821328f5f49c39ecc6f2f44950dda493c48dfbe47aff",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/mediciones/desfases_rover10_20260809_1924.json",
+      "destino": "vision-system/vision/mediciones/desfases_rover10_20260809_1924.json",
+      "sha256": "7630bfc7be59dc79544fb0054270aa94bd34a9c77edf375dcd9e38495ccb51d6",
+      "sha256_actual": "7630bfc7be59dc79544fb0054270aa94bd34a9c77edf375dcd9e38495ccb51d6",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/mediciones/desfases_rover10_20260809_2010.json",
+      "destino": "vision-system/vision/mediciones/desfases_rover10_20260809_2010.json",
+      "sha256": "f67c03cc8f4740ad3a40157312261fd121982ce15cbc34f53d670ea8c184e2b6",
+      "sha256_actual": "f67c03cc8f4740ad3a40157312261fd121982ce15cbc34f53d670ea8c184e2b6",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/mediciones/falsos_positivos_20260911_193133.json",
+      "destino": "vision-system/vision/mediciones/falsos_positivos_20260911_193133.json",
+      "sha256": "fabc17b4d18325032674770fbeead83c08d80d23079bc40d67ae75655ba907bc",
+      "sha256_actual": "fabc17b4d18325032674770fbeead83c08d80d23079bc40d67ae75655ba907bc",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/mediciones/falsos_positivos_20260911_193636.json",
+      "destino": "vision-system/vision/mediciones/falsos_positivos_20260911_193636.json",
+      "sha256": "617e31dcb86acfbf95e1ab24ec719e76b7775be3c066a7abc8d04ea2d64665f1",
+      "sha256_actual": "617e31dcb86acfbf95e1ab24ec719e76b7775be3c066a7abc8d04ea2d64665f1",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/mediciones/falsos_positivos_20260911_202329.json",
+      "destino": "vision-system/vision/mediciones/falsos_positivos_20260911_202329.json",
+      "sha256": "48290522424757a91a28f3dfaebfb06183c08985712c6221447fc1cacab79044",
+      "sha256_actual": "48290522424757a91a28f3dfaebfb06183c08985712c6221447fc1cacab79044",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/mediciones/logitech_c270_20260804_1750.json",
+      "destino": "vision-system/vision/mediciones/logitech_c270_20260804_1750.json",
+      "sha256": "7dfce4a9b2901c0761567bb9ec2973264cf0e2162b03e8ef3bd8f917b7019368",
+      "sha256_actual": "7dfce4a9b2901c0761567bb9ec2973264cf0e2162b03e8ef3bd8f917b7019368",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/mediciones/logitech_c270_20260804_1851.json",
+      "destino": "vision-system/vision/mediciones/logitech_c270_20260804_1851.json",
+      "sha256": "89dda9d23cacbb6d8e0f71ad3282214ea1461df23c15b381742ed7c284549348",
+      "sha256_actual": "89dda9d23cacbb6d8e0f71ad3282214ea1461df23c15b381742ed7c284549348",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/mundo.py",
+      "destino": "vision-system/vision/mundo.py",
+      "sha256": "ae761e48642349a122d8a36d9e38540766740d5d9933d1eb46a743e3f5077c1d",
+      "sha256_actual": "ae761e48642349a122d8a36d9e38540766740d5d9933d1eb46a743e3f5077c1d",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/publish/README.md",
+      "destino": "vision-system/vision/publish/README.md",
+      "sha256": "65430fe1c4b08ee9d601e16c4b401aa2e980ce209736460554369a40b4c042e0",
+      "sha256_actual": "65430fe1c4b08ee9d601e16c4b401aa2e980ce209736460554369a40b4c042e0",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/publish/__init__.py",
+      "destino": "vision-system/vision/publish/__init__.py",
+      "sha256": "69ad8cb64edf03999d4e0fd5ad2348b71453d783c60d7c511e569e5011baa2c6",
+      "sha256_actual": "69ad8cb64edf03999d4e0fd5ad2348b71453d783c60d7c511e569e5011baa2c6",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/publish/puerto.py",
+      "destino": "vision-system/vision/publish/puerto.py",
+      "sha256": "4e993bd8906d955ceba245c6bc8f150e1f83f25259d7b26e77f1e53d5dc55eb6",
+      "sha256_actual": "4e993bd8906d955ceba245c6bc8f150e1f83f25259d7b26e77f1e53d5dc55eb6",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/publish/telemetria.py",
+      "destino": "vision-system/vision/publish/telemetria.py",
+      "sha256": "418ccb7affd01f5546fc7db2a1971ecd437cc20f8e98fc4cb26ceeebbf224a7b",
+      "sha256_actual": "418ccb7affd01f5546fc7db2a1971ecd437cc20f8e98fc4cb26ceeebbf224a7b",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/record/README.md",
+      "destino": "vision-system/vision/record/README.md",
+      "sha256": "256d64e327499c352ed22f5440148f93bf7399e86d722430c14975c7fd637fae",
+      "sha256_actual": "256d64e327499c352ed22f5440148f93bf7399e86d722430c14975c7fd637fae",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/record/__init__.py",
+      "destino": "vision-system/vision/record/__init__.py",
+      "sha256": "fd88319143bd9d3c3f734f12d0247a7f24a05e69735598a827df42fddc5a46f0",
+      "sha256_actual": "fd88319143bd9d3c3f734f12d0247a7f24a05e69735598a827df42fddc5a46f0",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/record/acta.py",
+      "destino": "vision-system/vision/record/acta.py",
+      "sha256": "44836fe3989347fec2e88e62d6419f8d6c0c7c5376aab0fb1bd9b3c383c7bdba",
+      "sha256_actual": "44836fe3989347fec2e88e62d6419f8d6c0c7c5376aab0fb1bd9b3c383c7bdba",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/reglas/README.md",
+      "destino": "vision-system/vision/reglas/README.md",
+      "sha256": "95198bb750de33afd115a176efd0b0471be24467ad85625ff1623a66f6a663c8",
+      "sha256_actual": "95198bb750de33afd115a176efd0b0471be24467ad85625ff1623a66f6a663c8",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/reglas/__init__.py",
+      "destino": "vision-system/vision/reglas/__init__.py",
+      "sha256": "f26731d2c946ae0b21e352e3071c6972d7463d9225a875a27fc9932be9c6bf47",
+      "sha256_actual": "f26731d2c946ae0b21e352e3071c6972d7463d9225a875a27fc9932be9c6bf47",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/reglas/acopio.py",
+      "destino": "vision-system/vision/reglas/acopio.py",
+      "sha256": "17f0b5c0f038dedeb3ed67a9a0121658f1f3ee623f266e2a17d89977e75bc187",
+      "sha256_actual": "17f0b5c0f038dedeb3ed67a9a0121658f1f3ee623f266e2a17d89977e75bc187",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/requirements.txt",
+      "destino": "vision-system/vision/requirements.txt",
+      "sha256": "94475383368887c2e6cbd1b2417a021c2d976e42999c0f6c0f47883be656e174",
+      "sha256_actual": "94475383368887c2e6cbd1b2417a021c2d976e42999c0f6c0f47883be656e174",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/sistema.py",
+      "destino": "vision-system/vision/sistema.py",
+      "sha256": "12cec2ebf912892f85a4a3072f0144841acccf4d0d95676522553d44bdaaeef1",
+      "sha256_actual": "12cec2ebf912892f85a4a3072f0144841acccf4d0d95676522553d44bdaaeef1",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/sources/README.md",
+      "destino": "vision-system/vision/sources/README.md",
+      "sha256": "4198165e62faf5e5b53532529750e74202f327b652f6b029bef8893c1e452663",
+      "sha256_actual": "4198165e62faf5e5b53532529750e74202f327b652f6b029bef8893c1e452663",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/sources/__init__.py",
+      "destino": "vision-system/vision/sources/__init__.py",
+      "sha256": "a5c1bd79c3e50b0fcb83d23854bb2b19a767f62e89e175a760150b3deab70fbe",
+      "sha256_actual": "a5c1bd79c3e50b0fcb83d23854bb2b19a767f62e89e175a760150b3deab70fbe",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/sources/camara.py",
+      "destino": "vision-system/vision/sources/camara.py",
+      "sha256": "913bb8287bae03aea8d24ca245f4a926604f98224f3dd197eb5a50df57b49a69",
+      "sha256_actual": "913bb8287bae03aea8d24ca245f4a926604f98224f3dd197eb5a50df57b49a69",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/sources/fuente.py",
+      "destino": "vision-system/vision/sources/fuente.py",
+      "sha256": "2fbffa05b1889b1e953388ba5f3f1567ff911d541a4cd3ee0ad9fc737c75bcb5",
+      "sha256_actual": "2fbffa05b1889b1e953388ba5f3f1567ff911d541a4cd3ee0ad9fc737c75bcb5",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/sources/generador_sintetico.py",
+      "destino": "vision-system/vision/sources/generador_sintetico.py",
+      "sha256": "3bb21c3dbee7ee81bbdfa59ef50ce2f125c5deea23518e152d2915a15132ef5d",
+      "sha256_actual": "3bb21c3dbee7ee81bbdfa59ef50ce2f125c5deea23518e152d2915a15132ef5d",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/README.md",
+      "destino": "vision-system/vision/tools/README.md",
+      "sha256": "31891df2959e317ea493fffc2fcd7ccdb26a0167a67e3890eb0194722d5c08cf",
+      "sha256_actual": "31891df2959e317ea493fffc2fcd7ccdb26a0167a67e3890eb0194722d5c08cf",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/__init__.py",
+      "destino": "vision-system/vision/tools/__init__.py",
+      "sha256": "b51ffba7f16a25dcdf2b61af02f34ccb8565283fe1dedf92a69f16cc0bbf076a",
+      "sha256_actual": "b51ffba7f16a25dcdf2b61af02f34ccb8565283fe1dedf92a69f16cc0bbf076a",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/calibrar_camara.py",
+      "destino": "vision-system/vision/tools/calibrar_camara.py",
+      "sha256": "31e5bad7381da9e288ff3ebb88b14ba957eabc95b08179ed1ae6fa091f693d92",
+      "sha256_actual": "31e5bad7381da9e288ff3ebb88b14ba957eabc95b08179ed1ae6fa091f693d92",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/diagnostico_camara.py",
+      "destino": "vision-system/vision/tools/diagnostico_camara.py",
+      "sha256": "cbaf03720f562ab811bbb6eeee67f47a78dfcd75b033ab48ae2bfeca07756dc4",
+      "sha256_actual": "cbaf03720f562ab811bbb6eeee67f47a78dfcd75b033ab48ae2bfeca07756dc4",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/diagnostico_falsos_positivos.py",
+      "destino": "vision-system/vision/tools/diagnostico_falsos_positivos.py",
+      "sha256": "7d07ce88a978be45ee153b30f23e9b32f320bfb32f0179ce00809b306fe4d82b",
+      "sha256_actual": "7d07ce88a978be45ee153b30f23e9b32f320bfb32f0179ce00809b306fe4d82b",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/medir_desfases.py",
+      "destino": "vision-system/vision/tools/medir_desfases.py",
+      "sha256": "286ffea6cee130a7599ebfb7005718a52af7ca11204864b862d07a6451c04ed1",
+      "sha256_actual": "286ffea6cee130a7599ebfb7005718a52af7ca11204864b862d07a6451c04ed1",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/panel.py",
+      "destino": "vision-system/vision/tools/panel.py",
+      "sha256": "d14858e2eba1281db3e5616a1a5a9926f1ba4a11a533d5fa2748bccf226955c1",
+      "sha256_actual": "d14858e2eba1281db3e5616a1a5a9926f1ba4a11a533d5fa2748bccf226955c1",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/patron_calibracion.py",
+      "destino": "vision-system/vision/tools/patron_calibracion.py",
+      "sha256": "adb46af232ed30142b25a09b5b9e881f8edc21d1ce3dd3e2e0d831dfc9e7984f",
+      "sha256_actual": "adb46af232ed30142b25a09b5b9e881f8edc21d1ce3dd3e2e0d831dfc9e7984f",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/precision_ubicacion.py",
+      "destino": "vision-system/vision/tools/precision_ubicacion.py",
+      "sha256": "905af53234179e529dab5a10eb936454191c256ce46927db2447ceaa40474f19",
+      "sha256_actual": "905af53234179e529dab5a10eb936454191c256ce46927db2447ceaa40474f19",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/verificar_acopio.py",
+      "destino": "vision-system/vision/tools/verificar_acopio.py",
+      "sha256": "b4dca02bd26bddecaf26cadc8169ed4827e8604ab93df5463a5625c957e8b5d3",
+      "sha256_actual": "b4dca02bd26bddecaf26cadc8169ed4827e8604ab93df5463a5625c957e8b5d3",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/verificar_config.py",
+      "destino": "vision-system/vision/tools/verificar_config.py",
+      "sha256": "ac54b0d2dbd698c5e14a012a331872a2faf74fa84fa239db2f317c4aa9e2d821",
+      "sha256_actual": "ac54b0d2dbd698c5e14a012a331872a2faf74fa84fa239db2f317c4aa9e2d821",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/verificar_cubos.py",
+      "destino": "vision-system/vision/tools/verificar_cubos.py",
+      "sha256": "9d45b64f7c047703216abe16e224d6a4407dc723228335c56e5ee1bead1ecbb5",
+      "sha256_actual": "9d45b64f7c047703216abe16e224d6a4407dc723228335c56e5ee1bead1ecbb5",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/verificar_ejemplos.py",
+      "destino": "vision-system/vision/tools/verificar_ejemplos.py",
+      "sha256": "ca6a6a1bae8935cb3954f39433b778daa5bcb75ad379648ab05ca72b2c8b2b2d",
+      "sha256_actual": "ca6a6a1bae8935cb3954f39433b778daa5bcb75ad379648ab05ca72b2c8b2b2d",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/verificar_geometria.py",
+      "destino": "vision-system/vision/tools/verificar_geometria.py",
+      "sha256": "18c3ac260228eee6c81bca69a1469f4b4634fef6941187b04089c704c561791b",
+      "sha256_actual": "18c3ac260228eee6c81bca69a1469f4b4634fef6941187b04089c704c561791b",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/verificar_ronda.py",
+      "destino": "vision-system/vision/tools/verificar_ronda.py",
+      "sha256": "59b1313f3335110754cbe35507521d7519f3d1548f1b15a8705d24bdbee0eb84",
+      "sha256_actual": "59b1313f3335110754cbe35507521d7519f3d1548f1b15a8705d24bdbee0eb84",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/verificar_rovers.py",
+      "destino": "vision-system/vision/tools/verificar_rovers.py",
+      "sha256": "a3f15f17b7e27c8aa9890d8ff07c2402a0e5136d6ac92365b876d5baaf5cd7e7",
+      "sha256_actual": "a3f15f17b7e27c8aa9890d8ff07c2402a0e5136d6ac92365b876d5baaf5cd7e7",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tools/verificar_seguimiento.py",
+      "destino": "vision-system/vision/tools/verificar_seguimiento.py",
+      "sha256": "6ee977618fc7d1399e6d5f832ae3954af8c31373d15dc3059003dc0285fba48e",
+      "sha256_actual": "6ee977618fc7d1399e6d5f832ae3954af8c31373d15dc3059003dc0285fba48e",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tracking/README.md",
+      "destino": "vision-system/vision/tracking/README.md",
+      "sha256": "327b588a120b8ab9a87e85635f14b0e73f48a3d8ee8a9e7aa8aa48b9aea11986",
+      "sha256_actual": "327b588a120b8ab9a87e85635f14b0e73f48a3d8ee8a9e7aa8aa48b9aea11986",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tracking/__init__.py",
+      "destino": "vision-system/vision/tracking/__init__.py",
+      "sha256": "06b7fdfa872c9d1affdb9bb111cc73f4050a66e6764c2edcde0d1aa994b93112",
+      "sha256_actual": "06b7fdfa872c9d1affdb9bb111cc73f4050a66e6764c2edcde0d1aa994b93112",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tracking/admision.py",
+      "destino": "vision-system/vision/tracking/admision.py",
+      "sha256": "5314f502072943bcbc13374628c487791d10247ac688cd4f107564c859480db4",
+      "sha256_actual": "5314f502072943bcbc13374628c487791d10247ac688cd4f107564c859480db4",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/tracking/seguimiento.py",
+      "destino": "vision-system/vision/tracking/seguimiento.py",
+      "sha256": "a8d31ab2ffe28d14d9046bf68197889e79931cc415070d24ab2392ef30ef41e2",
+      "sha256_actual": "a8d31ab2ffe28d14d9046bf68197889e79931cc415070d24ab2392ef30ef41e2",
+      "estado": "conservado"
+    },
+    {
+      "origen": "vision-system/vision/vista.py",
+      "destino": "vision-system/vision/vista.py",
+      "sha256": "498ffd1e300cd2ad407e6ad04e11e825a084a8cd38ec5e97384442f7acf8fd41",
+      "sha256_actual": "498ffd1e300cd2ad407e6ad04e11e825a084a8cd38ec5e97384442f7acf8fd41",
+      "estado": "conservado"
+    }
+  ]
+}

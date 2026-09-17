@@ -105,6 +105,8 @@
     "_NO_HAY_PROBLEMA_DE_ASOCIACION": "Acá NO hace falta un seguidor de los clásicos, y conviene entender por qué: en este reto CADA OBJETO TRAE SU PROPIA IDENTIDAD. El rover la trae en el ID de su marcador ArUco y el cubo en su color, y no hay dos del mismo. O sea que no hay que adivinar qué detección de este cuadro corresponde a cuál del anterior —que es el problema difícil de todo seguimiento— porque la respuesta viene escrita en el objeto. Lo que queda es memoria y edad, que es mucho más simple y mucho más confiable.",
     "edad_maxima_ms": 60000,
     "_NOTA_EDAD_MAXIMA": "Después de este tiempo sin una observación buena, el objeto se saca de la lista. OJO: esto NO es para manejar oclusiones —para eso está la edad, y el contrato promete que un objeto tapado NO desaparece—. Es para barrer FANTASMAS: una detección espuria que nunca se repite, o un objeto que de verdad se fue de la cancha. Sesenta segundos son generosos a propósito: una ronda dura minutos y una oclusión normal dura segundos, así que una oclusión legítima nunca llega a este límite.",
+    "velocidad_maxima_rover_mm_s": 1000.0,
+    "_NOTA_VELOCIDAD_MAXIMA_ROVER": "Guarda de plausibilidad temporal para un rover YA seguido. Si una detección con el mismo ID exige que el rover haya recorrido más de este límite desde su última observación buena, no refresca la memoria: se conserva la pose anterior y su edad crece. Evita que un falso ArUco de la cuadrícula haga 'teletransportarse' al rover cuando el marcador real se tapa. 1000 mm/s es deliberadamente holgado para la prueba física actual; debe medirse y reajustarse si el hardware real demuestra una velocidad mayor.",
     "refrescar_con_cubos_no_confiables": false,
     "_NOTA_NO_CONFIABLES": "Si una detección de cubo marcada como NO confiable debe refrescar la posición y la edad. En false —lo correcto— no la refresca: se conserva la última posición buena y la edad sigue creciendo. Es exactamente lo que pide el contrato para un objeto ocluido, y es honesto: una detección no confiable dice 'el cubo está por acá' pero no 'está acá'. Poner true haría que el sistema publique posiciones que él mismo considera dudosas, con edad cero, o sea presentándolas como frescas y seguras."
   },
@@ -229,18 +231,24 @@
   },
   "deteccion_cubos": {
     "_acerca_de": "Detección de cubos por color (vision/detectors/cubos.py). El tablero es acromático —grises, blancos, negros— así que todo lo que tenga color saturado es, por definición, un objeto de interés. Ese es el filtro que separa el fondo del contenido casi gratis.",
-    "croma_minimo": 28.0,
-    "_nota_croma": "Croma mínimo en Lab, `raiz(a*² + b*²)`, para que un píxel cuente como coloreado. El croma de Lab ES la saturación en sentido perceptual. Se usa Lab y no HSV para el umbral Y para la clasificación —un solo espacio— porque el matiz de HSV se vuelve inestable justo donde más importa: con poca luz o poca saturación da saltos entre extremos.",
+    "croma_minimo": 25.4,
+    "_nota_croma": "Croma mínimo GLOBAL en Lab, `raiz(a*² + b*²)`, para que un píxel cuente como coloreado. 25.4 quedó fijado el 17-sep-2026 sobre la Logitech C270: mantiene el azul estable y con margen frente al residuo máximo. Se usa Lab y no HSV para el umbral Y para la clasificación —un solo espacio— porque el matiz de HSV se vuelve inestable justo donde más importa: con poca luz o poca saturación da saltos entre extremos.",
+    "croma_minimo_por_color": {
+      "green": 22.0
+    },
+    "_nota_croma_por_color": "Recuperación selectiva para plásticos cuya cara menos saturada cae por debajo del umbral global. Solo se aplica a píxeles cuyo matiz corresponde a ese color dentro de `matiz_tolerancia_recuperacion_grados`; el resto de la imagen sigue exigiendo 25.4. En el verde real, 22.0 dio residuo 0.128-0.140 en 5/5 cuadros con la C270, contra ~0.30 con solo el umbral global.",
     "matices_lab_grados": {
       "red": 39.9,
-      "green": 136.0,
+      "green": 171.0,
       "blue": 306.2,
       "yellow": 103.0
     },
-    "_POR_QUE_POR_MATIZ": "Se clasifica por el MATIZ —el ángulo `atan2(b*, a*)`— y no por la distancia a un color de referencia. El matiz es casi invariante a la iluminación y a lo saturado que sea el plástico: un cubo rojo a la sombra sigue teniendo matiz de rojo, aunque su croma y su luminosidad bajen. Por eso NO hace falta medir los cubos reales antes de arrancar: los valores de acá son los de los primarios sRGB puros y alcanzan, porque los tres colores del reto están de 94 a 170 grados entre sí.",
-    "_EL_AMARILLO_ES_EXCLUSION": "El amarillo está en la lista aunque esta edición no tenga obstáculos, y NO es un cubo: una mancha que caiga más cerca del amarillo se descarta. Existe porque verde y amarillo están a solo 33 grados —el par más ajustado con diferencia— y sin esa clase, cualquier objeto amarillo que ande por la cancha se leería como cubo verde.",
+    "_POR_QUE_POR_MATIZ": "Se clasifica por el MATIZ —el ángulo `atan2(b*, a*)`— y no por distancia RGB. El matiz aguanta mucho mejor los cambios de iluminación. Las referencias se pueden calibrar con los objetos reales: el verde se midió alrededor de 171° el 17-sep-2026 con la C270.",
+    "_EL_AMARILLO_ES_EXCLUSION": "El amarillo está en la lista aunque esta edición no tenga obstáculos, y NO es un cubo: una mancha que caiga más cerca del amarillo se descarta en vez de forzarse a uno de los tres colores de cubo.",
     "matiz_tolerancia_grados": 45.0,
-    "_nota_tolerancia": "Cuánto puede apartarse el matiz medido del de referencia para aceptar la clasificación. Con 45 grados, las clases no se solapan (la más cercana está a 33) y una mancha de un color que no es ninguno de los tres se descarta en vez de forzarse.",
+    "_nota_tolerancia": "Cuánto puede apartarse el matiz medido del de referencia para aceptar la clasificación. La clase más cercana se decide primero y luego se exige esta tolerancia; una mancha muy alejada de todas las referencias se descarta en vez de forzarse.",
+    "matiz_tolerancia_recuperacion_grados": 20.0,
+    "_nota_tolerancia_recuperacion": "La recuperación por croma bajo es deliberadamente más estrecha que la clasificación normal. Solo rescata píxeles muy cercanos al matiz calibrado del color para no convertir pequeñas variaciones cromáticas del fondo en parte del cubo.",
     "area_minima_relativa": 0.25,
     "area_maxima_relativa": 3.0,
     "_nota_area": "Tamaño admisible de la mancha, como fracción del área que ocuparía la cara de un cubo. Se expresa relativo y no en píxeles porque los píxeles dependen de la resolución y de la altura de la cámara. El mínimo bajo (0,25) es a propósito: un cubo empujado por un rover pierde alrededor del 22 % de su área, y hay que seguir encontrándolo.",
@@ -290,7 +298,7 @@
         175
       ]
     },
-    "_nota_colores_cubo": "Color con que se dibuja cada cubo en la imagen sintética, en RGB. NO son los colores del cubo real: son plásticos saturados plausibles, elegidos para que la segmentación por croma tenga algo realista que separar. Los del cubo real no hace falta medirlos: los tres primarios están de 94 a 170 grados de matiz entre sí en Lab, así que clasificarlos es fácil. El par ajustado es verde-amarillo (33 grados), y por eso el amarillo se conserva como clase de EXCLUSIÓN aunque no haya obstáculos.",
+    "_nota_colores_cubo": "Color con que se dibuja cada cubo en la imagen sintética, en RGB. NO son mediciones de los cubos reales: son plásticos saturados plausibles para ejercitar segmentación y clasificación. Las referencias del hardware real viven en `deteccion_cubos.matices_lab_grados`. El amarillo se conserva como clase de EXCLUSIÓN aunque no haya obstáculos.",
     "brillo_tapa": 1.0,
     "brillo_lateral": 0.62,
     "_nota_brillo": "La tapa del cubo recibe luz de frente y las caras laterales de refilón, así que se ven más oscuras. Dibujarlo es lo que vuelve realista la mancha: un cubo NO se ve como un cuadrado de color uniforme, y el detector tiene que vérselas con eso.",

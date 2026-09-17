@@ -1,0 +1,94 @@
+{
+  "_acerca_de": "Configuración del simulador (mock_publisher.py). JSON no admite comentarios, así que las notas van en claves que empiezan con guion bajo; el simulador las ignora. Nada de esto está incrustado en el código: para probar otro escenario se edita este archivo, no el programa.",
+
+  "red": {
+    "host": "0.0.0.0",
+    "port": null,
+    "_nota_puerto": "null = usar el puerto oficial del contrato: 2026, definido como DEFAULT_PORT en schema.py, que es el ÚNICO lugar donde vive ese número. El sistema real publica en el mismo puerto, así un equipo pasa del simulador a la cancha sin tocar su código. Poné un número acá solo si necesitás otro puerto; también se puede con --port."
+  },
+
+  "grid": {
+    "cols": 43,
+    "rows": 43,
+    "cell_mm": 20.0,
+
+    "_MEDIDA_VERIFICADA": "43 x 43 celdas de 20 mm = 860 x 860 mm, medido físicamente el 4-ago-2026 entre los CENTROS de los marcadores de esquina. Coincide con vision/config_vision.json, y tiene que seguir coincidiendo: los equipos desarrollan contra este simulador, así que si dice algo distinto de la cancha real, el código que les funciona acá les falla allá.",
+
+    "_DOS_NUMEROS_DISTINTOS": "El tablero FÍSICO mide 50 x 50 cuadros; la CANCHA EFECTIVA es de 43 x 43 celdas, que es el área entre los centros de los cuatro marcadores. Los 7 cuadros de diferencia son el margen donde van pegados los marcadores, y son borde muerto. Todo el juego vive dentro del área de 43 x 43.",
+
+    "_nota_equipos": "Los equipos NO deben asumir NINGÚN tamaño: tienen que leer grid del mensaje. Este número puede cambiar si se monta otra cancha."
+  },
+
+  "tasas": {
+    "pub_hz": 20.0,
+    "sim_hz": 30.0,
+    "_nota_relojes": "Dos relojes desacoplados, igual que en el sistema real: la simulación avanza a sim_hz (hace de cámara) y la publicación sale por temporizador a pub_hz. Uno nunca bloquea al otro."
+  },
+
+  "rovers": [
+    { "id": 10, "col": 4.0, "row": 17.5, "theta": 0.0 },
+    { "id": 11, "col": 4.0, "row": 25.5, "theta": 0.0 }
+  ],
+  "_nota_rovers": "El id es el ID del marcador ArUco pegado al robot. Los IDs 0..3 quedan reservados para los cuatro marcadores de esquina, por eso los rovers usan 10 y 11. col/row/theta son la pose inicial. Agregar o quitar entradas cambia la cantidad de rovers sin tocar código.",
+  "_nota_pose_inicial": "Los dos arrancan junto a la salida, que desde el protocolo v2 está al centro del lado izquierdo (3.75, 21.5), y miran hacia adentro de la cancha (theta 0 = hacia col creciente). Quedan simétricos respecto de la salida y separados 8 celdas = 160 mm entre centros: el chasis mide 120 mm de ancho, así que con menos separación se dibujarían montados uno sobre el otro.",
+
+  "velocidad_rover_celdas_s": 6.0,
+  "giro_rover_grados_s": 90.0,
+
+  "cubes": [
+    { "color": "green", "col": 26.0, "row": 10.0 },
+    { "color": "blue", "col": 15.0, "row": 29.0 },
+    { "color": "red", "col": 33.0, "row": 26.0 }
+  ],
+  "_nota_cubes": "Cubos de 6 cm. El color ES la identidad: no puede haber dos del mismo color. Se admiten 2 o 3 cubos; para probar con 2, se borra una entrada. Todo cubo debe tener un depot de su color (el contrato lo exige).",
+
+  "obstacles": [],
+  "_nota_obstacles": "Bloques amarillos de 10 cm. No llevan color ni id: el amarillo está reservado para obstáculos y son intercambiables entre sí.",
+
+  "_POR_QUE_VACIO": "⚠️ VACÍO A PROPÓSITO: la primera edición del reto NO usa obstáculos. El campo `obstacles` SIGUE EXISTIENDO en el mensaje y sigue siendo una lista; simplemente viene sin elementos. Eso NO es un cambio de contrato —el formato es idéntico y la versión sigue siendo 2—, así que ningún equipo tiene que tocar su código: quien itera la lista, como manda la regla 6.1, no encuentra nada y sigue.",
+
+  "_POR_QUE_NO_SE_DEJAN_DE_EJEMPLO": "Porque el simulador y la cancha real no pueden decir cosas distintas. Los equipos desarrollan contra esto, y un simulador que emite obstáculos que nunca van a existir hace que veinte equipos escriban lógica de esquive para nada. Si en una edición futura vuelven, se agregan acá y el mensaje deja de traer la lista vacía, sin cambiar el contrato ni avisar nada.",
+
+  "start": { "col": 3.75, "row": 21.5 },
+  "_nota_start": "Punto de salida de los robots, compartido por los dos. Está al CENTRO del lado que va del marcador 0 al 3 —el lado izquierdo mirando la cancha desde arriba—, a 3,75 celdas del borde, que es medio fondo de zona: así todos los lugares fijos quedan a la misma distancia de su borde. OJO: el ORIGEN de coordenadas no se movió, sigue siendo el centro del marcador 0 en (0,0). Lo que cambió en v2 es dónde arrancan los robots, no desde dónde se mide.",
+
+  "depots": [
+    { "color": "green", "col": 21.5, "row": 3.75 },
+    { "color": "red", "col": 39.25, "row": 21.5 },
+    { "color": "blue", "col": 21.5, "row": 39.25 }
+  ],
+  "depot_size": { "length": 10.0, "depth": 7.5 },
+  "cube_side": 3.0,
+
+  "_nota_depots": "Tres zonas de acopio, una por color, al CENTRO de cada uno de los tres lados que NO son el de la salida: verde arriba (lado 0-1), rojo a la derecha (lado 1-2) y azul abajo (lado 2-3). col/row son el CENTRO del rectángulo. La asignación de colores por lado está DECIDIDA y ya no es provisional; lo que sigue vigente es que los equipos NO la asumen: leen depots del mensaje, que para eso viaja en cada uno.",
+
+  "_nota_geometria_zonas": "Cada zona mide 200 x 150 mm = 10 x 7,5 celdas: el largo va PARALELO al borde y el fondo entra hacia adentro de la cancha. La zona queda entera dentro de la cancha efectiva, con su lado largo apoyado sobre el borde, y por eso el centro está a 3,75 celdas del borde (medio fondo). La ORIENTACIÓN no se declara: se deduce del borde más cercano al centro, que está a 3,75 celdas del suyo y a 21,5 de los perpendiculares.",
+
+  "_POR_QUE_EL_FONDO_ES_DE_150": "El fondo era de 100 mm y subió a 150 en sep-2026. Con 100, la ventana de aceptación quedaba de 15 mm sobre el fondo —7,6 mm a cada lado del eje— y en la cancha real se vio que un cubo bien puesto podía quedar afuera por una rendija, sobre todo entrando girado. El criterio conservador por media diagonal NO se tocó: es lo que hace que el veredicto valga para cualquier rotación del cubo. Lo que se agranda es la zona. Con 150 la ventana pasa a 65,1 mm. Esto NO sube la versión del protocolo: el tamaño es un DATO que viaja en el mensaje y los equipos lo leen de ahí, así que la forma del mensaje no cambió.",
+
+  "_nota_tamanos_en_el_mensaje": "depot_size y cube_side viajan en el mensaje como campos raíz, en celdas, y los equipos los leen de ahí en vez de copiarlos de un documento: el veredicto de 'cubo completamente dentro de su zona' depende de los dos. El tamaño de zona es UNO SOLO para las tres, y por eso va una vez y no repetido en cada depot. Tienen que coincidir con DEPOT_LENGTH_CELLS, DEPOT_DEPTH_CELLS y CUBE_SIDE_MM de schema.py: el simulador lo comprueba al arrancar y se niega a publicar si no.",
+
+  "ruido": {
+    "pos_sigma_celdas": 0.06,
+    "theta_sigma_grados": 1.5,
+    "_nota": "Ruido gaussiano que imita el jitter de la detección real. Los equipos deben filtrar o tolerar: si su lógica se rompe con este ruido, se rompe también en la cancha."
+  },
+
+  "patologias": {
+    "radio_oclusion_celdas": 2.0,
+    "prob_perdida_rover": 0.02,
+    "radio_empuje_celdas": 1.5,
+    "_nota_oclusion": "Si un rover queda a menos de radio_oclusion_celdas de un cubo, el cubo deja de verse: NO se reporta con posición vieja y age_ms=0, sino que mantiene su última posición conocida con age_ms creciendo. Un cubo ocluido nunca desaparece de la lista.",
+    "_nota_perdida": "Probabilidad, por cuadro, de que la detección de un rover falle (marcador borroso, reflejo). Mismo tratamiento: última posición conocida y age_ms creciendo.",
+    "_nota_empuje": "Si un rover pasa a menos de radio_empuje_celdas de un cubo, lo empuja en la dirección en la que va. Sirve para que los equipos vean cubos que se mueven solos."
+  },
+
+  "ronda": {
+    "_acerca_de": "Los dos tiempos de una ronda, en milisegundos. Tienen que ser los mismos que los de vision/config_vision.json: los equipos desarrollan contra el simulador para correr contra la cancha, y dos cronómetros distintos harían que la preparación que ensayaron no sea la que van a tener.",
+    "preparacion_ms": 60000,
+    "duracion_ms": 600000,
+    "_COMO_SE_PRUEBA_SIN_ESPERAR": "Bajá los dos valores acá. No hay comando que adelante el paso de READY a RUNNING —se quitó a propósito— así que esta es la forma de probar el ciclo completo en veinte segundos en vez de en once minutos."
+  },
+  "semilla_aleatoria": 20260725,
+  "_nota_semilla": "Semilla fija para que dos corridas den lo mismo y un bug del equipo sea reproducible. Poner null para tener ruido distinto en cada corrida."
+}

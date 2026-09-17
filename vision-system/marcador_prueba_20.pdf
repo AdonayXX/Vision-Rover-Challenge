@@ -1,0 +1,96 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792.0000 612.0000] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 4128 >>
+stream
+0.0000 g 310.9606 436.2520 28.3465 28.3465 re f
+0.0000 g 339.3071 436.2520 28.3465 28.3465 re f
+0.0000 g 367.6535 436.2520 28.3465 28.3465 re f
+0.0000 g 396.0000 436.2520 28.3465 28.3465 re f
+0.0000 g 424.3465 436.2520 28.3465 28.3465 re f
+0.0000 g 452.6929 436.2520 28.3465 28.3465 re f
+0.0000 g 310.9606 407.9055 28.3465 28.3465 re f
+0.0000 g 367.6535 407.9055 28.3465 28.3465 re f
+0.0000 g 396.0000 407.9055 28.3465 28.3465 re f
+0.0000 g 424.3465 407.9055 28.3465 28.3465 re f
+0.0000 g 452.6929 407.9055 28.3465 28.3465 re f
+0.0000 g 310.9606 379.5591 28.3465 28.3465 re f
+0.0000 g 339.3071 379.5591 28.3465 28.3465 re f
+0.0000 g 424.3465 379.5591 28.3465 28.3465 re f
+0.0000 g 452.6929 379.5591 28.3465 28.3465 re f
+0.0000 g 310.9606 351.2126 28.3465 28.3465 re f
+0.0000 g 367.6535 351.2126 28.3465 28.3465 re f
+0.0000 g 396.0000 351.2126 28.3465 28.3465 re f
+0.0000 g 424.3465 351.2126 28.3465 28.3465 re f
+0.0000 g 452.6929 351.2126 28.3465 28.3465 re f
+0.0000 g 310.9606 322.8661 28.3465 28.3465 re f
+0.0000 g 367.6535 322.8661 28.3465 28.3465 re f
+0.0000 g 452.6929 322.8661 28.3465 28.3465 re f
+0.0000 g 310.9606 294.5197 28.3465 28.3465 re f
+0.0000 g 339.3071 294.5197 28.3465 28.3465 re f
+0.0000 g 367.6535 294.5197 28.3465 28.3465 re f
+0.0000 g 396.0000 294.5197 28.3465 28.3465 re f
+0.0000 g 424.3465 294.5197 28.3465 28.3465 re f
+0.0000 g 452.6929 294.5197 28.3465 28.3465 re f
+0.4500 G 0.400 w 310.9606 271.8425 m 310.9606 290.2677 l S
+0.4500 G 0.400 w 310.9606 468.8504 m 310.9606 487.2756 l S
+0.4500 G 0.400 w 481.0394 271.8425 m 481.0394 290.2677 l S
+0.4500 G 0.400 w 481.0394 468.8504 m 481.0394 487.2756 l S
+0.4500 G 0.400 w 288.2835 294.5197 m 306.7087 294.5197 l S
+0.4500 G 0.400 w 485.2913 294.5197 m 503.7165 294.5197 l S
+0.4500 G 0.400 w 288.2835 464.5984 m 306.7087 464.5984 l S
+0.4500 G 0.400 w 485.2913 464.5984 m 503.7165 464.5984 l S
+BT /F1 13.00 Tf 0.0000 g 34.0157 232.1575 Td (MARCADOR DE PRUEBA DE PRECISION) Tj ET
+BT /F1 10.00 Tf 0.0000 g 34.0157 187.3701 Td (ID 20  \267  DICT_4X4_50  \267  60 x 60 mm  =  3 x 3 cuadros de 20 mm) Tj ET
+BT /F1 10.00 Tf 0.0000 g 34.0157 146.8346 Td (IMPRIMIR AL 100 % / TAMANO REAL. Nunca 'ajustar a la pagina'.) Tj ET
+BT /F1 10.00 Tf 0.0000 g 34.0157 125.8583 Td (Verificar con la regla de abajo antes de usarlo.) Tj ET
+BT /F1 10.00 Tf 0.0000 g 34.0157 85.3228 Td (RECORTAR dejando el borde blanco: el detector lo necesita para) Tj ET
+BT /F1 10.00 Tf 0.0000 g 34.0157 64.3465 Td (encontrar el marcador. No recortar al ras del negro.) Tj ET
+BT /F1 10.00 Tf 0.0000 g 34.0157 23.8110 Td (APOYARLO PLANO sobre el tablero, sin espesor. Los objetos con altura) Tj ET
+BT /F1 10.00 Tf 0.0000 g 34.0157 2.8346 Td (se ven corridos hacia afuera \(paralaje\). Con papel comun el efecto es) Tj ET
+BT /F1 10.00 Tf 0.0000 g 34.0157 -18.1417 Td (despreciable; si se pega sobre algo mas grueso, declarar el espesor en) Tj ET
+BT /F1 10.00 Tf 0.0000 g 34.0157 -39.1181 Td (config_vision.json -> precision.altura_marcador_mm.) Tj ET
+BT /F1 10.00 Tf 0.0000 g 34.0157 -79.6535 Td (ALINEAR sus bordes con las lineas de la cuadricula, usando las marcas) Tj ET
+BT /F1 10.00 Tf 0.0000 g 34.0157 -100.6299 Td (de los cuatro lados. De esa alineacion depende la exactitud de la) Tj ET
+BT /F1 10.00 Tf 0.0000 g 34.0157 -121.6063 Td (prueba: la distancia real se obtiene CONTANDO CUADROS, no midiendo.) Tj ET
+0.0000 G 0.800 w 34.0157 45.3543 m 317.4803 45.3543 l S
+0.0000 G 0.800 w 34.0157 45.3543 m 34.0157 55.2756 l S
+0.0000 G 0.800 w 62.3622 45.3543 m 62.3622 51.0236 l S
+0.0000 G 0.800 w 90.7087 45.3543 m 90.7087 51.0236 l S
+0.0000 G 0.800 w 119.0551 45.3543 m 119.0551 51.0236 l S
+0.0000 G 0.800 w 147.4016 45.3543 m 147.4016 51.0236 l S
+0.0000 G 0.800 w 175.7480 45.3543 m 175.7480 55.2756 l S
+0.0000 G 0.800 w 204.0945 45.3543 m 204.0945 51.0236 l S
+0.0000 G 0.800 w 232.4409 45.3543 m 232.4409 51.0236 l S
+0.0000 G 0.800 w 260.7874 45.3543 m 260.7874 51.0236 l S
+0.0000 G 0.800 w 289.1339 45.3543 m 289.1339 51.0236 l S
+0.0000 G 0.800 w 317.4803 45.3543 m 317.4803 55.2756 l S
+BT /F1 7.50 Tf 0.0000 g 34.0157 34.0157 Td (|<--- esta linea debe medir exactamente 100 mm --->|) Tj ET
+
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000257 00000 n 
+0000004437 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+4534
+%%EOF

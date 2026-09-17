@@ -610,7 +610,7 @@ def procesar(cuadro, cfg, matriz_camara, fase, reloj, seguidor, anclaje, descart
     # en vez de tener que resolverse. Medido en la cancha: trece disputas por
     # minuto que dejan de existir.
     crudos, descartes = filtrar_plausibles(
-        crudos, cfg, anclaje.sistema, pose_rover=pose_guardada)
+        crudos, cfg, anclaje.sistema, pose_rover=pose_guardada, imagen=cuadro.imagen)
     rechazos.extend(descartes)
 
     detectados, repetidos = resolver_duplicados(

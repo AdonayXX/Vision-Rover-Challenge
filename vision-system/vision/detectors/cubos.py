@@ -11,9 +11,8 @@ El color ES la identidad
 No hay dos cubos del mismo color, así que el color alcanza para identificarlos y
 no llevan ID. El **amarillo está reservado**: un objeto amarillo nunca es un
 cubo. Sigue siendo una clase del clasificador aunque esta edición del reto no
-tenga obstáculos, porque verde y amarillo están a solo 33° de matiz —el par más
-ajustado con diferencia— y sin esa clase cualquier objeto amarillo suelto se
-leería como cubo verde.
+tenga obstáculos, para que una mancha amarilla se descarte en vez de forzarse a
+uno de los colores de cubo.
 
 Croma para separar, matiz para clasificar
 -----------------------------------------
@@ -23,10 +22,10 @@ perceptual— es por definición un objeto de interés. Es un filtro que separa 
 fondo del contenido casi gratis, y de paso deja fuera al chasis negro del rover.
 
 La clase sale del **matiz**, el ángulo `atan2(b*, a*)`, y no de la distancia a un
-color de referencia. El matiz es casi invariante a la iluminación y a lo saturado
-que sea el plástico: un cubo rojo a la sombra sigue teniendo matiz de rojo aunque
-le bajen el croma y la luminosidad. Por eso no hace falta medir los cubos reales
-antes de arrancar.
+color RGB. El matiz es mucho más estable ante iluminación que comparar canales
+crudos. Los valores de referencia se pueden calibrar con los cubos reales, y el
+umbral de croma puede tener una recuperación específica por color cuando una cara
+del plástico queda menos saturada que las demás.
 
 El problema de verdad: la mancha no es el cubo
 ----------------------------------------------
@@ -134,8 +133,8 @@ def clasificar(matiz: float, cfg: ConfigVision) -> str | None:
 
     El amarillo participa de la comparación y después se descarta. Eso es lo
     que lo vuelve una clase de **exclusión** y no una ausencia: si se lo sacara
-    de la lista, un objeto amarillo caería en el más cercano de los tres —el
-    verde, a 33°— en vez de descartarse.
+    de la lista, una mancha amarilla podría terminar forzada al color de cubo
+    más cercano.
     """
     dc = cfg.deteccion_cubos
     mejor, distancia_mejor = None, 360.0
@@ -159,8 +158,36 @@ def mascara_de_color(imagen_bgr: np.ndarray, cfg: ConfigVision) -> tuple[np.ndar
     lab = cv2.cvtColor(imagen_bgr, cv2.COLOR_BGR2LAB)
     a = lab[:, :, 1].astype(np.int16) - 128
     b = lab[:, :, 2].astype(np.int16) - 128
-    croma = np.hypot(a.astype(np.float32), b.astype(np.float32))
-    mascara = (croma >= cfg.deteccion_cubos.croma_minimo).astype(np.uint8)
+    a32 = a.astype(np.float32)
+    b32 = b.astype(np.float32)
+    croma = np.hypot(a32, b32)
+    dc = cfg.deteccion_cubos
+    mascara = croma >= dc.croma_minimo
+
+    # Recuperación por color: el umbral global sigue protegiendo al tablero y a
+    # los otros objetos, pero un plástico concreto puede tener una cara menos
+    # saturada. Solo se recuperan píxeles cuyo matiz corresponde inequívocamente
+    # a ese color y cae dentro de una banda más estrecha que la tolerancia normal
+    # del clasificador. Así el verde puede bajar su croma sin abrir la compuerta
+    # a todo el fondo de la escena.
+    if dc.croma_minimo_por_color:
+        matiz = np.degrees(np.arctan2(b32, a32)) % 360.0
+        for color, minimo in dc.croma_minimo_por_color.items():
+            referencia = dc.matices_grados[color]
+            distancia = np.abs((matiz - referencia + 180.0) % 360.0 - 180.0)
+            es_mas_cercano = np.ones(matiz.shape, dtype=bool)
+            for otro, ref_otro in dc.matices_grados.items():
+                if otro == color:
+                    continue
+                distancia_otro = np.abs((matiz - ref_otro + 180.0) % 360.0 - 180.0)
+                es_mas_cercano &= distancia <= distancia_otro
+            mascara |= (
+                (croma >= minimo)
+                & (distancia <= dc.matiz_tolerancia_recuperacion_grados)
+                & es_mas_cercano
+            )
+
+    mascara = mascara.astype(np.uint8)
     # Cierra agujeros de un píxel sin mover los bordes, que es de donde sale
     # toda la información de posición.
     nucleo = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))

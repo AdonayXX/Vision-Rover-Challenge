@@ -1,0 +1,313 @@
+  ✓  Perfil compatible con la cámara conectada.
+======================================================================
+SISTEMA DE VISIÓN — Vision-Rover-Challenge · protocolo v2
+Entrada: cámara Logitech C270 (1280x720)
+Cancha: 43x43 celdas de 20 mm
+Comandos: ready | stop | abort | quit   (de READY a RUNNING pasa solo)
+======================================================================
+[publicacion] escuchando en el puerto 2026 a 20 Hz
+[estado] fase=IDLE cuadros=18 fallos=0 emitidos=100 clientes=0 pisados=0 fps=10.1 edad=300 ms conservados=0/0 acopio=0/3 duplicados=0 rechazados=0
+[aviso] identidades de rover demoradas hasta sostenerse 5 cuadros: ID 10 llegó a 4 cuadro(s). Es lo normal al poner un robot en la cancha —se paga una vez, unos 495 ms— y es lo que impide que un fantasma invente un rover que no existe. Ninguna quedó esperando.
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=31 fallos=0 emitidos=206 clientes=0 pisados=0 fps=10.0 edad=582 ms conservados=0/0 acopio=0/3 duplicados=0 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=49 fallos=0 emitidos=304 clientes=0 pisados=0 fps=10.0 edad=297 ms conservados=0/0 acopio=0/3 duplicados=1 rechazados=0
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 17.3, 17.4, 19.4 mm, ganó 17.3
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=67 fallos=0 emitidos=410 clientes=0 pisados=0 fps=10.0 edad=679 ms conservados=0/0 acopio=0/3 duplicados=1 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=76 fallos=0 emitidos=505 clientes=0 pisados=0 fps=10.0 edad=553 ms conservados=0/0 acopio=0/3 duplicados=1 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=85 fallos=0 emitidos=604 clientes=0 pisados=0 fps=10.0 edad=600 ms conservados=0/0 acopio=0/3 duplicados=1 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=94 fallos=0 emitidos=703 clientes=0 pisados=0 fps=10.0 edad=641 ms conservados=0/0 acopio=0/3 duplicados=1 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=104 fallos=0 emitidos=806 clientes=0 pisados=0 fps=10.0 edad=379 ms conservados=0/0 acopio=0/3 duplicados=1 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=117 fallos=0 emitidos=909 clientes=0 pisados=0 fps=10.0 edad=558 ms conservados=0/0 acopio=0/3 duplicados=1 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=128 fallos=0 emitidos=1003 clientes=0 pisados=0 fps=10.0 edad=333 ms conservados=0/0 acopio=0/3 duplicados=1 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=145 fallos=0 emitidos=1101 clientes=0 pisados=0 fps=10.0 edad=289 ms conservados=0/0 acopio=0/3 duplicados=1 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 34, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=154 fallos=0 emitidos=1204 clientes=0 pisados=0 fps=10.0 edad=724 ms conservados=0/0 acopio=0/3 duplicados=1 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[cliente] conectado 127.0.0.1:59724
+[cliente] desconectado 127.0.0.1:59724 (enviados=60 pisados=0)
+[estado] fase=IDLE cuadros=161 fallos=0 emitidos=1307 clientes=0 pisados=0 fps=10.0 edad=870 ms conservados=0/0 acopio=0/3 duplicados=1 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=167 fallos=0 emitidos=1404 clientes=0 pisados=0 fps=10.0 edad=781 ms conservados=0/0 acopio=0/3 duplicados=1 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=173 fallos=0 emitidos=1501 clientes=0 pisados=0 fps=10.0 edad=853 ms conservados=0/0 acopio=0/3 duplicados=1 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=179 fallos=0 emitidos=1601 clientes=0 pisados=0 fps=10.0 edad=855 ms conservados=0/2 acopio=0/3 duplicados=1 rechazados=0
+[cliente] conectado 127.0.0.1:53013
+[cliente] desconectado 127.0.0.1:53013 (enviados=24 pisados=0)
+[estado] fase=IDLE cuadros=186 fallos=0 emitidos=1705 clientes=0 pisados=0 fps=10.0 edad=843 ms conservados=0/4 acopio=0/3 duplicados=2 rechazados=0
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 17.9, 17.2 mm, ganó 17.9
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=193 fallos=0 emitidos=1801 clientes=0 pisados=0 fps=10.0 edad=743 ms conservados=0/9 acopio=0/3 duplicados=2 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=201 fallos=0 emitidos=1910 clientes=0 pisados=0 fps=10.0 edad=698 ms conservados=0/17 acopio=0/3 duplicados=2 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=208 fallos=0 emitidos=2016 clientes=0 pisados=0 fps=10.0 edad=993 ms conservados=0/22 acopio=0/3 duplicados=3 rechazados=0
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 17.4, 17.8 mm, ganó 17.4
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=214 fallos=0 emitidos=2109 clientes=0 pisados=0 fps=10.0 edad=834 ms conservados=0/22 acopio=0/3 duplicados=3 rechazados=0
+[estado] fase=IDLE cuadros=221 fallos=0 emitidos=2210 clientes=0 pisados=0 fps=10.0 edad=575 ms conservados=0/26 acopio=0/3 duplicados=3 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=229 fallos=0 emitidos=2303 clientes=0 pisados=0 fps=10.0 edad=625 ms conservados=0/34 acopio=0/3 duplicados=3 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=238 fallos=0 emitidos=2399 clientes=0 pisados=0 fps=10.0 edad=459 ms conservados=0/43 acopio=0/3 duplicados=3 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=258 fallos=0 emitidos=2503 clientes=0 pisados=0 fps=10.0 edad=336 ms conservados=0/63 acopio=0/3 duplicados=3 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=274 fallos=0 emitidos=2603 clientes=0 pisados=0 fps=10.0 edad=745 ms conservados=0/71 acopio=0/3 duplicados=3 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=288 fallos=0 emitidos=2701 clientes=0 pisados=0 fps=10.0 edad=328 ms conservados=0/79 acopio=0/3 duplicados=4 rechazados=0
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 19.0, 17.0 mm, ganó 19.0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=305 fallos=0 emitidos=2801 clientes=0 pisados=0 fps=10.0 edad=343 ms conservados=0/96 acopio=0/3 duplicados=4 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=322 fallos=0 emitidos=2901 clientes=0 pisados=0 fps=10.0 edad=319 ms conservados=0/112 acopio=0/3 duplicados=5 rechazados=0
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 17.6, 17.7 mm, ganó 17.6
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=340 fallos=0 emitidos=3005 clientes=0 pisados=0 fps=10.0 edad=322 ms conservados=0/123 acopio=0/3 duplicados=6 rechazados=0
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 17.1, 17.7 mm, ganó 17.1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=353 fallos=0 emitidos=3103 clientes=0 pisados=0 fps=10.0 edad=652 ms conservados=0/129 acopio=0/3 duplicados=6 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=515 fallos=160 emitidos=3200 clientes=0 pisados=0 fps=10.0 edad=4382 ms conservados=0/129 acopio=0/3 duplicados=6 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] falta un marcador de esquina: se ven 2, y se viene conservando la geometría hace 1 cuadros (desvío 1.72 mm). Las coordenadas siguen siendo válidas.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[fase] se recuperaron las coordenadas tras 7531 ms sin ver la cancha
+[estado] fase=IDLE cuadros=584 fallos=226 emitidos=3303 clientes=0 pisados=0 fps=10.0 edad=649 ms conservados=0/130 acopio=0/3 duplicados=7 rechazados=0
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 16.8, 17.6 mm, ganó 16.8
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=593 fallos=226 emitidos=3403 clientes=0 pisados=0 fps=10.0 edad=548 ms conservados=0/132 acopio=0/3 duplicados=7 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=603 fallos=226 emitidos=3508 clientes=0 pisados=0 fps=10.0 edad=622 ms conservados=0/134 acopio=0/3 duplicados=7 rechazados=0
+[fase] se recuperaron las coordenadas tras 422 ms sin ver la cancha
+[estado] fase=IDLE cuadros=613 fallos=227 emitidos=3602 clientes=0 pisados=0 fps=10.0 edad=521 ms conservados=0/139 acopio=0/3 duplicados=7 rechazados=0
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=622 fallos=227 emitidos=3700 clientes=0 pisados=0 fps=10.0 edad=617 ms conservados=0/146 acopio=0/3 duplicados=7 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=631 fallos=227 emitidos=3808 clientes=0 pisados=0 fps=10.0 edad=599 ms conservados=0/147 acopio=0/3 duplicados=7 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [37, 38]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] falta un marcador de esquina: se ven 3, y se viene conservando la geometría hace 2 cuadros (desvío 0.24 mm). Las coordenadas siguen siendo válidas.
+[estado] fase=IDLE cuadros=639 fallos=227 emitidos=3901 clientes=0 pisados=0 fps=10.0 edad=659 ms conservados=0/149 acopio=0/3 duplicados=7 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=648 fallos=227 emitidos=4003 clientes=0 pisados=0 fps=10.0 edad=611 ms conservados=0/149 acopio=0/3 duplicados=7 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=657 fallos=227 emitidos=4105 clientes=0 pisados=0 fps=10.0 edad=663 ms conservados=0/149 acopio=0/3 duplicados=7 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [38]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=696 fallos=261 emitidos=4200 clientes=0 pisados=0 fps=10.0 edad=2389 ms conservados=0/152 acopio=0/3 duplicados=7 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] falta un marcador de esquina: se ven 2, y se viene conservando la geometría hace 1 cuadros (desvío 0.46 mm). Las coordenadas siguen siendo válidas.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=779 fallos=344 emitidos=4301 clientes=0 pisados=0 fps=10.0 edad=7436 ms conservados=0/152 acopio=0/3 duplicados=8 rechazados=0
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 18.9, 17.5 mm, ganó 18.9
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] falta un marcador de esquina: se ven 0, y se viene conservando la geometría hace 1 cuadros (desvío 0.46 mm). Las coordenadas siguen siendo válidas.
+[aviso] último problema: solo se ven 0 marcadores de esquina
+[fase] se recuperaron las coordenadas tras 10422 ms sin ver la cancha
+[estado] fase=IDLE cuadros=842 fallos=404 emitidos=4400 clientes=0 pisados=0 fps=10.0 edad=572 ms conservados=0/152 acopio=0/3 duplicados=8 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=852 fallos=404 emitidos=4504 clientes=0 pisados=0 fps=10.0 edad=590 ms conservados=0/153 acopio=0/3 duplicados=8 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=861 fallos=404 emitidos=4611 clientes=0 pisados=0 fps=10.0 edad=626 ms conservados=0/155 acopio=0/3 duplicados=8 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=868 fallos=404 emitidos=4700 clientes=0 pisados=0 fps=10.0 edad=699 ms conservados=0/157 acopio=0/3 duplicados=8 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 38]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=876 fallos=404 emitidos=4802 clientes=0 pisados=0 fps=10.0 edad=692 ms conservados=0/158 acopio=0/3 duplicados=8 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=891 fallos=404 emitidos=4899 clientes=0 pisados=0 fps=10.0 edad=355 ms conservados=0/158 acopio=0/3 duplicados=8 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=910 fallos=404 emitidos=5004 clientes=0 pisados=0 fps=10.0 edad=298 ms conservados=0/159 acopio=0/3 duplicados=8 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=927 fallos=404 emitidos=5101 clientes=0 pisados=0 fps=10.0 edad=343 ms conservados=0/159 acopio=0/3 duplicados=8 rechazados=0
+[estado] fase=IDLE cuadros=946 fallos=404 emitidos=5203 clientes=0 pisados=0 fps=10.0 edad=344 ms conservados=0/159 acopio=0/3 duplicados=8 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=963 fallos=404 emitidos=5300 clientes=0 pisados=0 fps=10.0 edad=358 ms conservados=0/159 acopio=0/3 duplicados=8 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=972 fallos=404 emitidos=5405 clientes=0 pisados=0 fps=10.0 edad=751 ms conservados=0/159 acopio=0/3 duplicados=8 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=980 fallos=404 emitidos=5503 clientes=0 pisados=0 fps=10.0 edad=659 ms conservados=0/159 acopio=0/3 duplicados=9 rechazados=0
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 16.5, 18.2 mm, ganó 16.5
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=988 fallos=404 emitidos=5601 clientes=0 pisados=0 fps=10.0 edad=653 ms conservados=0/159 acopio=0/3 duplicados=9 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=997 fallos=404 emitidos=5707 clientes=0 pisados=0 fps=10.0 edad=614 ms conservados=0/159 acopio=0/3 duplicados=9 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1005 fallos=404 emitidos=5808 clientes=0 pisados=0 fps=10.0 edad=697 ms conservados=0/159 acopio=0/3 duplicados=9 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1013 fallos=404 emitidos=5907 clientes=0 pisados=0 fps=10.0 edad=646 ms conservados=0/159 acopio=0/3 duplicados=9 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1021 fallos=404 emitidos=6001 clientes=0 pisados=0 fps=10.0 edad=610 ms conservados=0/159 acopio=0/3 duplicados=10 rechazados=0
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 16.5, 17.6 mm, ganó 16.5
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1030 fallos=404 emitidos=6105 clientes=0 pisados=0 fps=10.0 edad=763 ms conservados=0/161 acopio=0/3 duplicados=10 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[fase] se recuperaron las coordenadas tras 1796 ms sin ver la cancha
+[estado] fase=IDLE cuadros=1043 fallos=411 emitidos=6212 clientes=0 pisados=0 fps=10.0 edad=688 ms conservados=3/165 acopio=0/3 duplicados=10 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=1050 fallos=411 emitidos=6312 clientes=0 pisados=0 fps=10.0 edad=703 ms conservados=10/166 acopio=0/3 duplicados=10 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1057 fallos=411 emitidos=6409 clientes=0 pisados=0 fps=10.0 edad=727 ms conservados=17/170 acopio=0/3 duplicados=10 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1064 fallos=411 emitidos=6504 clientes=0 pisados=0 fps=10.0 edad=714 ms conservados=24/176 acopio=0/3 duplicados=10 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1071 fallos=411 emitidos=6600 clientes=0 pisados=0 fps=10.0 edad=695 ms conservados=31/180 acopio=0/3 duplicados=10 rechazados=0
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[fase] se recuperaron las coordenadas tras 4328 ms sin ver la cancha
+[estado] fase=IDLE cuadros=1117 fallos=455 emitidos=6701 clientes=0 pisados=0 fps=10.0 edad=669 ms conservados=33/181 acopio=0/3 duplicados=10 rechazados=1
+[aviso] marcadores rechazados por no ser plausibles: 1 por tamaño. No pueden ser marcadores de esta cancha: el detector los inventa sobre la cuadrícula del tablero. Ejemplo: ID 10 rechazado por tamaño, midió 17.0 mm donde se esperaban 44.4, en la celda (11.0, 39.0)
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] falta un marcador de esquina: se ven 3, y se viene conservando la geometría hace 1 cuadros (desvío 0.36 mm). Las coordenadas siguen siendo válidas.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=1125 fallos=455 emitidos=6805 clientes=0 pisados=0 fps=10.0 edad=662 ms conservados=41/184 acopio=0/3 duplicados=10 rechazados=1
+[estado] fase=IDLE cuadros=1133 fallos=455 emitidos=6901 clientes=0 pisados=0 fps=10.0 edad=749 ms conservados=49/188 acopio=0/3 duplicados=10 rechazados=1
+[estado] fase=IDLE cuadros=1142 fallos=455 emitidos=7009 clientes=0 pisados=0 fps=10.0 edad=636 ms conservados=58/195 acopio=0/3 duplicados=10 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1150 fallos=455 emitidos=7110 clientes=0 pisados=0 fps=10.0 edad=669 ms conservados=66/200 acopio=0/3 duplicados=10 rechazados=1
+[estado] fase=IDLE cuadros=1158 fallos=455 emitidos=7204 clientes=0 pisados=0 fps=10.0 edad=688 ms conservados=74/204 acopio=0/3 duplicados=10 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] falta un marcador de esquina: se ven 3, y se viene conservando la geometría hace 1 cuadros (desvío 0.58 mm). Las coordenadas siguen siendo válidas.
+[fase] se recuperaron las coordenadas tras 1703 ms sin ver la cancha
+[estado] fase=IDLE cuadros=1179 fallos=470 emitidos=7303 clientes=0 pisados=0 fps=10.0 edad=752 ms conservados=80/209 acopio=0/3 duplicados=11 rechazados=1
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 17.8, 16.7 mm, ganó 17.8
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=1187 fallos=470 emitidos=7405 clientes=0 pisados=0 fps=10.0 edad=725 ms conservados=84/214 acopio=0/3 duplicados=11 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1195 fallos=470 emitidos=7500 clientes=0 pisados=0 fps=10.0 edad=589 ms conservados=84/217 acopio=0/3 duplicados=11 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1204 fallos=470 emitidos=7609 clientes=0 pisados=0 fps=10.0 edad=666 ms conservados=84/222 acopio=0/3 duplicados=11 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 38]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1212 fallos=470 emitidos=7704 clientes=0 pisados=0 fps=10.0 edad=691 ms conservados=84/224 acopio=0/3 duplicados=12 rechazados=1
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 17.8, 17.8 mm, ganó 17.8
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1220 fallos=470 emitidos=7800 clientes=0 pisados=0 fps=10.0 edad=566 ms conservados=84/229 acopio=0/3 duplicados=12 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1231 fallos=470 emitidos=7908 clientes=0 pisados=0 fps=10.0 edad=565 ms conservados=84/234 acopio=0/3 duplicados=12 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1241 fallos=470 emitidos=8006 clientes=0 pisados=0 fps=10.0 edad=507 ms conservados=84/238 acopio=0/3 duplicados=12 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1249 fallos=470 emitidos=8107 clientes=0 pisados=0 fps=10.0 edad=721 ms conservados=84/241 acopio=0/3 duplicados=13 rechazados=1
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 16.4, 17.7 mm, ganó 16.4
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1256 fallos=470 emitidos=8208 clientes=0 pisados=0 fps=10.0 edad=784 ms conservados=84/246 acopio=0/3 duplicados=13 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1263 fallos=470 emitidos=8309 clientes=0 pisados=0 fps=10.0 edad=817 ms conservados=84/252 acopio=0/3 duplicados=13 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1270 fallos=470 emitidos=8409 clientes=0 pisados=0 fps=10.0 edad=726 ms conservados=84/259 acopio=0/3 duplicados=13 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1279 fallos=473 emitidos=8502 clientes=0 pisados=0 fps=10.0 edad=1280 ms conservados=84/264 acopio=0/3 duplicados=13 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[fase] se recuperaron las coordenadas tras 1000 ms sin ver la cancha
+[estado] fase=IDLE cuadros=1286 fallos=473 emitidos=8601 clientes=0 pisados=0 fps=10.0 edad=697 ms conservados=84/269 acopio=0/3 duplicados=13 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1294 fallos=473 emitidos=8709 clientes=0 pisados=0 fps=10.0 edad=701 ms conservados=84/271 acopio=0/3 duplicados=13 rechazados=1
+[estado] fase=IDLE cuadros=1301 fallos=473 emitidos=8804 clientes=0 pisados=0 fps=10.0 edad=676 ms conservados=84/277 acopio=0/3 duplicados=13 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] falta un marcador de esquina: se ven 3, y se viene conservando la geometría hace 2 cuadros (desvío 0.25 mm). Las coordenadas siguen siendo válidas.
+[fase] se recuperaron las coordenadas tras 641 ms sin ver la cancha
+[estado] fase=IDLE cuadros=1310 fallos=474 emitidos=8910 clientes=0 pisados=0 fps=10.0 edad=686 ms conservados=84/285 acopio=0/3 duplicados=14 rechazados=1
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 16.4, 17.6 mm, ganó 16.4
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=1318 fallos=474 emitidos=9010 clientes=0 pisados=0 fps=10.0 edad=671 ms conservados=84/293 acopio=0/3 duplicados=14 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1325 fallos=474 emitidos=9102 clientes=0 pisados=0 fps=10.0 edad=668 ms conservados=84/300 acopio=0/3 duplicados=14 rechazados=1
+[estado] fase=IDLE cuadros=1333 fallos=474 emitidos=9206 clientes=0 pisados=0 fps=10.0 edad=755 ms conservados=84/308 acopio=0/3 duplicados=14 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1341 fallos=474 emitidos=9306 clientes=0 pisados=0 fps=10.0 edad=674 ms conservados=84/316 acopio=0/3 duplicados=14 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1349 fallos=474 emitidos=9412 clientes=0 pisados=0 fps=10.0 edad=764 ms conservados=84/324 acopio=0/3 duplicados=14 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[fase] se recuperaron las coordenadas tras 641 ms sin ver la cancha
+[cliente] conectado 127.0.0.1:58301
+[estado] fase=IDLE cuadros=1357 fallos=475 emitidos=9509 clientes=1 pisados=0 fps=10.0 edad=728 ms conservados=84/331 acopio=0/3 duplicados=14 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=1365 fallos=475 emitidos=9610 clientes=1 pisados=0 fps=10.0 edad=667 ms conservados=84/339 acopio=0/3 duplicados=14 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1372 fallos=475 emitidos=9704 clientes=1 pisados=0 fps=10.0 edad=652 ms conservados=84/346 acopio=0/3 duplicados=14 rechazados=1
+[fase] se recuperaron las coordenadas tras 1297 ms sin ver la cancha
+[cliente] desconectado 127.0.0.1:58301 (enviados=285 pisados=0)
+[cliente] conectado 127.0.0.1:56226
+[estado] fase=IDLE cuadros=1383 fallos=480 emitidos=9803 clientes=1 pisados=0 fps=10.0 edad=840 ms conservados=84/352 acopio=0/3 duplicados=14 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37, 38]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[cliente] desconectado 127.0.0.1:56226 (enviados=7 pisados=0)
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=1391 fallos=480 emitidos=9908 clientes=0 pisados=0 fps=10.0 edad=657 ms conservados=84/360 acopio=0/3 duplicados=14 rechazados=1
+[fase] se recuperaron las coordenadas tras 812 ms sin ver la cancha
+[estado] fase=IDLE cuadros=1400 fallos=482 emitidos=10006 clientes=0 pisados=0 fps=10.0 edad=669 ms conservados=84/362 acopio=0/3 duplicados=15 rechazados=1
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 1 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 16.9, 16.5 mm, ganó 16.9
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=1408 fallos=482 emitidos=10109 clientes=0 pisados=0 fps=10.0 edad=659 ms conservados=84/362 acopio=0/3 duplicados=17 rechazados=1
+[aviso] IDs que aparecieron DUPLICADOS en un mismo cuadro: [17]. Un fantasma con el ID de un marcador de verdad lo pisaría en silencio; se resolvieron 2 midiendo los candidatos y 0 cuadros se descartaron por no poder decidir. Ejemplo: 17 con lados de 16.3, 16.8 mm, ganó 16.3
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[fase] se recuperaron las coordenadas tras 1188 ms sin ver la cancha
+[estado] fase=IDLE cuadros=1419 fallos=487 emitidos=10202 clientes=0 pisados=0 fps=10.0 edad=677 ms conservados=84/366 acopio=0/3 duplicados=17 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=1427 fallos=487 emitidos=10303 clientes=0 pisados=0 fps=10.0 edad=643 ms conservados=84/368 acopio=0/3 duplicados=17 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1435 fallos=487 emitidos=10406 clientes=0 pisados=0 fps=10.0 edad=648 ms conservados=84/375 acopio=0/3 duplicados=17 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] falta un marcador de esquina: se ven 3, y se viene conservando la geometría hace 1 cuadros (desvío 0.40 mm). Las coordenadas siguen siendo válidas.
+[fase] se recuperaron las coordenadas tras 703 ms sin ver la cancha
+[estado] fase=IDLE cuadros=1443 fallos=488 emitidos=10499 clientes=0 pisados=0 fps=10.0 edad=650 ms conservados=84/382 acopio=0/3 duplicados=17 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=1451 fallos=488 emitidos=10600 clientes=0 pisados=0 fps=10.0 edad=695 ms conservados=84/390 acopio=0/3 duplicados=17 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[cliente] conectado 127.0.0.1:60211
+[estado] fase=IDLE cuadros=1459 fallos=488 emitidos=10705 clientes=1 pisados=0 fps=10.0 edad=686 ms conservados=84/398 acopio=0/3 duplicados=17 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[cliente] desconectado 127.0.0.1:60211 (enviados=82 pisados=0)
+[estado] fase=IDLE cuadros=1467 fallos=488 emitidos=10810 clientes=0 pisados=0 fps=10.0 edad=680 ms conservados=84/406 acopio=0/3 duplicados=17 rechazados=1
+[estado] fase=IDLE cuadros=1475 fallos=488 emitidos=10910 clientes=0 pisados=0 fps=10.0 edad=662 ms conservados=84/414 acopio=0/3 duplicados=17 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1482 fallos=488 emitidos=11001 clientes=0 pisados=0 fps=10.0 edad=726 ms conservados=84/421 acopio=0/3 duplicados=17 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1490 fallos=488 emitidos=11104 clientes=0 pisados=0 fps=10.0 edad=669 ms conservados=84/429 acopio=0/3 duplicados=17 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1506 fallos=499 emitidos=11200 clientes=0 pisados=0 fps=10.0 edad=2456 ms conservados=84/434 acopio=0/3 duplicados=17 rechazados=1
+[aviso] identidades de rover demoradas hasta sostenerse 5 cuadros: ID 10 llegó a 4 cuadro(s). Es lo normal al poner un robot en la cancha —se paga una vez, unos 499 ms— y es lo que impide que un fantasma invente un rover que no existe. Ninguna quedó esperando.
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[fase] se recuperaron las coordenadas tras 2844 ms sin ver la cancha
+[fase] se recuperaron las coordenadas tras 1015 ms sin ver la cancha
+[estado] fase=IDLE cuadros=1525 fallos=511 emitidos=11300 clientes=0 pisados=0 fps=10.0 edad=565 ms conservados=84/441 acopio=0/3 duplicados=17 rechazados=1
+[aviso] identidades de rover demoradas hasta sostenerse 5 cuadros: ID 10 llegó a 4 cuadro(s). Es lo normal al poner un robot en la cancha —se paga una vez, unos 501 ms— y es lo que impide que un fantasma invente un rover que no existe. Ninguna quedó esperando.
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=1541 fallos=511 emitidos=11401 clientes=0 pisados=0 fps=10.0 edad=339 ms conservados=84/457 acopio=0/3 duplicados=17 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1559 fallos=512 emitidos=11500 clientes=0 pisados=0 fps=10.0 edad=343 ms conservados=84/474 acopio=0/3 duplicados=17 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[aviso] falta un marcador de esquina: se ven 2, y se viene conservando la geometría hace 4 cuadros (desvío 1.48 mm). Las coordenadas siguen siendo válidas.
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[fase] se recuperaron las coordenadas tras 1281 ms sin ver la cancha
+[fase] se recuperaron las coordenadas tras 1031 ms sin ver la cancha
+[estado] fase=IDLE cuadros=1603 fallos=544 emitidos=11601 clientes=0 pisados=0 fps=10.0 edad=311 ms conservados=90/485 acopio=0/3 duplicados=17 rechazados=1
+[aviso] último problema: solo se ven 2 marcadores de esquina
+[estado] fase=IDLE cuadros=1621 fallos=544 emitidos=11701 clientes=0 pisados=0 fps=10.0 edad=300 ms conservados=90/503 acopio=0/3 duplicados=17 rechazados=1
+[estado] fase=IDLE cuadros=1639 fallos=544 emitidos=11805 clientes=0 pisados=0 fps=10.0 edad=491 ms conservados=90/521 acopio=0/3 duplicados=17 rechazados=1
+[estado] fase=IDLE cuadros=1652 fallos=544 emitidos=11900 clientes=0 pisados=0 fps=10.0 edad=664 ms conservados=90/534 acopio=0/3 duplicados=17 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17, 37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1662 fallos=544 emitidos=12003 clientes=0 pisados=0 fps=10.0 edad=505 ms conservados=90/544 acopio=0/3 duplicados=17 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [37]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1669 fallos=544 emitidos=12100 clientes=0 pisados=0 fps=10.0 edad=687 ms conservados=90/551 acopio=0/3 duplicados=17 rechazados=1
+[estado] fase=IDLE cuadros=1676 fallos=544 emitidos=12201 clientes=0 pisados=0 fps=10.0 edad=685 ms conservados=90/558 acopio=0/3 duplicados=17 rechazados=1
+[aviso] marcadores vistos que NO son ni esquina ni rover declarado, y por eso se descartan: [17]. Si alguno es un robot de verdad, hay que agregarlo a deteccion_rovers.ids_rover; si no, son detecciones falsas de la cuadrícula.
+[estado] fase=IDLE cuadros=1688 fallos=544 emitidos=12305 clientes=0 pisados=0 fps=10.0 edad=409 ms conservados=90/570 acopio=0/3 duplicados=17 rechazados=1
+[estado] fase=IDLE cuadros=1700 fallos=544 emitidos=12406 clientes=0 pisados=0 fps=10.0 edad=560 ms conservados=90/582 acopio=0/3 duplicados=17 rechazados=1

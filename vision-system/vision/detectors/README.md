@@ -126,11 +126,11 @@ importa —con poca saturación o poca luz— y da saltos entre valores extremos
 separa la luminosidad del color de forma más pareja, así que un cubo rojo a la
 sombra se sigue pareciendo a un cubo rojo.
 
-**Por qué el matiz y no la distancia a un color de referencia:** el matiz es casi
-invariante a la iluminación y a lo saturado que sea el plástico. Por eso **no
-hizo falta medir los cubos reales** antes de escribir el detector: los tres
-colores del reto están de **94° a 170°** entre sí, y el único par ajustado es
-verde–amarillo, a 33°.
+**Por qué el matiz y no la distancia RGB:** el matiz es mucho más estable frente
+a cambios de iluminación que comparar canales crudos. Las referencias se pueden
+calibrar con los cubos reales. Además, el croma tiene un umbral global y puede
+tener una recuperación más baja por color cuando una cara concreta del plástico
+queda menos saturada; esa recuperación se limita a una banda estrecha de matiz.
 
 #### El límite, declarado en vez de escondido
 

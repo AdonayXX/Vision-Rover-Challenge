@@ -34,7 +34,7 @@ import sys
 try:  # como paquete
     from ..configuracion import CuboDemo, Perspectiva, RoverDemo, cargar_config
     from ..detectors.cubos import detectar_cubos
-    from ..detectors.rovers import detectar_rovers
+    from ..detectors.rovers import PoseMarcador, RoverDetectado, detectar_rovers
     from ..geometry.coordenadas import construir_sistema, detectar_marcadores, pose_camara
     from ..sources.generador_sintetico import generar
     from ..tracking.seguimiento import Seguidor
@@ -43,7 +43,9 @@ except ImportError:  # como script suelto
         CuboDemo, Perspectiva, RoverDemo, cargar_config,
     )
     from vision.detectors.cubos import detectar_cubos  # type: ignore[no-redef]
-    from vision.detectors.rovers import detectar_rovers  # type: ignore[no-redef]
+    from vision.detectors.rovers import (  # type: ignore[no-redef]
+        PoseMarcador, RoverDetectado, detectar_rovers,
+    )
     from vision.geometry.coordenadas import (  # type: ignore[no-redef]
         construir_sistema, detectar_marcadores, pose_camara,
     )
@@ -155,6 +157,41 @@ def escenario_rover_desaparece(cfg, persp):
     return problemas
 
 
+def escenario_rover_no_teletransporta(cfg):
+    """Un falso ID ya admitido no puede reemplazar al rover por un salto imposible."""
+    print("\n  ESCENARIO 3 — un falso ID 10 no teletransporta al rover")
+    seguidor = Seguidor(cfg)
+    bueno = RoverDemo(id=10, col=17.0, row=29.0, theta=300.0)
+    falso = RoverDemo(id=10, col=2.4, row=33.3, theta=14.0)
+
+    # Este escenario prueba la memoria directamente: la geometría del detector
+    # ya fue verificada por separado y acá importa la plausibilidad temporal.
+    def detectado(r):
+        marcador = PoseMarcador(id=r.id, col=r.col, row=r.row, theta_grados=r.theta)
+        return RoverDetectado(id=r.id, col=r.col, row=r.row,
+                              theta_grados=r.theta, marcador=marcador)
+
+    estado = seguidor.actualizar(
+        ts_ms=1000, fase="RUNNING",
+        rovers=(detectado(bueno),),
+        cubos=(),
+    )
+    estado = seguidor.actualizar(
+        ts_ms=1100, fase="RUNNING",
+        rovers=(detectado(falso),),
+        cubos=(),
+    )
+    r = next(x for x in estado.rovers if x.id == 10)
+    problemas = []
+    if abs(r.col - bueno.col) > 1e-9 or abs(r.row - bueno.row) > 1e-9:
+        problemas.append("un salto imposible reemplazó la última pose buena del rover")
+    if r.age_ms != 100:
+        problemas.append("la detección rechazada no dejó crecer la edad a 100 ms")
+    if seguidor.rechazos_salto_rover != 1:
+        problemas.append("el rechazo de salto no quedó contabilizado")
+    return problemas
+
+
 def escenario_empujado(cfg, persp):
     """Un rover tapa tanto el cubo que la detección deja de ser confiable.
 
@@ -162,7 +199,7 @@ def escenario_empujado(cfg, persp):
     mancha pero el ajuste no encaja. Lo correcto es NO refrescar con eso, y que
     el cubo envejezca conservando su última posición buena.
     """
-    print("\n  ESCENARIO 3 — un rover tapa el cubo hasta volverlo no confiable")
+    print("\n  ESCENARIO 4 — un rover tapa el cubo hasta volverlo no confiable")
     print("  {:>7} {:>10} {:>20} {:>10}  {}".format(
         "cuadro", "en lista", "posición", "edad ms", "qué pasa"))
     print("  " + "-" * 72)
@@ -213,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
     problemas = []
     problemas += escenario_cubo_desaparece(cfg, persp, args.verboso)
     problemas += escenario_rover_desaparece(cfg, persp)
+    problemas += escenario_rover_no_teletransporta(cfg)
     problemas += escenario_empujado(cfg, persp)
 
     print("\n" + "=" * 78)

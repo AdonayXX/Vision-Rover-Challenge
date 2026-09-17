@@ -299,7 +299,7 @@ class Rechazo:
     """
 
     id: int
-    motivo: str          # "tamaño" o "posición"
+    motivo: str          # "tamaño", "posición" o "borde blanco"
     lado_mm: float
     esperado_mm: float
     col: float
@@ -323,11 +323,48 @@ def _lado_esperado_mm(id_aruco: int, cfg: ConfigVision, pose: "PoseCamara | None
     return None
 
 
+def _borde_blanco_rover_plausible(
+    imagen: np.ndarray,
+    esquinas_px: np.ndarray,
+    cfg: ConfigVision,
+) -> bool:
+    marcador = cfg.elementos.marcador_rover
+    lado = 80
+    borde = max(4, int(round(lado * marcador.borde_blanco_mm / marcador.lado_mm)))
+    total = lado + 2 * borde
+    src = np.asarray(esquinas_px, dtype=np.float32).reshape(4, 2)
+    dst = np.asarray([
+        [borde, borde],
+        [borde + lado - 1, borde],
+        [borde + lado - 1, borde + lado - 1],
+        [borde, borde + lado - 1],
+    ], dtype=np.float32)
+    matriz = cv2.getPerspectiveTransform(src, dst)
+    parche = cv2.warpPerspective(imagen, matriz, (total, total), flags=cv2.INTER_LINEAR)
+    gris = cv2.cvtColor(parche, cv2.COLOR_BGR2GRAY) if parche.ndim == 3 else parche
+    interior = gris[borde:borde + lado, borde:borde + lado]
+    oscuro = float(np.percentile(interior, 15))
+    claro = float(np.percentile(interior, 85))
+    if claro - oscuro < 20.0:
+        return True
+    umbral = oscuro + 0.55 * (claro - oscuro)
+    inicio = max(1, borde // 4)
+    fin = max(inicio + 1, borde - 1)
+    bandas = (
+        gris[inicio:fin, borde:borde + lado],
+        gris[borde + lado:borde + lado + (fin - inicio), borde:borde + lado],
+        gris[borde:borde + lado, inicio:fin],
+        gris[borde:borde + lado, borde + lado:borde + lado + (fin - inicio)],
+    )
+    return all(float(np.mean(banda > umbral)) >= 0.65 for banda in bandas if banda.size)
+
+
 def filtrar_plausibles(
     crudos: tuple[tuple[int, np.ndarray], ...],
     cfg: ConfigVision,
     sistema: SistemaCoordenadas | None,
     pose_rover: "PoseCamara | None" = None,
+    imagen: np.ndarray | None = None,
 ) -> tuple[tuple[tuple[int, np.ndarray], ...], tuple[Rechazo, ...]]:
     """Descarta lo que no puede ser un marcador de esta cancha.
 

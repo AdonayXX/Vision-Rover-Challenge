@@ -1,0 +1,26 @@
+{
+  "wifi_ssid": "TU_RED_WIFI",
+  "wifi_password": "TU_PASSWORD",
+  "ask_wifi_on_boot": true,
+  "command_port": 5000,
+  "imu_address": 107,
+  "watchdog_seconds": 0.5,
+  "control": {
+    "gyro_sign": 1,
+    "left_sign": 1,
+    "right_sign": 1,
+    "left_gain": 1.0,
+    "right_gain": 1.0,
+    "max_step": 0.25,
+    "turn_timeout": 10.0,
+    "max_duration": 30.0,
+    "kp": 0.015,
+    "ki": 0.0005,
+    "kd": 0.002,
+    "max_correction": 0.3,
+    "tolerance": 2.0,
+    "slow_angle": 30.0,
+    "slow_speed": 0.15
+  },
+  "use_imu": false
+}

@@ -1,0 +1,910 @@
+# Sistema de Visión — Vision Rover Challenge
+
+Este directorio contiene el **sistema de visión global** del Vision Rover
+Challenge de CENFOTEC: una cámara cenital que mira la cancha desde arriba y le
+dice a los equipos, varias veces por segundo, **dónde está cada cosa**.
+
+Si llegaste acá sin contexto, este documento te explica el sistema entero. Está
+escrito para una persona, de arriba abajo; no hace falta leer código para
+entenderlo.
+
+---
+
+## Índice
+
+1. [Qué es esto y para qué sirve](#1-qué-es-esto-y-para-qué-sirve)
+2. [El reparto de responsabilidades](#2-el-reparto-de-responsabilidades)
+3. [El flujo del dato, de punta a punta](#3-el-flujo-del-dato-de-punta-a-punta)
+4. [Arquitectura: productores, interfaz, consumidores](#4-arquitectura-productores-interfaz-consumidores)
+5. [Estructura de carpetas](#5-estructura-de-carpetas)
+6. [Decisiones de diseño y su porqué](#6-decisiones-de-diseño-y-su-porqué)
+7. [El contrato: la frontera con los equipos](#7-el-contrato-la-frontera-con-los-equipos)
+8. [Cómo correr y probar lo que ya existe](#8-cómo-correr-y-probar-lo-que-ya-existe)
+9. [Estado actual del proyecto](#9-estado-actual-del-proyecto)
+10. [Cómo seguir](#10-cómo-seguir)
+
+---
+
+## 1. Qué es esto y para qué sirve
+
+En el reto, **dos rovers** tienen que encontrar unos **cubos de colores** y
+llevar cada uno hasta su **zona de acopio**. Los rovers son ciegos: no tienen
+cámara propia ni saben dónde están.
+
+> En **esta primera edición no hay obstáculos**. El campo `obstacles` del
+> contrato sigue existiendo y llega como lista vacía: no es un cambio de formato
+> y ningún equipo tiene que tocar nada.
+
+Lo que los guía es una **cámara cenital** montada sobre la cancha. Esa cámara y
+el software que la procesa son este proyecto.
+
+El sistema hace tres cosas:
+
+1. **Mira** la cancha (~1 m × 1 m) desde arriba.
+2. **Deduce** dónde está cada rover y cada cubo, y hacia dónde apunta cada
+   rover.
+3. **Publica** esa información por la red, varias veces por segundo, en un
+   formato fijo que los equipos consumen.
+
+Además, el sistema publica la **fase oficial de la ronda** para que todos los
+rovers reciban una referencia común (`IDLE`, `READY`, `RUNNING`, `FINISHED`).
+**La visión es el árbitro de la ronda**: lleva el cronómetro oficial, pasa de
+`READY` a `RUNNING` sola al agotarse la preparación —sin que nadie apriete
+nada, para que todos los equipos preparen con el mismo tiempo— y cierra la
+ronda sola, por tiempo agotado, por reto cumplido o por haber perdido de vista
+la cancha. Una persona prepara (`ready`), puede cerrarla antes (`stop`) o
+abortar la preparación (`abort`); arrancarla no.
+
+### Lo que este proyecto NO hace
+
+**No maneja los rovers.** La planificación de rutas, la asignación de tareas, la
+coordinación entre los dos robots, el control de motores y la lógica de juego
+están **fuera de este sistema**: son de cada equipo. Nosotros solo informamos.
+
+La computadora que ejecuta este sistema de visión pertenece a la infraestructura
+oficial de la competencia. No es una computadora de control del equipo y no
+envía rutas, decisiones ni comandos de movimiento a los robots.
+
+Esa frontera es importante y se respeta con cuidado: el día de la competencia,
+los equipos van a estar consumiendo nuestros datos y todos tienen que poder
+confiar tanto en la estabilidad del formato como en la separación entre
+**percepción global** y **control autónomo en los rovers**.
+
+---
+
+## 2. El reparto de responsabilidades
+
+```
+        ┌───────────────────────────┐         ┌───────────────────────────────┐
+        │   SISTEMA DE VISIÓN       │         │     ROVERS DE LOS EQUIPOS     │
+        │   (infraestructura oficial)│        │       (ESP32 / IdeaBoard)     │
+        ├───────────────────────────┤         ├───────────────────────────────┤
+        │ • cámara y procesamiento  │  datos  │ • interpretar telemetría      │
+        │ • dónde está cada objeto  │ ──────► │ • planificar rutas            │
+        │ • orientación de rovers   │  TCP    │ • asignar y coordinar tareas  │
+        │ • fase oficial de ronda   │         │ • evitar colisiones           │
+        │ • publicar telemetría     │         │ • controlar los motores       │
+        └───────────────────────────┘         └───────────────────────────────┘
+                    ▲
+                    │
+                    └──── el sistema de visión no recibe decisiones
+                          ni comandos de los equipos
+```
+
+La comunicación del contrato de visión es **unidireccional**: el sistema oficial
+publica el estado del mundo y los rovers lo leen.
+
+Cualquiera puede consumir la telemetría desde una computadora para depurar,
+simular o validar software: el sistema publica lo mismo para todos y no sabe
+quién lo está leyendo.
+
+Qué arquitectura de control se admite durante una ronda oficial **no lo define
+este sistema**: está en el reglamento.
+
+
+---
+
+## 3. El flujo del dato, de punta a punta
+
+Este es el recorrido completo, desde la luz que entra a la cámara hasta el
+rover que decide girar:
+
+```
+  MUNDO FÍSICO              SISTEMA DE VISIÓN                 ROVERS DEL EQUIPO
+  ════════════              ═════════════════                 ═════════════════
+
+  ┌──────────────┐
+  │ cancha 1×1 m │
+  │  4 marcadores│
+  │  2 rovers    │
+  │  3 cubos     │
+  └──────┬───────┘
+         │ luz
+         ▼
+  ┌──────────────┐
+  │   cámara     │
+  │   cenital    │
+  │  (webcam USB)│
+  └──────┬───────┘
+         │ imagen + instante de captura
+         │
+    ─────┼──────────────────────────────────────────────────────────────────
+         ▼
+  ┌─────────────────┐   ①  Captura con ajustes FIJOS (exposición, enfoque,
+  │   sources/      │      balance de blancos). Sella cada cuadro con la hora
+  │   captura       │      exacta en que se tomó.
+  └────────┬────────┘
+           ▼
+  ┌─────────────────┐   ②  Quita la curvatura que mete el lente de la cámara,
+  │   geometry/     │      usando el perfil de ESA cámara. Va antes que todo lo
+  │   rectificación │      demás: la geometría de ③ supone que las rectas del
+  └────────┬────────┘      mundo se ven rectas, y la distorsión rompe eso.
+           ▼
+  ┌─────────────────┐   ③  Encuentra los 4 marcadores ArUco de esquina y con
+  │   geometry/     │      ellos arma el sistema de coordenadas, que convierte
+  │   píxeles→celdas│      cualquier píxel en su celda. De los mismos cuatro
+  └────────┬────────┘      deduce la POSE DE LA CÁMARA, que hace falta para
+           │               corregir el paralaje de los objetos con altura.
+           ▼
+  ┌─────────────────┐   ④  Busca los rovers por su marcador ArUco y los cubos
+  │   detectors/    │      por color. Solo DETECTA: no interpreta.
+  │   qué hay dónde │
+  └────────┬────────┘
+           ▼
+  ┌─────────────────┐   ⑤  Mantiene la identidad de cada objeto entre cuadros.
+  │   tracking/     │      Si algo se tapa, conserva su última posición y le
+  │   identidad     │      hace crecer la "edad" en vez de hacerlo desaparecer.
+  └────────┬────────┘
+           │
+           ▼
+  ╔═══════════════════════════════════╗
+  ║      ESTADO DEL MUNDO             ║   ⑥  Una foto completa e INMUTABLE de
+  ║   (inmutable, se produce uno      ║      la cancha en un instante. Es lo
+  ║    nuevo en cada cuadro)          ║      ÚNICO que cruza de un lado al otro.
+  ╚═══════════════┬═══════════════════╝
+                  │
+         ┌────────┴─────────┐
+         ▼                  ▼
+  ┌─────────────┐    ┌─────────────┐   ⑦  Dos consumidores independientes que
+  │  publish/   │    │   record/   │      solo LEEN el estado del mundo.
+  │  a la red   │    │  a disco    │
+  └──────┬──────┘    └─────────────┘
+         │
+         │  TCP · puerto 2026 · NDJSON (un JSON por línea)
+         │  {"v":2,"seq":4137,"ts_ms":...,"phase":"RUNNING","rovers":[...]}
+         │
+    ─────┼──────────────────────────────────────────────────────────────────
+         ▼
+  ┌──────────────────────┐
+  │ software del rover   │   ⑧  El ESP32/IdeaBoard lee líneas, parsea el JSON,
+  │  ESP32 / IdeaBoard   │      identifica los rovers y objetos, decide qué hacer,
+  │                      │      coordina y planifica localmente.
+  └──────────┬───────────┘
+             │ control local de motores
+             ▼
+       ┌──────────┐
+       │  rover   │
+       └──────────┘
+```
+
+> Durante **desarrollo y pruebas**, una computadora puede sustituir temporalmente
+> al rover como cliente del contrato para inspeccionar telemetría, probar
+> algoritmos o ejecutar el simulador. Durante una **ronda oficial**, la
+> planificación, asignación de tareas y generación de comandos de movimiento deben
+> ejecutarse en los rovers; una computadora externa no puede formar parte del
+> lazo de control del equipo.
+
+### Qué de todo esto ya funciona
+
+El diagrama muestra el recorrido completo, y **está construido entero**:
+
+| Paso | Estado | Error medido |
+|---|---|---|
+| ① captura · ② rectificación | ✅ | — |
+| ③ píxeles→celdas | ✅ | 0,52 mm |
+| ③b pose de cámara · ③c paralaje | ✅ | 27 mm → **1,0 mm** |
+| ④ detectores — **rovers** | ✅ | 1,03 mm · 1,2° |
+| ④ detectores — **cubos** | ✅ | 1,05 mm (4,88 mm empujado) |
+| ⑤ seguimiento · ⑥ estado del mundo · ⑦ publicación | ✅ | — |
+| ⑦ acta de la ronda | ✅ | — |
+| ⑧ grabación de sesiones a disco | ⚪ todavía no existe | — |
+
+Todos los errores son **contra la verdad conocida** del generador sintético, con
+la cámara inclinada, y contra un criterio de aceptación de **10 mm**.
+
+Y ya **hay un programa que las encadena**:
+
+```bash
+python -m vision.sistema                # con la cámara real
+python -m vision.sistema --sintetico    # sin cámara, con imágenes generadas
+```
+
+El detalle pieza por pieza está en la
+[sección 9](#9-estado-actual-del-proyecto).
+
+### Dos relojes que no se esperan
+
+Hay un detalle que define toda la arquitectura: **el procesamiento y la
+publicación corren a ritmos distintos y no se bloquean entre sí**.
+
+- El **procesamiento** (pasos ① a ⑤) va a la velocidad de la cámara.
+- La **publicación** (paso ⑦) va por temporizador propio.
+
+Si un cuadro tarda de más en procesarse, la publicación no se frena: vuelve a
+mandar el último estado bueno. Y si un equipo tiene la red lenta, el
+procesamiento ni se entera.
+
+### Qué pasa cuando algo falla
+
+El sistema **falla abierto**: ante cualquier excepción conserva el **último
+estado bueno** y sigue publicando. Nunca se cae a mitad de una ronda.
+
+La lógica es simple: un dato de hace 300 milisegundos, marcado como viejo, le
+sirve mucho más a un equipo que un silencio repentino.
+
+Pero "falla abierto" es la red de seguridad, no la primera respuesta. Casi todo
+lo que puede salir mal tiene un comportamiento **definido y verificado**, no
+supuesto:
+
+| Qué falla | Qué hace el sistema | Cuesta |
+|---|---|---|
+| Falta **un** marcador de esquina | conserva la geometría y la **verifica** con los tres visibles | **nada**: 0,52 mm, igual que con cuatro |
+| Faltan **dos o más** | falla abierto: no hay con qué verificar | la edad crece |
+| **Alguien mueve la cámara** con los cuatro | se reancla solo en el cuadro siguiente | nada |
+| **Alguien mueve la cámara** faltando uno | lo detecta por el desvío de los tres, y se detiene | la edad crece |
+| Un **rover** se tapa | conserva su posición, `age_ms` crece | nada |
+| Un **cubo** se tapa parcialmente | lo ubica igual, ajustando el modelo del cubo | 4,88 mm con el 22 % tapado |
+| Un cubo se tapa **demasiado** | **admite que no sabe** y el seguimiento conserva la última buena | la edad crece |
+| El **procesamiento** se rompe | sigue publicando; el dato envejece a la vista | la edad crece |
+| Un **cliente** se pone lento | se le pisan los mensajes viejos | nunca frena al sistema |
+
+Las tres frases que resumen el criterio:
+
+- **Un objeto tapado no parpadea**: conserva su posición y envejece.
+- **Cuando el sistema no sabe, lo dice**, en vez de inventar un número.
+- **Nunca se calla**: el silencio más largo medido, con el procesamiento roto a
+  propósito durante seis segundos, fue de **0,05 s** — un período de publicación.
+
+---
+
+## 4. Arquitectura: productores, interfaz, consumidores
+
+Toda la arquitectura se apoya en una idea única:
+
+> **Los productores generan un estado del mundo. Los consumidores lo leen. Eso
+> es lo único que cruza entre los dos lados.**
+
+| Lado | Quiénes | Qué hacen |
+|---|---|---|
+| **Productores** | `sources/`, `geometry/`, `detectors/`, `tracking/` | Convierten imágenes en un estado del mundo |
+| **Interfaz** | el **estado del mundo** | Una foto inmutable de la cancha en un instante |
+| **Consumidores** | `publish/`, `record/` | Solo leen ese estado. Nunca lo modifican |
+
+### Las capas se apilan, no se modifican entre sí
+
+La corrección de distorsión es el primer ejemplo construido de una idea que se va
+a repetir: **una etapa nueva se agrega envolviendo a la anterior, no editándola.**
+
+`FuenteRectificada` recibe una fuente de imágenes y **es** una fuente de
+imágenes. Se pone delante de la cámara y todo lo que viene después no se entera:
+
+```
+FuenteRectificada( FuenteCamara(...) )   ──►  .leer()  ──►  cuadro ya corregido
+```
+
+Se hizo por composición y no metiéndole la corrección a la cámara por dos
+razones. Son **dos responsabilidades distintas** —capturar y corregir—, y así la
+misma capa sirve también para la **fuente sintética**, que es lo que permite
+verificar el sistema sin cámara.
+
+### Por qué el estado del mundo es inmutable
+
+Porque productores y consumidores corren en **hilos distintos**. Si el estado se
+modificara en el lugar, un consumidor podría estar leyendo la posición del rover
+justo cuando un productor la está reescribiendo, y publicaría una mezcla de dos
+instantes distintos.
+
+La solución no es poner candados por todos lados: es **no modificar nunca**. Cada
+cuadro produce un estado **nuevo**. El anterior queda intacto para quien lo
+estuviera usando.
+
+---
+
+## 5. Estructura de carpetas
+
+```
+Vision-Rover-Challenge/              # raíz del repositorio (fork de CENFOTEC)
+├── README.md, reglamento.md         # material original de CENFOTEC
+├── robot.md, archivos_fabricacion/  # (no los tocamos)
+├── codigos/
+│
+└── vision-system/                   # ◄── TODO nuestro trabajo vive acá
+    ├── README.md                    # este documento
+    ├── MONTAJE.md                   # guía para armar la cancha física
+    ├── PUESTA_A_PUNTO.md            # guía para dejar lista una cámara
+    ├── OPERACION.md                 # guía para correr una ronda
+    ├── CLAUDE.md                    # las reglas del proyecto
+    ├── .gitignore
+    │
+    ├── contrato/                    # ◄── LO QUE SE ENTREGA A LOS EQUIPOS
+    │   ├── CONTRATO.md              # el manual para los equipos
+    │   ├── README.md
+    │   ├── schema.py                # el formato en código (uso interno)
+    │   ├── mock_publisher.py        # simulador: telemetría sin cámara
+    │   ├── test_client.py           # cliente de referencia
+    │   ├── config_simulador.json
+    │   └── requirements.txt         # vacío a propósito: no hay dependencias
+    │
+    └── vision/                      # ◄── EL SISTEMA DE VISIÓN
+        ├── README.md
+        ├── configuracion.py         # carga y valida la configuración
+        ├── config_vision.json       # toda la configuración, como datos
+        ├── requirements.txt
+        │
+        ├── sources/                 # productor: de dónde salen las imágenes
+        │   ├── fuente.py            #   la interfaz común (Cuadro, FuenteImagen)
+        │   ├── camara.py            #   webcam USB real
+        │   └── generador_sintetico.py   # imágenes de prueba con verdad conocida
+        │
+        ├── geometry/                # productor: píxeles → celdas
+        │   ├── distorsion.py        #   corrección del lente + perfiles de cámara
+        │   └── coordenadas.py       #   sistema de coordenadas por marcadores
+        │
+        ├── sistema.py               # ◄── EL PROGRAMA: encadena todo y se enciende
+        ├── mundo.py                 # la frontera: el estado del mundo, inmutable
+        ├── vista.py                 # consumidor: la ventana en vivo
+        │
+        ├── detectors/               # productor: qué hay y dónde
+        │   ├── rovers.py            #   rovers por su marcador: celda y ángulo
+        │   └── cubos.py             #   cubos por color: base, ajustando el modelo
+        │
+        ├── tracking/                # productor: identidad, oclusión y edad
+        │   └── seguimiento.py       #   memoria entre cuadros
+        │
+        ├── reglas/                  # decidir, no detectar: la regla del reto
+        │   └── acopio.py            #   cubos en posición, con permanencia
+        │
+        ├── publish/                 # consumidor: a la red
+        │   └── telemetria.py        #   reloj propio, último estado bueno
+        │
+        ├── record/                  # consumidor: a disco
+        │   └── acta.py              #   el registro de cada ronda cerrada
+        │
+        ├── tools/                   # herramientas de puesta a punto
+        │   ├── diagnostico_camara.py    # ¿la cámara sirve?
+        │   ├── patron_calibracion.py    # genera los PDF para imprimir
+        │   ├── calibrar_camara.py       # mide la distorsión del lente
+        │   ├── precision_ubicacion.py   # ¿ubica con error aceptable?
+        │   ├── medir_desfases.py        # los desfases marcador ↔ robot
+        │   ├── verificar_geometria.py   # coordenadas contra verdad conocida
+        │   ├── verificar_rovers.py      # rovers contra verdad conocida
+        │   ├── verificar_cubos.py       # cubos contra verdad conocida
+        │   ├── verificar_seguimiento.py # oclusión y edad
+        │   ├── verificar_acopio.py      # ¿el cubo está dentro de su zona?
+        │   ├── verificar_config.py      # la configuración: errores y avisos
+        │   └── panel.py                 # el panel que dibujan las demás
+        │
+        ├── calibraciones/           # DATOS: un perfil por cámara calibrada
+        └── mediciones/              # DATOS: una sesión por prueba de precisión
+```
+
+Cada subcarpeta de `vision/` tiene su propio `README.md` que dice qué hay hoy y
+qué está planificado.
+
+**`calibraciones/` y `mediciones/` no son código ni configuración del sistema:**
+son el resultado de medir **aparatos concretos**. Un perfil de calibración
+describe un lente; una sesión de precisión describe cómo se portó una cámara
+sobre una cancha. Por eso viven aparte de `config_vision.json`, que describe el
+sistema y no los aparatos.
+
+---
+
+## 6. Decisiones de diseño y su porqué
+
+Estas son las decisiones que más forma le dan al sistema. Están cerradas: se
+discutieron, se resolvieron y no se vuelven a abrir sin un motivo nuevo. Las
+reglas completas están en [`CLAUDE.md`](CLAUDE.md).
+
+### Por qué TCP y NDJSON, y no MQTT ni WebSocket
+
+**NDJSON** significa "un objeto JSON por línea, terminado en salto de línea".
+Nada más.
+
+- **Es legible.** Un equipo puede ver los datos con `nc` o un `print`, sin
+  herramientas especiales. Cuando algo falla a las once de la noche antes de la
+  competencia, eso vale más que cualquier eficiencia.
+- **Es trivial de parsear.** Leer hasta el `\n` y `json.loads()`. Funciona igual
+  en una computadora y en un microcontrolador.
+- **No arrastra infraestructura.** MQTT necesita un *broker*: una pieza más que
+  instalar, configurar y que puede fallar sola. WebSocket agrega un *handshake*
+  HTTP para transportar los mismos bytes.
+
+Veinte equipos con veinte niveles de experiencia distintos tienen que poder
+conectarse. Un socket TCP es lo más simple que existe y está en todos los
+lenguajes.
+
+### Por qué el último valor gana
+
+Cada cliente tiene un **buffer de un solo mensaje**. Si llega telemetría nueva y
+el cliente no drenó la anterior, **la anterior se pisa**. Nunca se encola.
+
+Porque en telemetría de posición **un dato viejo no vale nada**. Al rover le
+sirve saber dónde está *ahora*, no dónde estuvo hace medio segundo. Con una cola,
+un cliente lento se atrasaría cada vez más sin recuperarse jamás, navegando con
+información cada vez más falsa.
+
+Por eso los equipos ven saltos en el número de secuencia, y eso es **normal**:
+es la política funcionando.
+
+### Por qué las coordenadas se anclan a los marcadores
+
+El sistema no dice "el rover está en el píxel 340, 210". Dice "el rover está en
+la celda 12.4, 8.7".
+
+**Los píxeles no le sirven a nadie**: dependen de la resolución, del lugar donde
+quedó la cámara y de si alguien la movió sin querer. Las celdas son del mundo
+físico y no cambian.
+
+Para traducir, el sistema usa **cuatro marcadores ArUco** pegados en las esquinas
+de la cancha. Al verlos en la imagen, sabe exactamente cómo está mirando el
+tablero y puede convertir cualquier píxel a su celda.
+
+La ventaja escondida: **si alguien mueve la cámara, el sistema se reancla solo**
+en el cuadro siguiente. Los marcadores no se movieron, así que las coordenadas
+siguen significando lo mismo.
+
+> No confundir esto con la **calibración de distorsión**, que es otra cosa y no
+> hay que rehacerla: describe el **lente**, no dónde está puesta la cámara. Se
+> mide una vez por aparato y sigue valiendo aunque la cámara se mueva.
+
+Se usa el **centro** de cada marcador —no una esquina— porque es lo único que se
+puede medir sin ambigüedad, tanto en una imagen como con una cinta métrica sobre
+la cancha.
+
+### Por qué el centro sale de cruzar las diagonales
+
+Parece un detalle y no lo es. El centro de un marcador **no** es el promedio de
+sus cuatro esquinas: es el **cruce de sus dos diagonales**.
+
+Promediar es una operación afín, y mirar algo en perspectiva no lo es. Cuando la
+cámara mira el tablero con algo de ángulo, el lado del marcador que quedó más
+lejos se ve más chico, y el promedio de las cuatro esquinas se corre hacia el
+lado que se ve más grande. El cruce de las diagonales, en cambio, **se conserva**:
+una proyección manda rectas en rectas, así que manda las diagonales del cuadrado
+impreso en las diagonales del cuadrilátero que se ve, y su punto de cruce en el
+punto de cruce.
+
+El sesgo **crece con el tamaño del marcador** —cuanta más superficie, más
+perspectiva a lo ancho de la propia marca—, y por eso apareció recién al poner en
+el generador sintético los marcadores de **100 mm** reales: con los 60 mm
+nominales de antes quedaba escondido bajo el ruido. Medido con la cámara
+inclinada, el centro se corría **1,37 px**; cruzando las diagonales quedan
+**0,41 px**. Con más inclinación la diferencia se abre: a 0,30 son **7,4 px
+contra 0,6**.
+
+Importa porque esos cuatro centros son los que definen **todo** el sistema de
+coordenadas: un sesgo ahí no afecta a un objeto, los corre a todos.
+
+### Por qué tres zonas de acopio, una por color
+
+Hay **tres cubos**, de colores distintos (verde, azul, rojo), y **tres zonas de
+acopio**, una de cada color, **al centro de cada uno de los tres lados** que no
+son el de la salida. **Cada cubo va a la zona de su color.**
+
+Cada zona es un **rectángulo de 200 × 150 mm** con su lado largo apoyado sobre
+el borde de la cancha, y un cubo cuenta como entregado cuando queda
+**completamente adentro**. Eso es una diferencia de fondo con el punto que eran
+antes: hay un criterio exacto, y el sistema lo muestra en pantalla mientras
+corre la ronda.
+
+Las tres son **virtuales**: no se pega ni se pinta nada sobre el tablero. No es
+comodidad, es una condición de la detección: los cubos se encuentran porque
+**todo lo que tiene color saturado sobre un tablero acromático es un objeto del
+juego**, y tres rectángulos de color pegados en la cancha serían tres manchas
+permanentes compitiendo con los cubos.
+
+Esto convierte el reto en un problema de **asignación**, no solo de transporte:
+los equipos tienen que decidir qué rover lleva qué cubo y en qué orden, en vez de
+empujar todo al mismo rincón.
+
+Del lado del formato, los cubos y las zonas van en **listas separadas** aunque
+compartan el color, porque son cosas distintas: los cubos se **detectan** —se
+mueven, se tapan, envejecen— y las zonas se **declaran**: están siempre y no
+cambian nunca.
+
+### Por qué el color es la identidad del cubo
+
+Los cubos no tienen número de identificación. **El color los identifica**, porque
+no hay dos del mismo color.
+
+Es una simplificación deliberada: si los cubos tuvieran ID, el sistema tendría
+que seguir cada uno entre cuadros y no confundirlos al cruzarse. Con el color
+alcanza, y no hay nada que confundir.
+
+El **amarillo está reservado** para los obstáculos. Un objeto amarillo **nunca**
+es un cubo. Por eso los obstáculos no llevan campo de color: ya se sabe cuál es.
+
+### Por qué un objeto tapado no desaparece
+
+Cuando un rover pasa por encima de un cubo, la cámara deja de verlo. El sistema
+**no lo saca de la lista**: lo mantiene con su última posición conocida y le hace
+crecer un campo de **edad** (`age_ms`).
+
+Un objeto que parpadea entre existir y no existir vuelve loco al consumidor: el
+código del equipo tendría que distinguir "se lo llevaron" de "no lo veo ahora
+mismo", y no puede.
+
+Es preferible un dato viejo **marcado como viejo** que un agujero.
+
+### Por qué el contrato es una pieza aparte
+
+`contrato/` es una carpeta **independiente** que se entrega a los equipos **por
+sí sola**. Corre con Python puro: no necesita OpenCV, ni cámara, ni nada de
+`vision/`.
+
+La dependencia va en **un solo sentido**:
+
+```
+   vision/  ──puede depender de──►  contrato/
+   contrato/  ──NUNCA depende de──►  vision/
+```
+
+Así los equipos reciben algo liviano que corre en cualquier máquina, sin
+arrastrar 44 MB de OpenCV ni la mitad del sistema de visión.
+
+### Por qué el sistema publica la fase de la ronda
+
+La visión publica un campo de **fase**: `IDLE`, `READY`, `RUNNING`, `FINISHED`.
+
+Todos los equipos necesitan una referencia común sobre el estado de la ronda, y
+esa referencia tiene que ser **una sola voz**. La visión es esa voz: además de
+publicar la fase, **la decide**. Lleva el cronómetro oficial —con reloj
+monótono, para que un ajuste de hora del sistema no altere un tiempo de
+competencia—, arranca la ronda sola al agotarse la preparación y la cierra sola
+al agotarse el tiempo, al quedar todos los cubos en posición, o al perder de
+vista la cancha más de un par de segundos.
+
+El campo `clock` viaja en cada mensaje para que cualquiera pueda saber en qué
+punto está la ronda con **un solo mensaje y sin memoria**: un robot que llevara
+su propio reloj se desviaría del oficial.
+
+De esta manera, todos reciben la misma información de fase sin que cada equipo
+tenga que inferir por su cuenta si la ronda comenzó o terminó.
+
+La fase publicada no contiene estrategia ni comandos de movimiento. Sigue siendo
+parte de la telemetría oficial: informa el estado de la competencia, mientras que
+cada rover decide autónomamente cómo actuar.
+
+
+---
+
+## 7. El contrato: la frontera con los equipos
+
+El formato JSON que publica el sistema es un **contrato**. Es el único punto de
+acuerdo entre nosotros y los equipos, y **no se cambia por sorpresa**.
+
+Si algo tiene que cambiar, sube el número de versión (`v`) y se les avisa con
+tiempo. Un equipo que escribió código contra el formato no puede adaptarse a un
+cambio que descubre el día de la competencia.
+
+### Qué reciben los equipos
+
+Un mensaje por línea, unas veinte veces por segundo. Este es un mensaje real
+completo, el mismo que aparece en [`contrato/CONTRATO.md`](contrato/CONTRATO.md)
+(en el cable viaja todo en una sola línea; acá está formateado para leerlo):
+
+```json
+{
+  "v": 2,
+  "seq": 4137,
+  "ts_ms": 1785012345678,
+  "phase": "RUNNING",
+  "clock": { "elapsed_ms": 88000, "remaining_ms": 512000, "total_ms": 600000 },
+  "grid": { "cols": 43, "rows": 43, "cell_mm": 20.0 },
+  "rovers": [
+    { "id": 10, "col": 18.402, "row": 6.705,  "theta": 84.20, "age_ms": 0 },
+    { "id": 11, "col": 15.265, "row": 28.661, "theta": 40.22, "age_ms": 0 }
+  ],
+  "cubes": [
+    { "color": "green", "col": 21.480, "row": 3.762, "age_ms": 0   },
+    { "color": "blue",  "col": 15.000, "row": 29.000, "age_ms": 425 },
+    { "color": "red",   "col": 33.071, "row": 25.983, "age_ms": 0   }
+  ],
+  "obstacles": [],
+  "start":  { "col": 3.75, "row": 21.5 },
+  "depots": [
+    { "color": "green", "col": 21.5,  "row": 3.75  },
+    { "color": "red",   "col": 39.25, "row": 21.5  },
+    { "color": "blue",  "col": 21.5,  "row": 39.25 }
+  ],
+  "depot_size": { "length": 10.0, "depth": 7.5 },
+  "cube_side": 3.0
+}
+```
+
+**Fijate que `rovers`, `cubes`, `obstacles` y `depots` son listas con varios
+elementos.** Eso no es casual: hay que **iterar** sobre ellas y buscar por
+identidad —el rover por su `id`, el cubo por su `color`—, nunca tomar el primero
+de la lista. La cantidad de objetos cambia entre mensajes y el orden no está
+garantizado.
+
+Mirá también el cubo **azul**: tiene `age_ms: 425` porque el rover 11 está
+justo encima y lo tapa. El cubo **no desapareció** de la lista; sigue ahí con su
+última posición conocida y la edad creciendo. Eso es lo normal, no un error.
+
+Las posiciones van en **celdas con decimales** (una celda = 20 mm), con el origen
+en el marcador ID 0, `col` creciendo a la derecha y `row` hacia abajo. Los
+ángulos en grados, `0` = derecha, sentido antihorario.
+
+### Los rovers consumen JSON crudo
+
+Durante una ronda oficial, los **rovers** son los consumidores de la telemetría.
+Se conectan al servidor, separan cada mensaje por `\n`, parsean el JSON e iteran
+las listas buscando por identidad: el rover por su `id` y el cubo por su `color`.
+
+Los equipos pueden reproducir exactamente el mismo flujo desde una computadora
+durante desarrollo y pruebas. Esa computadora sirve para depurar y validar, pero
+no puede asumir la planificación o el control de los rovers durante la ronda.
+
+`schema.py` existe, pero es **infraestructura interna nuestra**: la fuente de
+verdad compartida entre el simulador y el sistema de visión. No se ofrece como
+biblioteca para el rover. El contrato documentado es la interfaz pública.
+
+### Pueden desarrollar sin cámara
+
+`contrato/` incluye un **simulador** que emite telemetría con el mismo formato
+que el sistema real, e incluso reproduce a propósito las patologías de la vida
+real: ruido, oclusiones, pérdidas de detección y cubos que se mueven al ser
+empujados.
+
+Un equipo puede escribir y probar gran parte de su lógica **antes de ver una
+cancha**, utilizando una computadora como entorno de desarrollo y el simulador
+como fuente de telemetría. El simulador publica en el **mismo puerto y con el
+mismo formato** que el sistema real, así que pasar de uno al otro no exige tocar
+una línea.
+
+El manual completo para los equipos está en
+**[`contrato/CONTRATO.md`](contrato/CONTRATO.md)**.
+
+---
+
+## 8. Cómo correr y probar lo que ya existe
+
+### 1. Instalar (una sola vez)
+
+El sistema de visión necesita **Python 3.10 o superior**. Desde la raíz del
+repositorio:
+
+```bash
+cd vision-system
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r vision/requirements.txt
+```
+
+Eso instala OpenCV, NumPy y Pillow en un entorno aislado, sin tocar el Python
+del sistema. La carpeta `.venv/` está ignorada por git.
+
+### 2. Encender el sistema
+
+Esto es lo que hace todo: mira, deduce y publica.
+
+```bash
+cd vision-system
+.venv/bin/python -m vision.sistema --ventana
+```
+
+**Los dos comandos importan.** El `cd` no es un detalle: `-m vision.sistema`
+busca el paquete `vision` desde la carpeta actual, así que desde otro lado falla
+con `No module named vision`. Y `.venv/bin/python` es el intérprete **del
+proyecto**, el único que tiene OpenCV instalado; con `python` a secas falla con
+`No module named cv2`.
+
+Otras formas de arrancarlo:
+
+```bash
+.venv/bin/python -m vision.sistema                # sin ventana: procesa y publica a ciegas
+.venv/bin/python -m vision.sistema --sintetico    # sin cámara, con imágenes generadas
+```
+
+Al arrancar pregunta **qué cámara** usar y qué perfil de calibración, y después
+queda corriendo. Mientras corre, el operador de la infraestructura oficial puede
+escribir por teclado `ready`, `stop`, `abort`, `quit`. Estos comandos cambian la
+fase de la ronda. Las otras dos transiciones —el arranque y el cierre por tiempo
+o por reto cumplido— **las hace el reloj del sistema**, no una persona.
+
+No son comandos disponibles para los equipos ni mecanismos de control de los
+rovers.
+
+> **El puerto 2026 se reclama solo.** Si un proceso anterior —otra visión, o el
+> simulador— lo tiene tomado, el sistema lo termina y arranca igual, avisando por
+> pantalla a quién terminó. Ya no hace falta matar nada a mano ni existe el
+> `Address already in use` al arrancar.
+
+
+### 3. La vista en vivo
+
+`--ventana` abre una ventana con **la imagen de la cámara y lo que el sistema
+dedujo, dibujado encima**: los cuatro marcadores, la grilla de celdas
+reproyectada, cada rover con su flecha de orientación y cada cubo con su base,
+etiquetados con **la celda exacta que se está publicando**. Lo que se ve ahí es
+lo que reciben los equipos.
+
+Es la forma más rápida de encontrar un problema: si la grilla dibujada no cae
+sobre la cuadrícula del tablero, la geometría está mal; si un cubo no aparece,
+no se está detectando; si algo se pone ámbar, está viejo y su edad está creciendo.
+
+Es un **consumidor**: solo lee, se refresca a su propio reloj y **no le cuesta
+nada al procesamiento** —medido, 179 cuadros en 6 segundos con y sin ventana—.
+Desde la ventana se maneja con `r` ready · `f` stop · `a` abort · `q` salir.
+No hay tecla para arrancar la ronda: de `READY` a `RUNNING` pasa el reloj solo.
+
+> **Sin argumentos abre la cámara.** Lo sintético hay que **pedirlo**, y cuando
+> corre así el sistema lo repite en pantalla en un cartel imposible de pasar por
+> alto. Nadie tiene que poder confundir una demostración con una ronda.
+
+Para ver lo que sale, en otra terminal:
+
+```bash
+python3 contrato/test_client.py
+```
+
+Es el cliente de referencia para **desarrollo, pruebas y validación**: se conecta
+al puerto 2026 y verifica cada mensaje contra el contrato.
+
+Sirve para comprobar desde una computadora que la red y la telemetría funcionan.
+Es una herramienta de diagnóstico, no un ejemplo de arquitectura de control.
+
+### Probar el simulador del contrato (sin instalar nada)
+
+Esto **no necesita el entorno virtual ni ninguna instalación**: corre con
+cualquier Python 3.9 o superior. Desde `vision-system/contrato/`, en dos
+terminales:
+
+```bash
+python3 mock_publisher.py     # terminal 1: el simulador
+python3 test_client.py        # terminal 2: el cliente de prueba
+```
+
+En la terminal 1, escribí `ready` y **esperá**: al agotarse la preparación, la
+ronda arranca sola. Vas a ver la telemetría llegando y validándose.
+
+La guía completa, paso a paso y a prueba de principiantes, está en la sección 7
+de [`contrato/CONTRATO.md`](contrato/CONTRATO.md).
+
+### Probar la geometría del sistema de visión
+
+Esto sí usa el entorno virtual. Desde `vision-system/`:
+
+```bash
+.venv/bin/python -m vision.tools.verificar_geometria
+```
+
+Genera imágenes sintéticas del tablero, detecta los cuatro marcadores de esquina,
+arma el sistema de coordenadas y mide cuánto se desvía de la verdad conocida. Lo
+hace en dos modos: con cámara perfectamente cenital y con la cámara inclinada.
+
+Para ver la imagen que generó:
+
+```bash
+.venv/bin/python -m vision.tools.verificar_geometria --salida /tmp/tablero.png --anotar
+```
+
+### Las verificaciones contra verdad conocida
+
+Cada etapa tiene la suya. Todas corren **sin cámara** y devuelven código de
+salida distinto de cero si algo se sale de umbral, así que sirven igual para
+mirarlas a mano o para encadenarlas.
+
+```bash
+.venv/bin/python -m vision.tools.verificar_geometria      # píxeles → celdas
+.venv/bin/python -m vision.tools.verificar_rovers         # posición y ángulo
+.venv/bin/python -m vision.tools.verificar_cubos          # color, base y oclusión
+.venv/bin/python -m vision.tools.verificar_seguimiento    # memoria, oclusión y edad
+.venv/bin/python -m vision.tools.verificar_acopio         # ¿el cubo está en su zona?
+.venv/bin/python -m vision.tools.verificar_config         # la configuración declarada
+.venv/bin/python -m vision.tools.medir_desfases --autoprueba
+```
+
+`verificar_config` es la única que no compara contra la verdad del generador:
+revisa lo que declara la configuración y separa lo **imposible** —que impide
+arrancar— de lo **ajustado**, que avisa y deja seguir. Sale con código distinto
+de cero solo ante errores, nunca ante avisos.
+
+Ese último no es una verificación del sistema sino de **la matemática de la
+herramienta de desfases**: le inyecta un desfase conocido al generador y
+comprueba que lo recupera, antes de dejarla acercarse al robot real.
+
+### Poner a punto una cámara real
+
+Cuatro etapas —diagnóstico, impresión del patrón, calibración de distorsión y
+medición de precisión—, en un orden que no es arbitrario: cada una supone que
+la anterior salió bien.
+
+**El procedimiento completo, paso a paso, está en
+[`PUESTA_A_PUNTO.md`](PUESTA_A_PUNTO.md)**, escrito para alguien que recibe la
+cámara sin conocer el sistema. Los comandos exactos viven ahí y **solo ahí**,
+para que no haya dos secuencias que puedan desincronizarse.
+
+Acá quedan los enlaces según lo que necesites:
+
+| Si querés… | Andá a |
+|---|---|
+| **Hacerlo**: los pasos, los comandos, qué mirar en pantalla | [`PUESTA_A_PUNTO.md`](PUESTA_A_PUNTO.md) |
+| **Consultar** una herramienta: todas sus opciones y su porqué | [`vision/tools/README.md`](vision/tools/README.md) |
+| **Entender** cómo funciona la corrección por dentro | [`vision/geometry/README.md`](vision/geometry/README.md) |
+
+---
+
+## 9. Estado actual del proyecto
+
+El sistema se construye por **hilos delgados**: en vez de completar una pieza
+antes de empezar la siguiente, se arma un camino mínimo de punta a punta y se lo
+va engrosando. Así siempre hay algo que funciona y se puede verificar.
+
+### Terminado y verificado
+
+| Pieza | Qué hace |
+|---|---|
+| **El contrato** (`contrato/`) | Formato definido, validador, simulador con patologías reales, cliente de referencia y manual completo. Protocolo **v2**: zonas de acopio rectangulares, salida al centro del lado, y la geometría del acopio compartida con los equipos. |
+| **La regla de acopio** (`vision/reglas/`) | Cuenta los cubos completamente dentro de su zona, con permanencia mínima para que el número no titile. El veredicto sale del contrato, así que la pantalla y el rover dicen lo mismo. El conteo **no se publica**, pero cuando están todos, el contador se lo informa al árbitro y **la ronda se cierra sola** con motivo `reto_cumplido`. |
+| **Generador sintético** (`vision/sources/`) | Crea imágenes del tablero con marcadores y rovers, **conociendo la verdad** de lo que dibujó. |
+| **Captura real** (`vision/sources/`) | Lee la webcam USB en un hilo propio que **nunca bloquea**, con exposición, enfoque y balance de blancos fijos —y **verificados por efecto**, porque muchas cámaras aceptan el ajuste y siguen haciendo lo que quieren—. Incluye un menú para elegir qué cámara abrir. |
+| **Geometría de esquinas** (`vision/geometry/`) | Detecta los 4 marcadores y convierte píxeles a celdas. Verificado contra la verdad del generador sintético, con los marcadores de **100 mm** reales: **exacto** con la cámara cenital y **0,44 mm** de error máximo con la cámara inclinada. El centro de cada marcador sale de **cruzar sus diagonales** y no de promediar sus esquinas (ver más abajo). |
+| **Calibración de distorsión** (`vision/geometry/`) | Corrige la curvatura del lente. Hace falta en **toda** cámara, también en las que no son gran angular: la C270 oficial mide 47,1° × 27,6° y distorsiona igual. **Dos cámaras ya calibradas y verificadas**: ArgomTech CAM40 (1920×1080, 0,314 px) y Logitech C270 (1280×720, 0,206 px). |
+| **Perfiles por cámara** (`vision/geometry/`) | Cada aparato guarda su propia calibración, y el sistema **avisa cuando el perfil no le corresponde** a la cámara conectada, en vez de corregir mal en silencio. |
+| **Detección de rovers** (`vision/detectors/`) | Encuentra los rovers por su marcador y deduce su **celda y su ángulo**, calculados en celdas y no en píxeles porque la perspectiva no conserva los ángulos. Verificado contra la verdad del generador: **0,8 mm** de error de posición y **1,3°** de orientación con la cámara inclinada, sobre 36 rovers repartidos. |
+| **Detección de cubos** (`vision/detectors/`) | Encuentra los cubos por color —croma en Lab para separar, matiz para clasificar— y los ubica por su **base**, ajustando el modelo del cubo al contorno visible. **1,05 mm** con el cubo despejado y **4,88 mm** con un rover empujándolo y tapándole el 22 %. |
+| **Pose de cámara y paralaje** (`vision/geometry/`) | La pose sale de los mismos cuatro marcadores, sin declarar nada. Con ella, el corrimiento del marcador del rover baja de **27 mm a 1,0 mm**. |
+| **Seguimiento** (`vision/tracking/`) | Memoria entre cuadros: un objeto tapado conserva su posición y su edad crece, en vez de desaparecer. Acá **no hay problema de asociación**, porque cada objeto trae su identidad. |
+| **Publicación** (`vision/publish/`) | TCP/NDJSON en el 2026, con reloj propio y último-valor-gana. El transporte lo comparte con el simulador. |
+| **El sistema completo** (`vision/sistema.py`) | El programa que se enciende: elige la fuente, corre el bucle, falla abierto y arbitra las fases. |
+| **La vista en vivo** (`vision/vista.py`) | Ventana con la imagen y lo detectado encima, etiquetado con la celda publicada. Es un consumidor: solo lee y no le cuesta nada al procesamiento. |
+| **Herramientas de puesta a punto** (`vision/tools/`) | Once: diagnóstico de cámara, generación de los PDF, calibración, medición de precisión, medición de desfases, revisión de la configuración, y cinco verificaciones contra verdad conocida —geometría, rovers, cubos, seguimiento y acopio—. |
+
+**Precisión medida sobre hardware real.** El criterio era **error máximo por
+debajo de 10 mm** —un cubo mide 60 mm, así que 10 mm mantiene el objetivo dentro
+del cubo—. Las dos cámaras quedaron muy por debajo:
+
+| Cámara | Resolución | Error máximo | Error medio |
+|---|---|---|---|
+| Logitech C270 | 1280×720 | **1,01 mm** | 0,47 mm |
+| ArgomTech CAM40 | 1920×1080 | **1,58 mm** | 0,75 mm |
+
+La consecuencia práctica es que **la resolución no es el factor limitante**: 720p
+ubica bien, así que la cámara se puede elegir por disponibilidad y precio.
+
+### El alcance de esta versión
+
+El **sistema de visión** está completo y verificado: capta, deduce y publica.
+Fuera de ese alcance quedan dos cosas que no son percepción —el **instalador
+para Windows** y la **grabación de sesiones** para repetirlas sin cámara, que
+todavía no tiene código; el acta de cada ronda, en cambio, ya está en
+`record/`— y las **mediciones
+sobre la cancha montada**, que necesitan el hardware en su lugar definitivo.
+
+Las medidas que todavía no están confirmadas llevan su estado escrito **en la
+configuración**, junto al valor: `vision/config_vision.json` distingue lo
+`CONFIRMADO` de lo `PROVISIONAL` en cada caso, y explica qué falta para cerrarlo.
+
+## 10. Cómo seguir
+
+- **Si vas a usar el sistema como equipo:** leé
+  [`contrato/CONTRATO.md`](contrato/CONTRATO.md) para implementar la recepción de
+  telemetría y consultá también el [`reglamento.md`](../reglamento.md) para las
+  condiciones de autonomía y la arquitectura permitida durante una ronda.
+- **Si vas a trabajar en el sistema de visión:** leé
+  [`CLAUDE.md`](CLAUDE.md), que fija las reglas del proyecto, y después el
+  `README.md` de la carpeta que vayas a tocar.
+- **Si te dieron una cámara y tenés que dejarla lista:** leé
+  **[`PUESTA_A_PUNTO.md`](PUESTA_A_PUNTO.md)**. Te lleva de la mano desde
+  imprimir las hojas hasta saber con cuántos milímetros de error ubica tu
+  cámara. No hace falta que sepas nada del sistema por dentro.
+- **Si vas a montar la cancha física:** leé **[`MONTAJE.md`](MONTAJE.md)**. Tiene
+  la disposición exacta de los marcadores, la regla del margen blanco y una
+  comprobación para hacer antes de la primera ronda. Pegar los marcadores en otro
+  orden rota todas las coordenadas, y el sistema no se queja.
+- **Si vas a correr una ronda:** leé **[`OPERACION.md`](OPERACION.md)**. El ciclo
+  completo, los comandos, por qué el cronómetro no se pausa, las dos guardas que
+  impiden arbitrar a ciegas, los cinco motivos de cierre y qué trae el acta.
+
+El trabajo va en la rama **`desarrollo`**; `main` queda como llegó del fork.
