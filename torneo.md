@@ -44,7 +44,7 @@
 
 3.1. Antes de cada intento, la organización restablecerá el escenario de competencia según la configuración oficial correspondiente.
 
-3.2. Los robots, cubos, zonas de acopio y demás elementos serán colocados en las condiciones iniciales definidas para el intento.
+3.2. Los cubos serán colocados en las condiciones iniciales definidas al azar para cada intento. Inicio de rovers, zonas de acopio no cambian.
 
 3.3. Todos los equipos competirán bajo las mismas condiciones oficiales establecidas para la ronda.
 
