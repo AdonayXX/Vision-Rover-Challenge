@@ -1,6 +1,6 @@
 # Solución Greedy
 
-##Tip: una estrategia básica que funciona
+## Tip: una estrategia básica que funciona
 
 Una forma sencilla de comenzar es usar una estrategia **greedy** o voraz. No necesariamente produce la mejor solución, pero permite tener rápidamente un comportamiento funcional sobre el cual experimentar y mejorar.
 
