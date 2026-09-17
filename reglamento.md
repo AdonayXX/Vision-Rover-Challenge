@@ -352,4 +352,385 @@ A partir del cambio del sistema oficial de visión al estado `READY`, los rovers
 
 13.2. El tiempo de depósito de un cubo corresponderá al momento, medido desde el cambio a `READY`, en que el cubo quede correctamente depositado.
 
-13.3. Un cu
+13.3. Un cubo correctamente depositado deberá permanecer en una condición válida durante el resto del intento.
+
+13.4. Si posteriormente uno de los rovers retira accidentalmente un cubo de su zona de acopio, el cubo dejará de considerarse correctamente depositado.
+
+13.5. Si un rover provoca que un cubo salga de la superficie de competencia, caiga del tablero o quede fuera del área válida de juego, ese cubo se considerará **no depositado**.
+
+13.6. En los casos establecidos en 13.4 y 13.5, cualquier registro previo de depósito del cubo quedará sin efecto.
+
+13.7. Para efectos de cantidad de cubos completados, tiempo y clasificación, se considerará como si ese cubo no hubiera sido depositado correctamente durante el intento.
+
+13.8. Los jueces no recolocarán manualmente un cubo que haya sido desplazado, retirado de su zona de acopio o expulsado de la superficie como consecuencia de las acciones de los rovers.
+
+13.9. Si el cubo permanece dentro del área válida de competencia, los rovers podrán intentar colocarlo nuevamente en su zona de acopio mientras quede tiempo disponible.
+
+13.10. Si el cubo vuelve a ser correctamente depositado, se registrará como tiempo válido el correspondiente al nuevo depósito correcto.
+
+---
+
+## 14. Registro oficial de tiempos
+
+14.1. Durante cada intento se registrará la cantidad de cubos correctamente depositados.
+
+14.2. Se registrará el tiempo de depósito correcto del primer cubo.
+
+14.3. Se registrará el tiempo de depósito correcto del segundo cubo, cuando corresponda.
+
+14.4. Se registrará el tiempo de depósito correcto del tercer cubo, cuando corresponda.
+
+14.5. Si los tres cubos son completados, el tiempo del tercer cubo constituirá el tiempo total de finalización.
+
+14.6. Todos los tiempos se medirán a partir del momento en que el sistema oficial de visión cambie al estado `READY`.
+
+14.7. Solamente se utilizarán para la clasificación los tiempos correspondientes a cubos que permanezcan válidamente depositados al finalizar el intento.
+
+14.8. Si un cubo pierde posteriormente su condición de depósito válido, su tiempo anterior será eliminado del resultado del intento.
+
+14.9. Si el cubo es depositado correctamente nuevamente durante el mismo intento, se registrará el nuevo tiempo de depósito.
+
+14.10. El cronometraje oficial y la validación de los resultados serán responsabilidad de la organización y de los jueces de la competencia.
+
+---
+
+## 15. Fallos atribuibles al equipo
+
+15.1. Una vez iniciado un intento, no se permitirá reiniciarlo por errores atribuibles al sistema desarrollado por el equipo.
+
+15.2. Se consideran errores atribuibles al equipo, entre otros:
+
+15.2.1. Errores de programación.
+
+15.2.2. Errores de navegación.
+
+15.2.3. Pérdida de coordinación entre los rovers.
+
+15.2.4. Errores en la interpretación de la telemetría.
+
+15.2.5. Problemas en la estrategia desarrollada por el equipo.
+
+15.2.6. Colisiones entre los rovers.
+
+15.2.7. Incapacidad para localizar o transportar un cubo.
+
+15.2.8. Bloqueos del software desarrollado por el equipo.
+
+15.2.9. Decisiones incorrectas tomadas por los rovers.
+
+15.2.10. Que un rover retire accidentalmente un cubo de una zona de acopio.
+
+15.2.11. Que un rover provoque la caída o salida de un cubo de la superficie de competencia.
+
+15.3. Ante cualquiera de estas situaciones, el intento no será reiniciado.
+
+15.4. El cronómetro continuará hasta que se complete la tarea, se alcance el límite de 10 minutos o el juez determine que debe detenerse el intento.
+
+---
+
+## 16. Fallos de infraestructura y alteraciones externas
+
+16.1. Un intento podrá ser repetido cuando el juez determine que ocurrió una falla atribuible a la infraestructura oficial o una alteración del escenario no provocada por los rovers participantes.
+
+16.2. Se consideran posibles fallos de infraestructura oficial:
+
+16.2.1. Fallos del sistema oficial de visión.
+
+16.2.2. Fallos de la cámara superior.
+
+16.2.3. Fallos de la telemetría oficial.
+
+16.2.4. Fallos de la red de comunicación proporcionada por la organización.
+
+16.2.5. Fallos del escenario oficial.
+
+16.2.6. Fallos de los mecanismos utilizados por la organización para iniciar o controlar el estado del intento.
+
+16.3. También se considerará una alteración externa cuando un cubo se desplace, caiga o salga de la superficie de competencia debido a:
+
+16.3.1. Vibraciones del tablero no provocadas por los rovers participantes.
+
+16.3.2. Movimiento accidental de la infraestructura.
+
+16.3.3. Intervención externa involuntaria.
+
+16.3.4. Cualquier otra causa que el juez determine que no fue provocada por los rovers participantes.
+
+16.4. Cuando una alteración de este tipo afecte materialmente el desarrollo del intento, el juez podrá detenerlo y ordenar su repetición desde el inicio.
+
+16.5. En caso de repetición, el escenario será restablecido a sus condiciones iniciales.
+
+16.6. El intento afectado por la falla o alteración externa quedará anulado y no será contabilizado como uno de los dos intentos del equipo.
+
+16.7. Una falla atribuible al código, configuración, comunicación, navegación, coordinación o estrategia desarrollada por el equipo no constituye una falla de infraestructura oficial.
+
+16.8. La determinación de si un incidente fue causado por la infraestructura, por un factor externo o por la acción de los rovers corresponderá a los jueces de la competencia.
+
+16.9. La decisión sobre la repetición de un intento corresponderá a los jueces de la competencia.
+
+---
+
+## 17. Superficie y sistema de coordenadas
+
+17.1. La superficie física de competencia es aproximadamente de **1 m × 1 m** y está formada por una cuadrícula de celdas de 20 mm.
+
+17.2. El área efectiva utilizada por el sistema de visión está determinada por los marcadores visuales oficiales colocados en las esquinas.
+
+17.3. Las dimensiones lógicas de la cancha pueden ser menores que las dimensiones físicas completas de la superficie.
+
+17.4. Los equipos no deberán asumir en su código un número fijo de filas o columnas.
+
+17.5. Los equipos deberán utilizar los valores publicados por el sistema oficial de visión, incluyendo:
+
+17.5.1. Cantidad de columnas.
+
+17.5.2. Cantidad de filas.
+
+17.5.3. Tamaño de cada celda.
+
+17.5.4. Posición de salida.
+
+17.5.5. Posición de las zonas de acopio.
+
+---
+
+## 18. Restricciones técnicas
+
+18.1. No se permite modificar físicamente los rovers.
+
+18.2. No se permite:
+
+18.2.1. Agregar o retirar sensores.
+
+18.2.2. Agregar actuadores.
+
+18.2.3. Agregar mecanismos de recolección.
+
+18.2.4. Cambiar motores, ruedas o baterías.
+
+18.2.5. Alterar el chasis.
+
+18.2.6. Incorporar tarjetas electrónicas adicionales.
+
+18.2.7. Sustituir la electrónica principal.
+
+18.2.8. Utilizar otro robot o plataforma.
+
+18.2.9. Dañar, perforar, cortar o alterar permanentemente los robots entregados.
+
+18.2.10. Utilizar hardware externo como controlador auxiliar durante un intento.
+
+18.2.11. Ejecutar planificación o control en tiempo real desde una computadora externa durante un intento.
+
+18.3. Cualquier modificación física o electrónica no autorizada será motivo de descalificación técnica.
+
+---
+
+# Formato del torneo
+
+## 19. Estructura del torneo
+
+19.1. El torneo se desarrollará en **dos rondas**.
+
+19.2. En la primera ronda participarán todos los equipos inscritos.
+
+19.3. Cada equipo tendrá **dos intentos** durante la primera ronda.
+
+19.4. Para efectos de clasificación se utilizará únicamente el **mejor resultado obtenido por cada equipo en sus dos intentos**.
+
+19.5. Los **10 equipos con mejores resultados** clasificarán a la segunda ronda.
+
+19.6. Los 10 equipos clasificados tendrán **dos nuevos intentos** durante la segunda ronda.
+
+19.7. Para la clasificación final se utilizará únicamente el **mejor resultado obtenido por cada equipo durante la segunda ronda**.
+
+19.8. Los resultados obtenidos durante la primera ronda no se acumulan ni se utilizan para determinar las posiciones finales.
+
+19.9. Los equipos que obtengan los **tres mejores resultados de la segunda ronda** ocuparán las tres primeras posiciones del Vision Rover Challenge.
+
+19.10. Cada intento constituye una ejecución independiente. Los resultados de los dos intentos de una misma ronda no se suman ni se promedian.
+
+---
+
+## 20. Orden de participación
+
+20.1. El orden de participación de los equipos será determinado **aleatoriamente por la organización**.
+
+20.2. La organización podrá distribuir los dos intentos de cada equipo a lo largo de la ronda.
+
+20.3. Los dos intentos de un mismo equipo no necesariamente se realizarán de forma consecutiva.
+
+20.4. La distribución aleatoria busca evitar ventajas asociadas al orden de participación.
+
+20.5. El orden será comunicado por la organización antes del inicio de la ronda correspondiente.
+
+20.6. Los equipos deberán estar preparados para participar cuando sean llamados según el orden establecido.
+
+---
+
+## 21. Selección del mejor intento
+
+21.1. Al finalizar cada ronda, cada equipo tendrá hasta dos resultados correspondientes a sus dos intentos oficiales.
+
+21.2. Para efectos de clasificación se utilizará únicamente el **mejor de los dos intentos**.
+
+21.3. Los resultados de ambos intentos no se sumarán ni se promediarán.
+
+21.4. Para determinar cuál de los dos intentos es mejor se aplicarán los mismos criterios utilizados para la clasificación general.
+
+21.5. Tendrá prioridad el intento con mayor cantidad de cubos correctamente depositados.
+
+21.6. Si ambos intentos tienen la misma cantidad de cubos correctamente depositados, tendrá prioridad el intento con el menor tiempo correspondiente al último cubo completado.
+
+---
+
+## 22. Criterios de clasificación
+
+22.1. El objetivo principal será completar correctamente los tres cubos en el menor tiempo posible.
+
+22.2. Los equipos que completen los tres cubos antes del límite de 10 minutos serán ordenados por el tiempo de depósito del tercer cubo.
+
+22.3. Un equipo que complete tres cubos tendrá prioridad sobre cualquier equipo que complete dos, uno o ningún cubo.
+
+22.4. Un equipo que complete dos cubos tendrá prioridad sobre cualquier equipo que complete uno o ningún cubo.
+
+22.5. Un equipo que complete un cubo tendrá prioridad sobre cualquier equipo que no complete ningún cubo.
+
+22.6. Entre equipos con la misma cantidad de cubos correctamente depositados, tendrá prioridad aquel que haya depositado su último cubo válido en menor tiempo.
+
+22.7. La clasificación se determinará de la siguiente manera:
+
+| Cubos completados | Criterio de clasificación                 |
+| ----------------- | ----------------------------------------- |
+| 3 cubos           | Menor tiempo de depósito del tercer cubo  |
+| 2 cubos           | Menor tiempo de depósito del segundo cubo |
+| 1 cubo            | Menor tiempo de depósito del primer cubo  |
+| 0 cubos           | Sin tiempo de cubo registrado             |
+
+22.8. Si dos equipos completan dos cubos, tendrá mejor resultado el equipo que haya colocado correctamente su segundo cubo en menor tiempo.
+
+22.9. Si dos equipos completan un cubo, tendrá mejor resultado el equipo que haya colocado correctamente ese cubo en menor tiempo.
+
+22.10. Si ningún cubo fue completado, no existirá un tiempo de cubo para utilizar como criterio de clasificación.
+
+---
+
+## 23. Desempates
+
+23.1. Si dos o más equipos tienen la misma cantidad de cubos correctamente depositados y exactamente el mismo tiempo para el último cubo válido, se utilizará como siguiente criterio el tiempo del cubo anterior.
+
+23.2. Para equipos con tres cubos, si existe empate en el tiempo del tercer cubo, se comparará el tiempo del segundo cubo.
+
+23.3. Si persiste el empate, se comparará el tiempo del primer cubo.
+
+23.4. Para equipos con dos cubos, si existe empate en el tiempo del segundo cubo, se comparará el tiempo del primer cubo.
+
+23.5. Si después de aplicar todos los criterios anteriores persiste un empate que afecte la clasificación a la segunda ronda, se realizará un **intento adicional de desempate** entre los equipos involucrados.
+
+23.6. Si después de aplicar todos los criterios anteriores persiste un empate que afecte alguna de las tres posiciones finales, se realizará un **intento adicional de desempate** entre los equipos involucrados.
+
+23.7. El intento de desempate tendrá las mismas condiciones y duración máxima de 10 minutos establecidas para los demás intentos.
+
+23.8. Si persiste el empate después del intento adicional, la organización podrá realizar nuevos intentos de desempate hasta determinar las posiciones correspondientes.
+
+---
+
+## 24. Clasificación de la primera ronda
+
+24.1. Al finalizar la primera ronda, los equipos serán ordenados según los criterios establecidos en este reglamento.
+
+24.2. Los **10 equipos con mejores resultados** clasificarán a la segunda ronda.
+
+24.3. Para cada equipo se utilizará exclusivamente el mejor de sus dos intentos.
+
+24.4. Los resultados de la primera ronda determinarán únicamente la clasificación a la segunda ronda.
+
+24.5. Los tiempos y resultados obtenidos en la primera ronda no se trasladarán a la segunda ronda.
+
+---
+
+## 25. Clasificación final
+
+25.1. Los 10 equipos clasificados iniciarán la segunda ronda sin ventaja derivada de los resultados obtenidos en la primera ronda.
+
+25.2. Cada equipo tendrá dos intentos durante la segunda ronda.
+
+25.3. Se utilizará el mejor resultado de los dos intentos de cada equipo.
+
+25.4. Los equipos serán ordenados según los criterios de clasificación y desempate establecidos en este reglamento.
+
+25.5. Los **tres equipos con mejores resultados** ocuparán, respectivamente, el primer, segundo y tercer lugar del Vision Rover Challenge.
+
+---
+
+## 26. Penalizaciones y descalificación
+
+26.1. Podrán aplicarse penalizaciones por:
+
+26.1.1. Intervención manual durante el intento.
+
+26.1.2. Salida de un rover de la superficie de competencia.
+
+26.1.3. Incumplimiento de las condiciones de autonomía.
+
+26.1.4. Incumplimiento de las condiciones de inicio o ejecución definidas por la organización.
+
+26.2. Serán causas de descalificación:
+
+26.2.1. Modificar física o electrónicamente un robot.
+
+26.2.2. Agregar o sustituir componentes.
+
+26.2.3. Cambiar el microcontrolador o la tarjeta principal.
+
+26.2.4. Utilizar una plataforma robótica diferente.
+
+26.2.5. Controlar manualmente los robots durante la ejecución.
+
+26.2.6. Utilizar una computadora, teléfono, servicio en la nube u otro sistema externo para tomar decisiones o controlar los rovers durante un intento.
+
+26.2.7. Incumplir las condiciones técnicas establecidas por la organización.
+
+---
+
+## 27. Autoridad de los jueces
+
+27.1. El cronometraje y los registros oficiales de cada intento serán responsabilidad de la organización.
+
+27.2. Los jueces determinarán cuándo un cubo se encuentra correctamente depositado.
+
+27.3. Los jueces determinarán si un incidente fue provocado por un rover, por la infraestructura oficial o por un factor externo.
+
+27.4. Los jueces podrán detener un intento por razones de seguridad o por incumplimiento del reglamento.
+
+27.5. Los jueces determinarán cuándo una falla de infraestructura justifica la anulación y repetición de un intento.
+
+27.6. Cualquier situación no contemplada explícitamente en estas reglas será resuelta por los jueces y la organización del Vision Rover Challenge.
+
+---
+
+# Resumen de lo que NO se puede hacer
+
+| Área                    | ❌ Lo que NO se puede hacer                                  | Ejemplo                                                |
+| ----------------------- | ----------------------------------------------------------- | ------------------------------------------------------ |
+| **Hardware**            | Modificar físicamente los rovers                            | Cortar, perforar o alterar el robot                    |
+| **Chasis**              | Modificar el chasis original                                | Agregar una pala para empujar cubos                    |
+| **Componentes**         | Agregar componentes físicos                                 | Añadir piezas impresas en 3D                           |
+| **Componentes**         | Retirar componentes                                         | Quitar un sensor                                       |
+| **Electrónica**         | Modificar la electrónica                                    | Alterar la tarjeta principal                           |
+| **Microcontrolador**    | Sustituir el microcontrolador                               | Cambiar el ESP32 por otro controlador                  |
+| **Controladores**       | Agregar tarjetas de desarrollo                              | Incorporar Raspberry Pi, Arduino u otro ESP32          |
+| **Sensores**            | Agregar sensores                                            | Añadir LiDAR, cámara, ToF o encoders                   |
+| **Sensores**            | Sustituir sensores                                          | Cambiar el ultrasónico por otro modelo                 |
+| **Actuadores**          | Agregar actuadores                                          | Incorporar servomotores                                |
+| **Manipulación**        | Agregar mecanismos de recolección                           | Pinzas, brazos o palas móviles                         |
+| **Motores**             | Cambiar los motores                                         | Instalar motores diferentes                            |
+| **Ruedas**              | Cambiar las ruedas                                          | Usar ruedas de otro diámetro                           |
+| **Baterías**            | Cambiar el sistema de alimentación                          | Utilizar baterías diferentes                           |
+| **Control externo**     | Controlar los rovers durante el intento                     | Teclado, teléfono o control remoto                     |
+| **Computadora externa** | Tomar decisiones durante el intento                         | Calcular rutas desde una laptop                        |
+| **Nube**                | Utilizar servicios externos para decidir durante el intento | Enviar telemetría a un servicio que determine acciones |
+| **Intervención humana** | Tocar o corregir los robots durante el intento              | Reorientar manualmente un rover                        |
+| **Cubos**               | Mover manualmente los objetos durante el intento            | Recolocar un cubo desplazado                           |
+| **Código**              | Modificar el programa después de `READY`                    | Cambiar parámetros o cargar código nuevo               |
+| **Inicio**              | Iniciar manualmente después de `READY`                      | Presionar el botón de la IdeaBoard                     |
