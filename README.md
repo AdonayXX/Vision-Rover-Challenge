@@ -45,3 +45,4 @@ El objetivo es que los rovers encuentren los objetos, los transporten y los colo
 - [Códigos en python de movimientos, sensores, control etc, del rover](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/blob/main/codigos/README.md)
 - [Sistema de visión](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/tree/main/vision-system)
 - [Archivos de fabricación](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/tree/main/archivos_fabricacion)
+- [Una Idea de Solución](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/blob/main/solucion_simple.md)
