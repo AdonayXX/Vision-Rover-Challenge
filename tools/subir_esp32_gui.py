@@ -1,6 +1,7 @@
 import os
 import queue
 import subprocess
+import sys
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -108,10 +109,34 @@ class Esp32Uploader(tk.Tk):
         ttk.Label(status, textvariable=self.status_var, anchor="w").pack(side="left", fill="x", expand=True)
 
     def detect_ports(self):
-        self.run_worker("Detectando puertos...", [self.python_cmd(), "-m", "serial.tools.list_ports"])
+        self.run_worker(
+            "Detectando puertos...",
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-Command",
+                "[System.IO.Ports.SerialPort]::GetPortNames()",
+            ],
+        )
 
     def install_ampy(self):
-        self.run_worker("Instalando ampy...", [self.python_cmd(), "-m", "pip", "install", "adafruit-ampy"])
+        self.set_busy(True, "Instalando dependencias...")
+        thread = threading.Thread(target=self._install_worker, daemon=True)
+        thread.start()
+
+    def _install_worker(self):
+        try:
+            self.log_queue.put(("log", f"Python usado: {sys.executable}\n"))
+            self.log_queue.put(("log", "Activando pip si hace falta...\n"))
+            self.run_command([sys.executable, "-m", "ensurepip", "--upgrade"])
+            self.log_queue.put(("log", "Instalando pyserial y adafruit-ampy...\n"))
+            self.run_command([sys.executable, "-m", "pip", "install", "--upgrade", "pyserial", "adafruit-ampy"])
+            self.log_queue.put(("status", "Dependencias instaladas"))
+        except Exception as error:
+            self.log_queue.put(("log", f"\nERROR: {error}\n"))
+            self.log_queue.put(("status", "Error instalando dependencias"))
+        finally:
+            self.log_queue.put(("done", None))
 
     def choose_files(self):
         files = filedialog.askopenfilenames(
@@ -152,16 +177,16 @@ class Esp32Uploader(tk.Tk):
         thread.start()
 
     def reset_board(self):
-        self.run_worker("Reiniciando placa...", ["ampy", "--port", self.port(), "reset", "--hard"])
+        self.run_worker("Reiniciando placa...", self.ampy_command("reset", "--hard"))
 
     def _upload_worker(self, commands):
         try:
             self.log_queue.put(("log", f"Usando puerto {self.port()}\n"))
             for path, remote in commands:
                 self.log_queue.put(("log", f"Subiendo {path} -> {remote}\n"))
-                self.run_command(["ampy", "--port", self.port(), "put", path, remote])
+                self.run_command(self.ampy_command("put", path, remote))
             self.log_queue.put(("log", "\nReiniciando placa...\n"))
-            self.run_command(["ampy", "--port", self.port(), "reset", "--hard"])
+            self.run_command(self.ampy_command("reset", "--hard"))
             self.log_queue.put(("status", "Carga terminada"))
             self.log_queue.put(("done", None))
         except Exception as error:
@@ -202,8 +227,11 @@ class Esp32Uploader(tk.Tk):
         exit_code = process.wait()
         if exit_code != 0:
             raise RuntimeError(
-                "El comando fallo. Revisa que el puerto no este ocupado por Thonny, miniterm o VS Code."
+                "El comando fallo. Revisa dependencias, puerto seleccionado y que el puerto no este ocupado."
             )
+
+    def ampy_command(self, *args):
+        return [sys.executable, "-m", "ampy.cli", "--port", self.port(), *args]
 
     def _drain_log_queue(self):
         try:
@@ -250,7 +278,7 @@ class Esp32Uploader(tk.Tk):
 
     @staticmethod
     def python_cmd():
-        return "python"
+        return sys.executable
 
 
 if __name__ == "__main__":
