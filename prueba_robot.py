@@ -1,7 +1,7 @@
 import socket
 import tkinter as tk
 
-ROBOT_IP = "192.168.40.18"
+ROBOT_IP = "10.50.42.207"
 ROBOT_PORT = 5000
 
 SPEED = 0.55
