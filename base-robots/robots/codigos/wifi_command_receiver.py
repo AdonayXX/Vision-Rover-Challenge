@@ -9,7 +9,7 @@ import json
 import time
 
 from control_movimiento import MotionController, calibrate_drift
-from sesion_comandos import CommandSession
+from sesion_comandos import CommandSession, would_block
 from wifi_config import obtener_credenciales_wifi
 
 
@@ -193,7 +193,14 @@ def main(config_path="config_robot.json"):
                 "esperando_cliente"
             )
 
-            client, address = server.accept()
+            try:
+                client, address = server.accept()
+
+            except OSError as error:
+                if would_block(error):
+                    time.sleep(0.05)
+                    continue
+                raise
 
             print(
                 "Cliente conectado:",
