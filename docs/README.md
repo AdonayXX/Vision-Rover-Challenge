@@ -1,5 +1,7 @@
 # Criterio de dificultad para la distribución de cubos
 
+> [Generador de posición inicial de cubos](https://universidad-cenfotec.github.io/Vision-Rover-Challenge/)
+
 ## 1. Objetivo
 
 La aplicación genera escenarios aleatorios para el Vision Rover Challenge, distribuyendo tres cubos de colores rojo, azul y verde sobre un tablero de 50 × 50 casillas, con un área efectiva interior de 40 × 40 casillas.
