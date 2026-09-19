@@ -8,16 +8,16 @@ Cada cubo ocupa un espacio de 3 × 3 casillas y debe ser transportado por uno de
 
 Las zonas de acopio están ubicadas de la siguiente manera:
 
-- **Rojo:** Centro del borde superior.
-- **Verde:** Centro del borde izquierdo.
-- **Azul:** Centro del borde derecho.
-- **Robots:** Dos posiciones de partida en el borde inferior.
+* **Rojo:** Centro del borde superior.
+* **Verde:** Centro del borde izquierdo.
+* **Azul:** Centro del borde derecho.
+* **Robots:** Dos posiciones de partida en el borde inferior.
 
-La aplicación permite seleccionar un nivel de dificultad \(D\) entre 0 y 1.
+La aplicación permite seleccionar un nivel de dificultad $D$ entre 0 y 1.
 
-\[
+$$
 D \in [0,1]
-\]
+$$
 
 La dificultad se determina mediante dos factores principales:
 
@@ -32,27 +32,27 @@ Un valor cercano a 0 genera escenarios con cubos próximos a sus zonas de acopio
 
 Para cada cubo se calcula la distancia Manhattan entre su centro y el centro de su zona de acopio correspondiente.
 
-\[
+$$
 d_i = |x_i-x_{a_i}|+|y_i-y_{a_i}|
-\]
+$$
 
 Donde:
 
-- \((x_i,y_i)\) representa el centro del cubo.
-- \((x_{a_i},y_{a_i})\) representa el centro de su zona de acopio.
-- \(d_i\) es la distancia del cubo \(i\) a su zona de acopio, expresada en casillas.
+* $(x_i,y_i)$ representa el centro del cubo.
+* $(x_{a_i},y_{a_i})$ representa el centro de su zona de acopio.
+* $d_i$ es la distancia del cubo $i$ a su zona de acopio, expresada en casillas.
 
 La distancia media de los tres cubos se calcula mediante:
 
-\[
+$$
 \overline{d}=\frac{d_1+d_2+d_3}{3}
-\]
+$$
 
 La aplicación utiliza el nivel de dificultad para establecer una distancia media objetivo:
 
-\[
+$$
 d_{\text{objetivo}}=6.5+35D
-\]
+$$
 
 Por lo tanto, a mayor dificultad, mayor es la distancia media que se busca entre los cubos y sus zonas de acopio.
 
@@ -66,9 +66,9 @@ Para estimar la posibilidad de interferencia entre los robots, la aplicación co
 
 Se comparan las tres parejas posibles de trayectorias:
 
-- Rojo y azul.
-- Rojo y verde.
-- Azul y verde.
+* Rojo y azul.
+* Rojo y verde.
+* Azul y verde.
 
 Se considera que existe una posible interferencia cuando dos trayectorias se cruzan geométricamente o cuando la distancia mínima entre ellas es inferior a 4 casillas.
 
@@ -77,11 +77,11 @@ La cantidad de parejas de trayectorias con interferencia puede variar entre 0 y 
 El nivel de dificultad establece el siguiente objetivo:
 
 | Dificultad seleccionada | Interferencias objetivo |
-|---|---:|
-| 0.00 ≤ D < 0.28 | 0 |
-| 0.28 ≤ D < 0.53 | 1 |
-| 0.53 ≤ D < 0.77 | 2 |
-| 0.77 ≤ D ≤ 1.00 | 3 |
+| ----------------------- | ----------------------: |
+| $0.00 \leq D < 0.28$    |                       0 |
+| $0.28 \leq D < 0.53$    |                       1 |
+| $0.53 \leq D < 0.77$    |                       2 |
+| $0.77 \leq D \leq 1.00$ |                       3 |
 
 Este criterio favorece escenarios en los cuales los robots podrían necesitar coordinar sus movimientos, esperar, modificar sus trayectorias o evitar interferencias durante el transporte de los cubos.
 
@@ -97,27 +97,27 @@ Las posiciones iniciales de estas distribuciones se obtienen mediante una combin
 
 Cada distribución válida se evalúa mediante una función de pérdida:
 
-\[
+$$
 L=0.55L_d+0.45L_c+\epsilon
-\]
+$$
 
 Donde:
 
-\[
+$$
 L_d=\frac{|\overline{d}-d_{\text{objetivo}}|}{36}
-\]
+$$
 
-\[
+$$
 L_c=\frac{|C-C_{\text{objetivo}}|}{3}
-\]
+$$
 
 En estas expresiones:
 
-- \(L_d\) mide la diferencia entre la distancia media obtenida y la distancia objetivo.
-- \(L_c\) mide la diferencia entre las interferencias obtenidas y las interferencias objetivo.
-- \(C\) representa el número de parejas de trayectorias con interferencia.
-- \(C_{\text{objetivo}}\) representa la cantidad de interferencias buscada para el nivel de dificultad seleccionado.
-- \(\epsilon\) es una pequeña perturbación aleatoria entre 0 y 0.06 que introduce variabilidad entre escenarios.
+* $L_d$ mide la diferencia entre la distancia media obtenida y la distancia objetivo.
+* $L_c$ mide la diferencia entre las interferencias obtenidas y las interferencias objetivo.
+* $C$ representa el número de parejas de trayectorias con interferencia.
+* $C_{\text{objetivo}}$ representa la cantidad de interferencias buscada para el nivel de dificultad seleccionado.
+* $\epsilon$ es una pequeña perturbación aleatoria entre 0 y 0.06 que introduce variabilidad entre escenarios.
 
 La función asigna un peso del 55 % al criterio de distancia y un 45 % al criterio de interferencia.
 
@@ -131,11 +131,11 @@ La aplicación evalúa hasta 700 distribuciones candidatas y selecciona aquella 
 
 Independientemente del nivel de dificultad seleccionado, todas las distribuciones generadas deben cumplir las siguientes restricciones:
 
-- Cada cubo ocupa exactamente 3 × 3 casillas.
-- Los tres cubos deben permanecer completamente dentro del área efectiva de 40 × 40 casillas.
-- Los cubos no pueden superponerse entre sí.
-- Debe existir una separación mínima de 2 casillas libres entre los cubos, incluyendo las aproximaciones diagonales.
-- Los cubos no pueden superponerse con las zonas de acopio ni con las posiciones iniciales de los robots.
+* Cada cubo ocupa exactamente 3 × 3 casillas.
+* Los tres cubos deben permanecer completamente dentro del área efectiva de 40 × 40 casillas.
+* Los cubos no pueden superponerse entre sí.
+* Debe existir una separación mínima de 2 casillas libres entre los cubos, incluyendo las aproximaciones diagonales.
+* Los cubos no pueden superponerse con las zonas de acopio ni con las posiciones iniciales de los robots.
 
 Estas restricciones se aplican tanto durante la generación automática como durante el desplazamiento manual de los cubos en la aplicación.
 
