@@ -46,3 +46,4 @@ El objetivo es que los rovers encuentren los objetos, los transporten y los colo
 - [Sistema de visión](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/tree/main/vision-system)
 - [Archivos de fabricación](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/tree/main/archivos_fabricacion)
 - [Una Idea de Solución](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/blob/main/solucion_simple.md)
+- [Generador de posición inicial de cubos](https://universidad-cenfotec.github.io/Vision-Rover-Challenge/)
