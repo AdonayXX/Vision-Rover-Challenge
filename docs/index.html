@@ -73,8 +73,8 @@
       <h2 id="legendHeading">Referencias del tablero</h2>
       <div class="legend">
         <div class="legend-item"><i class="swatch red"></i>Cubo/acopio rojo</div>
-        <div class="legend-item"><i class="swatch blue"></i>Cubo/acopio azul</div>
         <div class="legend-item"><i class="swatch green"></i>Cubo/acopio verde</div>
+        <div class="legend-item"><i class="swatch blue"></i>Cubo/acopio azul</div>
         <div class="legend-item">🤖 &nbsp;2 robots, salida inferior</div>
       </div>
       <p class="mini">Tablero de 50 × 50; área interior útil de 40 × 40, entre las casillas 6 y 45 (contadas desde 1). Los cubos se mantienen dentro de esa área, con al menos 2 casillas libres entre cubos, incluso al moverlos manualmente.</p>
@@ -100,8 +100,8 @@
   // Las zonas de acopio están centradas en tres lados, como en la referencia visual.
   const goals = {
     red:   {x:21, y:1,  w:8, h:6, color:'#f43f51', name:'rojo'},
-    blue:  {x:1,  y:21, w:6, h:8, color:'#397ce9', name:'azul'},
-    green: {x:43, y:21, w:6, h:8, color:'#00a98f', name:'verde'}
+    green: {x:1,  y:21, w:6, h:8, color:'#00a98f', name:'verde'},
+    blue:  {x:43, y:21, w:6, h:8, color:'#397ce9', name:'azul'}
   };
   const keys = ['red','blue','green'];
   const robots = [{x:19,y:46,w:4,h:3},{x:27,y:46,w:4,h:3}];
@@ -165,8 +165,8 @@
     const jitter=level<.1 ? 2 : (level>.9 ? 2.4 : 3.6);
     const anchors={
       red:   {x:23.5+rand(-jitter,jitter), y:8.5+31*level+rand(-jitter,jitter)},
-      blue:  {x:8.5+29*level+rand(-jitter,jitter), y:23-5*wave+rand(-jitter,jitter)},
-      green: {x:38.5-29*level+rand(-jitter,jitter), y:23+5*wave+rand(-jitter,jitter)}
+      green: {x:8.5+29*level+rand(-jitter,jitter), y:23+5*wave+rand(-jitter,jitter)},
+      blue:  {x:38.5-29*level+rand(-jitter,jitter), y:23-5*wave+rand(-jitter,jitter)}
     };
     return keys.map(key=>({key,x:clamp(Math.round(anchors[key].x),INNER_MIN,INNER_MAX-CUBE+1),y:clamp(Math.round(anchors[key].y),INNER_MIN,INNER_MAX-CUBE+1)}));
   }
