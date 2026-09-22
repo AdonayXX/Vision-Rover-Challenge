@@ -44,7 +44,7 @@
 
 3.1. Antes de cada intento, la organización restablecerá el escenario de competencia según la configuración oficial correspondiente.
 
-3.2. Los cubos serán colocados en las condiciones iniciales definidas al azar para cada intento. Inicio de rovers, zonas de acopio no cambian.
+3.2. Los cubos serán colocados en las condiciones iniciales definidas al azar para cada intento, utilizando el [criterio definido acá](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/tree/main/docs). Inicio de rovers, zonas de acopio no cambian.
 
 3.3. Todos los equipos competirán bajo las mismas condiciones oficiales establecidas para la ronda.
 
