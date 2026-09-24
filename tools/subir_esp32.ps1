@@ -16,6 +16,9 @@ $DefaultFiles = @(
     "control_movimiento.py",
     "sesion_comandos.py",
     "command_protocol.py",
+    "sensores_rover.py",
+    "hardware_sensores.py",
+    "config_sensores.json",
     "ideaboard.py"
 ) | ForEach-Object { Join-Path $CodeDir $_ }
 

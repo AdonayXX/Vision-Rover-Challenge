@@ -15,7 +15,7 @@ from sensores_rover import SensoresRover, firma_color, clasificar_color, validar
 from sesion_comandos import CommandSession
 from control_movimiento import MotionController
 from prueba_transporte_cubo import RobotClient, _check_local_sensors
-from leer_sensores import guardar_perfil
+from leer_sensores import agrupar_firmas, firma_aceptable_para, guardar_perfil
 from hardware_sensores import Sonar, HardwareSensores
 from test_control import Clock, Robot, Socket
 
@@ -35,6 +35,17 @@ class SensorTests(unittest.TestCase):
         self.sensors = SensoresRover(self.hw, self.cfg, self.clock)
         self.controller = MotionController(self.robot, clock=self.clock, safety=self.sensors)
         self.session = CommandSession(self.controller, clock=self.clock, sensors=self.sensors)
+
+    def feed_color_sweep(self, values):
+        if not self.sensors.scanning:
+            self.sensors.update()
+        for value in values:
+            self.clock.advance(self.cfg["color"]["settle_seconds"] + .001)
+            # Un pico aislado dentro de una fase no decide la lectura.
+            for sample in (value, value, 65000, value, value):
+                self.hw.light.value = sample
+                self.sensors.update()
+                self.clock.advance(self.cfg["color"]["sample_interval_seconds"] + .001)
 
     def test_forward_requires_fresh_readings(self):
         self.assertIsNotNone(self.sensors.reason(.2, .2))
@@ -83,30 +94,29 @@ class SensorTests(unittest.TestCase):
         self.assertEqual(self.sensors.reason(.2, .2), "ir_fuera_del_suelo_calibrado")
 
     def test_color_scan_is_cooperative_and_resets_on_motion(self):
-        self.sensors.update()
-        for value in (4000, 20000, 7000, 8000):
-            self.clock.advance(self.cfg["color"]["settle_seconds"] + .001)
-            # Un pico aislado no debe convertirse en la lectura del canal.
-            for sample in (value, value, 65000, value, value):
-                self.hw.light.value = sample
-                self.sensors.update()
-                self.clock.advance(self.cfg["color"]["sample_interval_seconds"] + .001)
+        # Siete barridos: un fallo apagado y un pico completo no deben ganar.
+        for red in (20000, 20000, 20000, 20000, 20000, 4000, 60000):
+            self.feed_color_sweep((4000, red, 7000, 8000))
         result = self.sensors.snapshot()
         self.assertEqual(result["color_seq"], 1)
         self.assertEqual(result["color_raw"], [4000, 20000, 7000, 8000])
-        self.assertIsNone(result["color"])
+        self.assertEqual(len(result["color_sweep_signatures"]), 7)
         self.assertAlmostEqual(sum(result["color_signature"]), 1)
         self.sensors.update()
         self.sensors.update(moving=True)
         self.assertFalse(self.sensors.scanning)
+        self.assertEqual(self.sensors.sweeps, [])
+        self.assertEqual(self.sensors.sweep_signatures, [])
+        self.assertIsNone(self.sensors.snapshot()["color_raw"])
         self.assertEqual(self.hw.pixel[0], (0, 0, 0))
 
     def test_color_waits_and_does_not_reuse_partial_phase_after_motion(self):
         self.sensors.update()
-        self.clock.advance(.1)
+        half_settle = self.cfg["color"]["settle_seconds"] / 2
+        self.clock.advance(half_settle)
         self.sensors.update()
         self.assertEqual(self.sensors.phase_samples, [])
-        self.clock.advance(.101)
+        self.clock.advance(half_settle + .001)
         self.sensors.update()
         self.assertEqual(len(self.sensors.phase_samples), 1)
         self.sensors.update()  # Mismo instante: no duplicar muestra.
@@ -116,15 +126,18 @@ class SensorTests(unittest.TestCase):
         self.sensors.update()
         self.assertEqual(self.sensors.phase_samples, [])
         self.assertEqual(self.sensors.samples, [])
+        self.assertEqual(self.sensors.sweeps, [])
         self.assertEqual(self.sensors.phase, 0)
 
     def test_legacy_color_config_keeps_single_sample_scanning(self):
         self.cfg["color"].pop("samples_per_phase")
         self.cfg["color"].pop("sample_interval_seconds")
+        self.cfg["color"].pop("sweeps_per_result")
+        self.cfg["color"].pop("min_color_votes")
         validar_config(self.cfg)
         self.sensors.update()
         for value in (4000, 20000, 7000, 8000):
-            self.clock.advance(.201)
+            self.clock.advance(self.cfg["color"]["settle_seconds"] + .001)
             self.hw.light.value = value
             self.sensors.update()
         self.assertEqual(self.sensors.snapshot()["color_raw"], [4000, 20000, 7000, 8000])
@@ -133,7 +146,10 @@ class SensorTests(unittest.TestCase):
         for key, value in (("samples_per_phase", 2), ("samples_per_phase", True),
                            ("samples_per_phase", 100), ("sample_interval_seconds", 0),
                            ("sample_interval_seconds", float("nan")),
-                           ("sample_interval_seconds", True)):
+                           ("sample_interval_seconds", True),
+                           ("sweeps_per_result", 0), ("sweeps_per_result", 16),
+                           ("min_color_votes", 0), ("min_color_votes", 8),
+                           ("brightness", 0), ("brightness", True)):
             cfg = copy.deepcopy(self.cfg)
             cfg["color"][key] = value
             with self.assertRaises(ValueError):
@@ -144,9 +160,19 @@ class SensorTests(unittest.TestCase):
             path = Path(directory) / "config.json"
             original = json.dumps(self.cfg)
             path.write_text(original, encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "no demuestra movimiento"):
-                guardar_perfil(path, "red", [[1, 0, 0], [0, 0, 1]] * 6)
+            with self.assertRaisesRegex(ValueError, "no distinguen"):
+                guardar_perfil(path, "red", [[.34, .33, .33]] * 6)
             self.assertEqual(path.read_text(encoding="utf-8"), original)
+
+    def test_calibration_keeps_dense_lighting_groups_and_discards_outliers(self):
+        warm = [[.82, .11, .07], [.80, .12, .08], [.81, .10, .09]] * 3
+        cool = [[.64, .23, .13], [.65, .21, .14], [.63, .22, .15]] * 3
+        profiles, discarded = agrupar_firmas(
+            warm + cool + [[.48, .42, .10], [.50, .39, .11]]
+        )
+        self.assertEqual(len(profiles), 2)
+        self.assertEqual(discarded, 2)
+        self.assertTrue(all(profile[0] > profile[1] for profile in profiles))
 
     def test_color_signature_supports_both_sensor_polarities(self):
         positive = [4000, 20000, 7000, 8000]
@@ -166,6 +192,62 @@ class SensorTests(unittest.TestCase):
         self.assertIsNone(clasificar_color([1, 0, 0], {"red": [1, 0, 0]}))
         profiles["green"] = [1, 0, 0]
         self.assertIsNone(clasificar_color([1, 0, 0], profiles))
+
+    def test_color_uses_multiple_lighting_scenarios(self):
+        profiles = {
+            "red": {"artificial": [.9, .05, .05], "natural": [.75, .15, .10]},
+            "green": {"artificial": [.1, .8, .1], "natural": [.2, .7, .1]},
+            "blue": {"artificial": [.05, .1, .85], "natural": [.1, .2, .7]},
+        }
+        self.assertEqual(clasificar_color([.76, .14, .10], profiles), "red")
+        self.assertEqual(clasificar_color([.11, .19, .70], profiles), "blue")
+
+    def test_color_votes_across_complete_sweeps(self):
+        self.cfg["color"]["profiles"] = {
+            "red": {"artificial": [1, 0, 0]},
+            "green": {"artificial": [0, 1, 0]},
+            "blue": {"artificial": [0, 0, 1]},
+        }
+        sensors = SensoresRover(self.hw, self.cfg, self.clock)
+        self.sensors = sensors
+        for values in (
+            (4000, 20000, 4000, 4000),
+            (4000, 19000, 4500, 4000),
+            (4000, 21000, 4000, 4500),
+            (4000, 18000, 4000, 4000),
+            (4000, 4000, 4000, 20000),
+            (4000, 4000, 4500, 19000),
+            (4000, 5000, 5000, 5000),
+        ):
+            self.feed_color_sweep(values)
+        self.assertEqual(sensors.snapshot()["color"], "red")
+
+    def test_color_requires_two_matching_sweeps(self):
+        self.cfg["color"]["profiles"] = {
+            "red": {"artificial": [1, 0, 0]},
+            "green": {"artificial": [0, 1, 0]},
+            "blue": {"artificial": [0, 0, 1]},
+        }
+        sensors = SensoresRover(self.hw, self.cfg, self.clock)
+        self.sensors = sensors
+        for values in (
+            (4000, 4000, 4000, 20000),
+            (4000, 4000, 4500, 19000),
+            (4000, 5000, 5000, 5000),
+            (4000, 5000, 5000, 5000),
+            (4000, 5000, 5000, 5000),
+            (4000, 5000, 5000, 5000),
+            (4000, 20000, 4000, 4000),
+        ):
+            self.feed_color_sweep(values)
+        self.assertEqual(sensors.snapshot()["color"], "blue")
+
+    def test_calibration_requires_a_distinctive_expected_channel(self):
+        self.assertTrue(firma_aceptable_para("red", [.8, .1, .1]))
+        self.assertTrue(firma_aceptable_para("green", [.1, .8, .1]))
+        self.assertFalse(firma_aceptable_para("red", [.2, .7, .1]))
+        self.assertFalse(firma_aceptable_para("blue", [.14, .42, .44]))
+        self.assertFalse(firma_aceptable_para("blue", [.34, .32, .34]))
 
     def test_sensor_queries_do_not_renew_motor_watchdog(self):
         self.session.process_command("MOTOR|.2|.2")
@@ -198,6 +280,7 @@ class SensorTests(unittest.TestCase):
         self.sensors.update()
         result = self.sensors.snapshot()
         _check_local_sensors(result, "AVANZAR", "red")
+        result["color_calibrated"] = False
         with self.assertRaisesRegex(RuntimeError, "Calibra"):
             _check_local_sensors(result, "EMPUJAR", "red")
         result.update(color_calibrated=True, color="green", color_age_ms=0)
@@ -217,10 +300,13 @@ class SensorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
             path.write_text(json.dumps(self.cfg), encoding="utf-8")
-            guardar_perfil(path, "red", [[.8, .1, .1]] * 12)
+            guardar_perfil(path, "red", [[.8, .1, .1]] * 6, "artificial")
+            guardar_perfil(path, "red", [[.7, .2, .1]] * 6, "natural")
             result = json.loads(path.read_text())
             self.assertEqual(result["color"]["analog"], self.cfg["color"]["analog"])
-            self.assertEqual(result["color"]["profiles"]["red"], [.8, .1, .1])
+            self.assertEqual(result["color"]["profiles"]["red"], {
+                "artificial": [.8, .1, .1], "natural": [.7, .2, .1]
+            })
             self.assertEqual(result["ultrasonic"]["echo_3v3_confirmed"],
                              self.cfg["ultrasonic"]["echo_3v3_confirmed"])
 

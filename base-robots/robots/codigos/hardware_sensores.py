@@ -75,8 +75,12 @@ class HardwareSensores:
             if c["analog"] != "IO33":
                 raise ValueError("AO en IO4 usa ADC2 y no funciona con Wi-Fi en ESP32; confirmar AO a IO33 libre")
             self.light = analogio.AnalogIn(getattr(board, c["analog"]))
-            self.pixel = neopixel.NeoPixel(getattr(board, c["led"]), 1, brightness=.3, auto_write=True)
+            self.pixel = neopixel.NeoPixel(
+                getattr(board, c["led"]), 1,
+                brightness=c.get("brightness", 1), auto_write=False
+            )
             self.pixel[0] = (0, 0, 0)
+            self.pixel.show()
         except Exception as exc:
             if self.light is not None:
                 self.light.deinit()
@@ -86,6 +90,7 @@ class HardwareSensores:
     def deinit(self):
         if self.pixel is not None:
             self.pixel[0] = (0, 0, 0)
+            self.pixel.show()
         for device in [self.sonar, self.light, self.pixel] + (self.ir or []):
             if device is not None:
                 device.deinit()

@@ -43,7 +43,7 @@ Referencias: [ADC2 y Wi-Fi en CircuitPython](https://docs.circuitpython.org/en/s
 3. Reiniciar placa, conectar Wi-Fi y cerrar el control manual. Desde la raíz:
 
 ```powershell
-.\vision-system\.venv\Scripts\python.exe -X utf8 -B .\base-robots\robots\pc\leer_sensores.py --robot-ip 10.141.29.149
+.\vision-system\.venv\Scripts\python.exe -X utf8 -B .\base-robots\robots\pc\leer_sensores.py --robot-ip <IP_DEL_ROVER>
 ```
 
 El monitor confirma STOP y solo consulta `SENSORS`; nunca envía movimiento.
@@ -56,13 +56,14 @@ cooperativamente con vencimiento de 30 ms; no hay espera larga bloqueando STOP.
 
 ## Color: calibrar cada cubo
 
-El muestreo actual espera 200 ms tras cambiar cada iluminacion y toma cinco
-lecturas separadas al menos 10 ms; usa su mediana para descartar picos aislados.
-Es cooperativo: no agrega esperas bloqueantes a STOP ni al watchdog. Un barrido
-tarda al menos 0,96 s; usar `--segundos 30` al calibrar para reunir 12 barridos.
-Subir tanto `sensores_rover.py` como `config_sensores.json` para aplicar el cambio.
-Esta mejora no garantiza respuesta optica: si no hay senal, no inventa un color
-ni relaja el criterio de estabilidad. Inestabilidad no demuestra movimiento.
+El muestreo espera 300 ms tras cambiar cada iluminación y toma cinco lecturas
+separadas al menos 10 ms. El firmware reúne siete barridos completos, conserva
+la firma RGB de cada uno y elige como firma representativa el barrido más cercano
+al conjunto. La detección clasifica cada barrido completo y exige dos votos del
+mismo color. Así no mezcla canales tomados en condiciones distintas ni permite
+que un único pico decida el resultado. El NeoPixel usa `show()` explícito. Todo
+el proceso es cooperativo: no bloquea STOP ni el watchdog mientras espera. Un
+resultado consolidado tarda varios segundos y se invalida al mover el rover.
 
 La configuración local usa `color.polarity=1`: en la prueba manual de AO IO33,
 el usuario midió 2819–3971 tapado y 37613 iluminado. La lectura aumenta con
@@ -72,18 +73,25 @@ al sensor probado: verificar la polaridad por separado en el otro rover.
 Si se cambia la polaridad de un sensor ya calibrado, borrar sus perfiles y
 calibrar nuevamente los tres colores; no reutilizar perfiles de otro montaje.
 
-Motores parados, presentar el cubo al sensor a la distancia y orientación que
-tendrá durante el empuje. Repetir el comando cambiando `red` por `green` y `blue`:
+Motores parados, presentar el cubo con una cara paralela a aproximadamente 1 cm,
+la distancia validada en banco. Calibrar cada color bajo cada condición de luz.
+Si se omite `--segundos`, una calibración dura 100 segundos. Ejemplo:
 
 ```powershell
-.\vision-system\.venv\Scripts\python.exe -X utf8 -B .\base-robots\robots\pc\leer_sensores.py --robot-ip 10.141.29.149 --segundos 30 --calibrar-color red
+.\vision-system\.venv\Scripts\python.exe -X utf8 -B .\base-robots\robots\pc\leer_sensores.py --robot-ip <IP_DEL_ROVER> --calibrar-color red --escenario artificial
 ```
 
-Se requieren al menos 12 barridos distintos y estables. Los perfiles se guardan
-SOLO en el archivo local. Tras los tres, volver a subir `config_sensores.json`
-y reiniciar la placa. Verificar los tres colores y que fondo/sin cubo resulte
-desconocido; si no, recalibrar señal mínima, tolerancia y margen con lecturas
-reales. No basta con elegir el canal mayor: sin calibración no se etiqueta color.
+Repetir con `green` y `blue`, y luego con escenarios como `tenue` o `natural`.
+Cada perfil requiere al menos seis firmas válidas. El calibrador identifica hasta
+cuatro grupos densos dentro del mismo escenario y descarta como máximo 30 % de
+lecturas atípicas. Se guardan varios perfiles por color y escenario. Si los
+perfiles de colores distintos quedan demasiado cerca, el archivo no se sobrescribe.
+Para estos tres cubos, una firma de calibración solo se acepta cuando el canal
+del color presentado supera claramente al segundo canal. Las respuestas mixtas
+que comparten verde y azul se rechazan porque no permiten distinguir los cubos.
+Tras completar los escenarios, volver a subir `config_sensores.json` y reiniciar
+la placa. Verificar los tres colores y que fondo/sin cubo resulte desconocido.
+No basta con elegir el canal mayor: el material puede reflejar más otro canal.
 
 Si el sensor mira al SUELO, no puede confirmar un cubo frente a las palas.
 Hace falta confirmar su montaje antes de usar la comprobación de empuje.
