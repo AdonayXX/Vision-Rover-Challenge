@@ -211,9 +211,10 @@ def aplicar_desfases(
     el robot gira.
 
     Con los dos desfases en cero, esto es la identidad: la pose del robot es
-    exactamente la del marcador. Es el estado de hoy, y está verificado.
+    exactamente la del marcador. El ajuste angular específico del ID, si
+    existe, reemplaza el general y también orienta el desfase de posición.
     """
-    theta_robot = normalizar_grados(pose.theta_grados + ajustes.desfase_angular_grados)
+    theta_robot = normalizar_grados(pose.theta_grados + ajustes.desfase_angular_para(pose.id))
 
     desfase = ajustes.desfase_posicion
     if desfase.es_nulo:

@@ -46,6 +46,7 @@ class VisionClient:
     def _connected(self):
         self.connecting = False
         self.connected_at = self.state.monotonic()
+        self.last_data_at = self.connected_at
         self.connections += 1
         self.state.connect()
 
@@ -87,10 +88,13 @@ class VisionClient:
                 if not chunk:
                     self.close("servidor_desconectado")
                     return
+                self.last_data_at = self.state.monotonic()
                 self.receiver.feed(chunk)
-            last = self.state.received_at
-            if now - (self.connected_at if last is None else last) >= self.timeout_seconds:
-                self.close("sin_datos_validos")
+            # Un cuadro viejo exige STOP, pero no significa que TCP se haya
+            # caido. Reconectar por cada rechazo impedia recibir el siguiente
+            # cuadro fresco y agregaba mas esperas a un productor lento.
+            if self.state.monotonic() - self.last_data_at >= self.timeout_seconds:
+                self.close("sin_datos")
         except (OSError, ValueError) as error:
             self.close("error_red: " + str(error))
 

@@ -12,6 +12,7 @@ MOTOR = "MOTOR"
 TURN = "TURN"
 HEADING = "HEADING"
 KEEPALIVE = "KEEPALIVE"
+SENSORS = "SENSORS"
 MAX_LINE = 128
 
 
@@ -39,7 +40,7 @@ def parse_command(message):
         if not parts:
             raise ValueError("Mensaje vacio")
         command = parts[0].strip().upper()
-        fields = {PING: (), STOP: (), KEEPALIVE: (), MOTOR: ("left", "right"),
+        fields = {PING: (), STOP: (), KEEPALIVE: (), SENSORS: (), MOTOR: ("left", "right"),
                   TURN: ("angle", "speed"), HEADING: ("heading", "speed", "duration")}
         if command not in fields or len(parts) != len(fields[command]) + 1:
             raise ValueError("Comando o cantidad de parametros invalida")

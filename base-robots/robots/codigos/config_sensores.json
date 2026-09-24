@@ -1,0 +1,28 @@
+{
+  "enabled": true,
+  "diagnostic_only": true,
+  "max_age_ms": 400,
+  "ultrasonic": {
+    "trigger": "IO25",
+    "echo": "IO26",
+    "echo_3v3_confirmed": false,
+    "allow_unverified_echo_diagnostic": true,
+    "stop_mm": 80
+  },
+  "ir": {
+    "pins": ["IO36", "IO39", "IO34", "IO35"],
+    "floor_ranges": null
+  },
+  "color": {
+    "led": "IO32",
+    "analog": "IO33",
+    "settle_seconds": 0.2,
+    "samples_per_phase": 5,
+    "sample_interval_seconds": 0.01,
+    "polarity": 1,
+    "min_signal": 300,
+    "tolerance": 0.15,
+    "margin": 0.04,
+    "profiles": {}
+  }
+}

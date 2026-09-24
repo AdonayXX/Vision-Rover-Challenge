@@ -30,7 +30,7 @@ import numpy as np
 
 try:  # como paquete
     from ..configuracion import cargar_config
-    from ..detectors.cubos import ajustar_cubo, clasificar, mascara_de_color, matiz_y_croma
+    from ..detectors.cubos import area_cara_local_px, ajustar_cubo, clasificar, mascara_de_color, matiz_y_croma
     from ..geometry.coordenadas import (
         ErrorGeometria,
         construir_sistema,
@@ -41,6 +41,7 @@ try:  # como paquete
 except ImportError:  # como script suelto
     from vision.configuracion import cargar_config  # type: ignore[no-redef]
     from vision.detectors.cubos import (  # type: ignore[no-redef]
+        area_cara_local_px,
         ajustar_cubo,
         clasificar,
         mascara_de_color,
@@ -109,10 +110,8 @@ def _color_mas_cercano(matiz: float, cfg) -> tuple[str | None, float]:
 
 def _area_cara_px(sistema, cfg) -> float:
     lado = cfg.elementos.cubos.lado_mm / cfg.tablero.cell_mm
-    extremos = np.array([[0.0, 0.0], [lado, 0.0]], dtype=np.float64)
-    px = sistema.a_pixeles(extremos)
-    lado_px = float(np.hypot(px[1, 0] - px[0, 0], px[1, 1] - px[0, 1]))
-    return max(1.0, lado_px ** 2)
+    centro = sistema.a_pixeles(np.array([[cfg.tablero.cols / 2, cfg.tablero.rows / 2]]))[0]
+    return area_cara_local_px(sistema, centro, lado)
 
 
 def _dentro_de_cancha(sistema, centro_px: tuple[float, float], cfg) -> bool:
@@ -129,8 +128,6 @@ def _analizar(imagen: np.ndarray, cfg, sistema, pose):
     cantidad, etiquetas, stats, centroides = cv2.connectedComponentsWithStats(mascara, 8)
     area_ref = _area_cara_px(sistema, cfg)
     dc = cfg.deteccion_cubos
-    area_min = area_ref * dc.area_minima_relativa
-    area_max = area_ref * dc.area_maxima_relativa
     lado_celdas = cfg.elementos.cubos.lado_mm / cfg.tablero.cell_mm
     nadir = np.array(pose.nadir_celdas, dtype=np.float64)
     factor = pose.factor_paralaje(cfg.elementos.cubos.lado_mm)
@@ -149,7 +146,10 @@ def _analizar(imagen: np.ndarray, cfg, sistema, pose):
         region = (etiquetas == etiqueta).astype(np.uint8)
         matiz, croma = matiz_y_croma(cv2.mean(lab, mask=region)[:3])
         cercano, distancia = _color_mas_cercano(matiz, cfg)
-        area_rel = area / area_ref
+        area_local = area_cara_local_px(sistema, (cx, cy), lado_celdas)
+        area_min = area_local * dc.area_minima_relativa
+        area_max = area_local * dc.area_maxima_relativa
+        area_rel = area / area_local
         area_ok = area_min <= area <= area_max
         color = clasificar(matiz, cfg) if area_ok else None
         residuo = None

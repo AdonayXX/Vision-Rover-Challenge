@@ -123,6 +123,8 @@ class DeteccionMarcadores:
     tolerancia_tamano: float
     margen_fuera_de_cancha_celdas: float
     margen_decision_duplicados: float
+    usar_aruco3: bool = False
+    lado_minimo_aruco3_px: int = 16
 
 
 @dataclass(frozen=True, slots=True)
@@ -360,21 +362,22 @@ class Ronda:
 class DeteccionRovers:
     """Cómo se pasa de marcadores detectados a rovers.
 
-    Qué marcador es un rover no está declarado como lista: **es rover todo el
-    que no sea una esquina**. Una lista de IDs de rover habría que mantenerla
-    sincronizada con los marcadores que se peguen de verdad, y el día que no lo
-    esté, un rover deja de existir sin que nada avise.
-
-    Los desfases arrancan en cero, que hace que la pose del robot sea idéntica a
-    la del marcador. No es que el robot real no tenga desfase —lo tiene—: es que
-    todavía no se midió. Se van a medir con el propio sistema haciendo girar el
-    robot en el lugar; el procedimiento está en las notas de `config_vision.json`.
+    Solo se aceptan los IDs declarados. El desfase angular por ID reemplaza
+    el general para ese robot: cada marcador puede estar pegado con una
+    orientación diferente. Los pares se guardan en una tupla inmutable.
     """
 
     ids_rover: frozenset[int]
     ids_ignorados: frozenset[int]
     desfase_posicion: DesfaseMarcadorRobot
     desfase_angular_grados: float
+    desfase_angular_por_id: tuple[tuple[int, float], ...] = ()
+
+    def desfase_angular_para(self, id_rover: int) -> float:
+        for id_configurado, grados in self.desfase_angular_por_id:
+            if id_configurado == id_rover:
+                return grados
+        return self.desfase_angular_grados
 
 
 @dataclass(frozen=True, slots=True)
@@ -813,6 +816,8 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
         tolerancia_tamano=float(dm["tolerancia_tamano"]),
         margen_fuera_de_cancha_celdas=float(dm["margen_fuera_de_cancha_celdas"]),
         margen_decision_duplicados=float(dm["margen_decision_duplicados"]),
+        usar_aruco3=bool(dm.get("usar_aruco3", False)),
+        lado_minimo_aruco3_px=int(dm.get("lado_minimo_aruco3_px", 16)),
     )
 
     elementos = _leer_elementos(d["elementos"])
@@ -866,6 +871,10 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
             izquierda_mm=float(desf["izquierda"]),
         ),
         desfase_angular_grados=float(dr["desfase_angular_grados"]),
+        desfase_angular_por_id=tuple(
+            (int(id_rover), float(grados))
+            for id_rover, grados in dr.get("desfase_angular_por_id", {}).items()
+        ),
     )
 
     dc = d["deteccion_cubos"]
@@ -1244,6 +1253,10 @@ def revisar_config(cfg: ConfigVision) -> str | None:
             "marcadores_esquina.borde_blanco_mm debe ser > 0: sin zona blanca alrededor "
             "el detector de ArUco no encuentra el marcador"
         )
+    if cfg.deteccion_marcadores.lado_minimo_aruco3_px < 8:
+        return "deteccion_marcadores.lado_minimo_aruco3_px debe ser >= 8"
+    if cfg.deteccion_marcadores.usar_aruco3 and cfg.deteccion_marcadores.refinamiento_esquinas != "subpixel":
+        return "usar_aruco3 requiere refinamiento_esquinas=subpixel para conservar precision"
     if cfg.deteccion_marcadores.cuadros_para_admitir_rover < 1:
         return (
             "deteccion_marcadores.cuadros_para_admitir_rover tiene que ser >= 1: es "
@@ -1333,6 +1346,13 @@ def revisar_config(cfg: ConfigVision) -> str | None:
             "deteccion_rovers.desfase_angular_grados = {} está fuera de [-360, 360]; "
             "es un ángulo, no una cantidad de vueltas".format(dr.desfase_angular_grados)
         )
+    ids_desfase = set()
+    for id_rover, grados in dr.desfase_angular_por_id:
+        if id_rover not in dr.ids_rover or id_rover in ids_desfase:
+            return "deteccion_rovers.desfase_angular_por_id requiere IDs de rover declarados y únicos"
+        ids_desfase.add(id_rover)
+        if not (-360.0 <= grados <= 360.0):
+            return "deteccion_rovers.desfase_angular_por_id: ángulo fuera de [-360, 360] para ID {}".format(id_rover)
     if cfg.seguimiento.edad_maxima_ms <= 0:
         return "seguimiento.edad_maxima_ms debe ser > 0"
     if cfg.seguimiento.velocidad_maxima_rover_mm_s <= 0:

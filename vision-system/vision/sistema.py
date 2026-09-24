@@ -39,6 +39,7 @@ marcado como viejo, le sirve mucho más a un equipo que un silencio repentino.
 from __future__ import annotations
 
 import argparse
+from collections import deque
 import os
 import sys
 import threading
@@ -547,7 +548,7 @@ def abrir_fuente(cfg: ConfigVision, args):
 
 
 def procesar(cuadro, cfg, matriz_camara, fase, reloj, seguidor, anclaje, descartados, duplicados,
-             rechazos, admision, demorados):
+             rechazos, admision, demorados, tiempos=None):
     """De un cuadro al estado del mundo. Lanza si la geometría no se puede armar.
 
     Una sola pasada del detector de ArUco por cuadro: el mismo resultado sirve
@@ -590,9 +591,15 @@ def procesar(cuadro, cfg, matriz_camara, fase, reloj, seguidor, anclaje, descart
     hubo un cuadro. Es lo correcto: un cuadro que no se pudo procesar no es una
     observación, y la edad de todos los objetos tiene que seguir creciendo.
     """
+    inicio = time.perf_counter()
     crudos = detectar_marcadores_crudo(
         cuadro.imagen, cfg.marcadores_esquina.nombre_diccionario,
-        cfg.deteccion_marcadores.refinamiento_esquinas)
+        cfg.deteccion_marcadores.refinamiento_esquinas,
+        usar_aruco3=cfg.deteccion_marcadores.usar_aruco3,
+        lado_minimo_aruco3_px=cfg.deteccion_marcadores.lado_minimo_aruco3_px,
+        ids_requeridos=cfg.marcadores_esquina.ids_esperados | set(seguidor.ultimas_poses_rover()))
+    if tiempos is not None:
+        tiempos["marcadores"] = (time.perf_counter() - inicio) * 1000
     # Lo que se espera del marcador de un rover no es una constante: está a 80 mm
     # del tablero, así que se ve más grande Y corrido hacia afuera. Las dos cosas
     # salen de la pose deducida de la geometría GUARDADA —la de este cuadro
@@ -633,12 +640,17 @@ def procesar(cuadro, cfg, matriz_camara, fase, reloj, seguidor, anclaje, descart
     # o si los tres la desmienten, lanza y el falla-abierto se hace cargo.
     sistema = anclaje.actualizar(cuadro.imagen, detectados)
     pose = pose_camara(sistema, matriz_camara)
+    inicio_cubos = time.perf_counter()
+    cubos = detectar_cubos(cuadro.imagen, sistema, cfg, pose)
+    if tiempos is not None:
+        tiempos["cubos"] = (time.perf_counter() - inicio_cubos) * 1000
+        tiempos["proceso"] = (time.perf_counter() - inicio) * 1000
     return sistema, seguidor.actualizar(
         ts_ms=cuadro.ts_ms,
         fase=fase,
         reloj=reloj,
         rovers=detectar_rovers(detectados, sistema, cfg, pose),
-        cubos=detectar_cubos(cuadro.imagen, sistema, cfg, pose),
+        cubos=cubos,
     )
 
 
@@ -718,6 +730,8 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 70)
     print("SISTEMA DE VISIÓN — Vision-Rover-Challenge · protocolo v{}".format(VERSION_PROTOCOLO))
     print("Entrada: {}".format(descripcion))
+    print("[vision] detector={} (subpixel en resolucion original)".format(
+        "ArUco3 con respaldo clasico" if cfg.deteccion_marcadores.usar_aruco3 else "clasico"))
     if args.sintetico:
         print("")
         print("  ##################################################################")
@@ -760,14 +774,19 @@ def main(argv: list[str] | None = None) -> int:
     arranque: tuple[str, ...] = ()
     proximo_informe = time.monotonic() + 5.0
     fin = time.monotonic() + args.duracion if args.duracion > 0 else float("inf")
+    latencias = deque(maxlen=300)
 
     try:
         while not salir.is_set() and time.monotonic() < fin:
+            inicio_lectura = time.perf_counter()
             cuadro = fuente.leer()
             if cuadro is None:
                 time.sleep(0.005)
                 continue
             cuadros += 1
+            tiempos = {"lectura": (time.perf_counter() - inicio_lectura) * 1000,
+                       "entrada": cuadro.edad_ms()}
+            latencias.append(tiempos)
             sistema_actual = None
             # ---- falla abierto -------------------------------------------
             # Si un cuadro no se puede procesar, NO se toca la casilla y se
@@ -777,8 +796,9 @@ def main(argv: list[str] | None = None) -> int:
                 fase_ahora, reloj_ahora = arbitro.instantanea()
                 sistema_actual, estado = procesar(
                     cuadro, cfg, matriz, fase_ahora, reloj_ahora, seguidor, anclaje,
-                    descartados, duplicados, rechazos, admision, demorados)
+                    descartados, duplicados, rechazos, admision, demorados, tiempos)
                 publicador.actualizar(estado)
+                tiempos["al_publicar"] = cuadro.edad_ms()
                 ultimo_estado = estado
                 # El conteo va DESPUÉS de publicar y en su propio try: es para
                 # la pantalla, no para el contrato, así que un error suyo no
@@ -881,6 +901,7 @@ def main(argv: list[str] | None = None) -> int:
                     arranque = ()
 
             # ---- la vista ------------------------------------------------
+            inicio_vista = time.perf_counter()
             if vista is not None and vista.toca_dibujar(time.monotonic()):
                 # La fase y el reloj, del MISMO instante: en dos llamadas
                 # sueltas podrían caer a los lados de una transición y el panel
@@ -904,9 +925,17 @@ def main(argv: list[str] | None = None) -> int:
                     salir.set()
                 elif comando:
                     print("[fase] " + arbitro.intentar(comando), flush=True)
+            tiempos["vista"] = (time.perf_counter() - inicio_vista) * 1000
 
             if time.monotonic() >= proximo_informe:
                 proximo_informe += 5.0
+                resumen = []
+                for etapa in ("lectura", "entrada", "marcadores", "cubos", "proceso", "vista", "al_publicar"):
+                    valores = [m[etapa] for m in latencias if etapa in m]
+                    if valores:
+                        resumen.append("{}={:.0f}/{:.0f}".format(etapa, sum(valores) / len(valores), max(valores)))
+                print("[latencia ms promedio/max] " + " ".join(resumen), flush=True)
+                latencias.clear()
                 edad = publicador.edad_del_estado_ms()
                 print("[estado] fase={} cuadros={} fallos={} emitidos={} clientes={} "
                       "pisados={} fps={:.1f} edad={} conservados={}/{} acopio={} "

@@ -9,7 +9,6 @@ def parse_args():
     parser.add_argument("--port", type=int, default=5000, help="Puerto TCP del rover")
     return parser.parse_args()
 
-
 ARGS = parse_args()
 ROBOT_IP = ARGS.host
 ROBOT_PORT = ARGS.port

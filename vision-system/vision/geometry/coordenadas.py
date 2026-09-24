@@ -141,7 +141,9 @@ class ErrorDuplicado(ErrorGeometria):
 
 
 def detectar_marcadores_crudo(
-    imagen: np.ndarray, nombre_diccionario: str, refinamiento: str = "ninguno"
+    imagen: np.ndarray, nombre_diccionario: str, refinamiento: str = "ninguno",
+    *, usar_aruco3: bool = False, lado_minimo_aruco3_px: int = 16,
+    ids_requeridos=(),
 ) -> tuple[tuple[int, np.ndarray], ...]:
     """**Todas** las detecciones del cuadro, sin colapsar por ID.
 
@@ -154,10 +156,31 @@ def detectar_marcadores_crudo(
     """
     if imagen.ndim == 3:
         imagen = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
-    detector = cv2.aruco.ArucoDetector(
-        diccionario_aruco(nombre_diccionario), parametros_detector(refinamiento)
-    )
+    parametros = parametros_detector(refinamiento)
+    parametros.useAruco3Detection = usar_aruco3
+    parametros.minSideLengthCanonicalImg = lado_minimo_aruco3_px
+    detector = cv2.aruco.ArucoDetector(diccionario_aruco(nombre_diccionario), parametros)
     esquinas, ids, _ = detector.detectMarkers(imagen)
+    if usar_aruco3:
+        presentes = set() if ids is None else set(ids.ravel())
+        if not set(ids_requeridos).issubset(presentes):
+            # La rapidez no autoriza a perder una esquina o un rover conocido.
+            # Rehacer TODO el cuadro conserva también la detección de duplicados.
+            return detectar_marcadores_crudo(imagen, nombre_diccionario, refinamiento)
+        if refinamiento == "subpixel":
+            # ArUco3 puede devolver esquinas enteras aun solicitando subpíxel.
+            # Refinar a resolución ORIGINAL mantiene la precisión de la pose.
+            for esquina in esquinas:
+                puntos = esquina.reshape(4, 2)
+                lado = np.linalg.norm(puntos - np.roll(puntos, 1, axis=0), axis=1).mean()
+                modulos = diccionario_aruco(nombre_diccionario).markerSize + 2 * parametros.markerBorderBits
+                ventana = max(1, min(parametros.cornerRefinementWinSize,
+                                    int(round(lado / modulos * parametros.relativeCornerRefinmentWinSize))))
+                cv2.cornerSubPix(
+                    imagen, esquina, (ventana, ventana), (-1, -1),
+                    (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_MAX_ITER,
+                     parametros.cornerRefinementMaxIterations,
+                     parametros.cornerRefinementMinAccuracy))
     if ids is None:
         return ()
     return tuple(

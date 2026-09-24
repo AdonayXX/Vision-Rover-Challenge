@@ -66,6 +66,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -149,20 +150,19 @@ def clasificar(matiz: float, cfg: ConfigVision) -> str | None:
     return mejor
 
 
-def mascara_de_color(imagen_bgr: np.ndarray, cfg: ConfigVision) -> tuple[np.ndarray, np.ndarray]:
-    """Separa lo coloreado del tablero. Devuelve `(máscara, imagen Lab)`.
+@lru_cache(maxsize=8)
+def _tabla_color(croma_minimo, minimos_por_color, matices, tolerancia):
+    """Precalcula las 256x256 combinaciones posibles de a/b de OpenCV.
 
-    Una sola conversión a Lab sirve para las dos cosas —umbral y clasificación—,
-    que es la razón de usar Lab también para el umbral en vez de pasar por HSV.
+    El filtro solo depende de estos dos bytes y de la configuración. Repetir
+    trigonometría por cada píxel de cada cuadro costaba cientos de milisegundos.
+    La tabla aplica exactamente las mismas comparaciones y cambia de clave si
+    cambian los umbrales (incluidas las pruebas temporales del diagnóstico).
     """
-    lab = cv2.cvtColor(imagen_bgr, cv2.COLOR_BGR2LAB)
-    a = lab[:, :, 1].astype(np.int16) - 128
-    b = lab[:, :, 2].astype(np.int16) - 128
-    a32 = a.astype(np.float32)
-    b32 = b.astype(np.float32)
+    valores = np.arange(256, dtype=np.float32) - 128
+    a32, b32 = np.meshgrid(valores, valores, indexing="ij")
     croma = np.hypot(a32, b32)
-    dc = cfg.deteccion_cubos
-    mascara = croma >= dc.croma_minimo
+    mascara = croma >= croma_minimo
 
     # Recuperación por color: el umbral global sigue protegiendo al tablero y a
     # los otros objetos, pero un plástico concreto puede tener una cara menos
@@ -170,24 +170,36 @@ def mascara_de_color(imagen_bgr: np.ndarray, cfg: ConfigVision) -> tuple[np.ndar
     # a ese color y cae dentro de una banda más estrecha que la tolerancia normal
     # del clasificador. Así el verde puede bajar su croma sin abrir la compuerta
     # a todo el fondo de la escena.
-    if dc.croma_minimo_por_color:
+    if minimos_por_color:
+        referencias = dict(matices)
         matiz = np.degrees(np.arctan2(b32, a32)) % 360.0
-        for color, minimo in dc.croma_minimo_por_color.items():
-            referencia = dc.matices_grados[color]
+        for color, minimo in minimos_por_color:
+            referencia = referencias[color]
             distancia = np.abs((matiz - referencia + 180.0) % 360.0 - 180.0)
             es_mas_cercano = np.ones(matiz.shape, dtype=bool)
-            for otro, ref_otro in dc.matices_grados.items():
+            for otro, ref_otro in matices:
                 if otro == color:
                     continue
                 distancia_otro = np.abs((matiz - ref_otro + 180.0) % 360.0 - 180.0)
                 es_mas_cercano &= distancia <= distancia_otro
             mascara |= (
                 (croma >= minimo)
-                & (distancia <= dc.matiz_tolerancia_recuperacion_grados)
+                & (distancia <= tolerancia)
                 & es_mas_cercano
             )
 
-    mascara = mascara.astype(np.uint8)
+    tabla = mascara.astype(np.uint8)
+    tabla.flags.writeable = False
+    return tabla
+
+
+def mascara_de_color(imagen_bgr: np.ndarray, cfg: ConfigVision) -> tuple[np.ndarray, np.ndarray]:
+    """Separa lo coloreado del tablero. Devuelve `(máscara, imagen Lab)`."""
+    lab = cv2.cvtColor(imagen_bgr, cv2.COLOR_BGR2LAB)
+    dc = cfg.deteccion_cubos
+    tabla = _tabla_color(dc.croma_minimo, tuple(sorted(dc.croma_minimo_por_color.items())),
+                         tuple(sorted(dc.matices_grados.items())), dc.matiz_tolerancia_recuperacion_grados)
+    mascara = tabla[lab[:, :, 1], lab[:, :, 2]]
     # Cierra agujeros de un píxel sin mover los bordes, que es de donde sale
     # toda la información de posición.
     nucleo = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
@@ -295,6 +307,18 @@ def ajustar_cubo(contorno_celdas: np.ndarray, lado_celdas: float, nadir: np.ndar
 # --------------------------------------------------------------------------
 
 
+def area_cara_local_px(sistema: SistemaCoordenadas, centro_px, lado_celdas: float) -> float:
+    """Área de una cara en el piso, proyectada donde está el candidato.
+
+    Con perspectiva, los dos lados tienen escalas distintas y cambian de un
+    extremo al otro de la cancha. Elevar al cuadrado un lado medido en el
+    origen subestimaba el área y rechazaba cubos reales en cámaras inclinadas.
+    """
+    col, row = sistema.a_celdas(np.asarray([centro_px], dtype=np.float64))[0]
+    cara = sistema.a_pixeles(cuadrado(col, row, lado_celdas, 0.0))
+    return max(1.0, float(cv2.contourArea(cara.astype(np.float32))))
+
+
 def detectar_cubos(
     imagen_bgr: np.ndarray,
     sistema: SistemaCoordenadas,
@@ -320,16 +344,12 @@ def detectar_cubos(
     factor = pose_de_camara.factor_paralaje(cfg.elementos.cubos.lado_mm)
 
     mascara, lab = mascara_de_color(imagen_bgr, cfg)
-    cantidad, etiquetas, stats, _ = cv2.connectedComponentsWithStats(mascara, 8)
-
-    # Área de referencia: la que ocuparía la cara de un cubo en esta imagen.
-    esquina = np.array([[0.0, 0.0], [lado_celdas, 0.0]], dtype=np.float64)
-    px = sistema.a_pixeles(esquina)
-    area_cara = max(1.0, float(np.hypot(px[1, 0] - px[0, 0], px[1, 1] - px[0, 1])) ** 2)
+    cantidad, etiquetas, stats, centroides = cv2.connectedComponentsWithStats(mascara, 8)
 
     candidatos: dict[str, CuboDetectado] = {}
     for etiqueta in range(1, cantidad):
         area = int(stats[etiqueta, cv2.CC_STAT_AREA])
+        area_cara = area_cara_local_px(sistema, centroides[etiqueta], lado_celdas)
         if not (area_cara * dc.area_minima_relativa <= area <= area_cara * dc.area_maxima_relativa):
             continue
 

@@ -18,8 +18,9 @@ class MotionController:
                  left_gain=1.0, right_gain=1.0, max_step=0.25,
                  turn_timeout=10.0, max_duration=30.0,
                  kp=0.015, ki=0.0005, kd=0.002, max_correction=0.30,
-                 tolerance=2.0, slow_angle=30.0, slow_speed=0.15):
+                 tolerance=2.0, slow_angle=30.0, slow_speed=0.15, safety=None):
         self.robot, self.sensor, self.clock = robot, sensor, clock
+        self.safety = safety
         self.drift = finite(drift)
         for value in (gyro_sign, left_sign, right_sign):
             if value not in (-1, 1):
@@ -42,6 +43,11 @@ class MotionController:
         self.stop()
 
     def _drive(self, left, right):
+        if self.safety is not None:
+            reason = self.safety.reason(left, right)
+            if reason:
+                self.stop(reason)
+                return
         self.robot.motor_1.throttle = limit(left * self.left_gain * self.left_sign, -1, 1)
         self.robot.motor_2.throttle = limit(right * self.right_gain * self.right_sign, -1, 1)
 
@@ -56,6 +62,9 @@ class MotionController:
 
     def _begin(self, mode):
         self.stop()
+        if self.safety is not None and self.safety.motion_inhibited:
+            self.stop("diagnostico_o_cableado_pendiente")
+            raise ValueError("Movimiento bloqueado: diagnostico o cableado pendiente")
         if mode != "MOTOR" and self.sensor is None:
             raise ValueError("Movimiento angular requiere IMU")
         self.started = self.previous = self.clock()

@@ -51,7 +51,8 @@ def serve_client(
     controller,
     watchdog=0.5,
     clock=time.monotonic,
-    sleep=time.sleep
+    sleep=time.sleep,
+    sensors=None
 ):
     try:
         client.setblocking(False)
@@ -59,7 +60,8 @@ def serve_client(
         session = CommandSession(
             controller,
             watchdog,
-            clock
+            clock,
+            sensors=sensors
         )
 
         while session.poll(client):
@@ -84,6 +86,7 @@ def main(config_path="config_robot.json"):
     controller = MotionController(robot)
 
     server = None
+    hardware = None
 
     try:
         # ---------------------------------
@@ -92,6 +95,24 @@ def main(config_path="config_robot.json"):
 
         with open(config_path) as source:
             config = json.load(source)
+
+        # Configuración separada: no sobrescribe Wi-Fi ni calibración de motores.
+        from sensores_rover import SensoresRover, validar_config
+        from hardware_sensores import HardwareSensores
+        with open("config_sensores.json") as source:
+            sensor_config = json.load(source)
+        sensors = None
+        if sensor_config.get("enabled", False):
+            validar_config(sensor_config)
+            hardware = HardwareSensores(sensor_config)
+            sensors = SensoresRover(hardware, sensor_config)
+            print("Sensores locales activos; errores de cableado/configuracion:", hardware.errors)
+            if sensors.motion_inhibited:
+                print("DIAGNOSTICO: motores bloqueados; solo lectura de sensores")
+            for warning in hardware.warnings:
+                print("AVISO:", warning)
+        else:
+            print("AVISO: sensores locales DESACTIVADOS por configuracion")
 
         use_imu = config.get("use_imu", True)
 
@@ -125,6 +146,7 @@ def main(config_path="config_robot.json"):
             robot,
             sensor,
             drift,
+            safety=sensors,
             **config["control"]
         )
 
@@ -211,7 +233,8 @@ def main(config_path="config_robot.json"):
                 serve_client(
                     client,
                     controller,
-                    config["watchdog_seconds"]
+                    config["watchdog_seconds"],
+                    sensors=sensors
                 )
 
             except Exception as error:
@@ -229,6 +252,8 @@ def main(config_path="config_robot.json"):
         finally:
             if server is not None:
                 server.close()
+            if hardware is not None:
+                hardware.deinit()
 
 
 if __name__ == "__main__":

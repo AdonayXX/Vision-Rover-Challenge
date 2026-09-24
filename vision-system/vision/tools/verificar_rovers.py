@@ -223,10 +223,13 @@ def medir(verdad, rovers, ids_esquina, corregido: bool = False) -> Resultado:
         objetivo = (real.col, real.row) if corregido else (real.col_en_plano, real.row_en_plano)
         error_pos = math.hypot(rover.col - objetivo[0], rover.row - objetivo[1])
         r.paralajes.append(real.paralaje_celdas)
-        error_ang = abs(diferencia_angular(rover.theta_grados, real.theta_grados))
+        # La verdad sintética describe el marcador impreso. La calibración del
+        # montaje físico se verifica aparte: no es un error del detector.
+        theta_marcador = rover.marcador.theta_grados
+        error_ang = abs(diferencia_angular(theta_marcador, real.theta_grados))
         r.errores_pos.append(error_pos)
         r.errores_ang.append(error_ang)
-        r.detalle.append((rover.id, real.theta_grados, rover.theta_grados, error_ang, error_pos))
+        r.detalle.append((rover.id, real.theta_grados, theta_marcador, error_ang, error_pos))
 
         # Prueba de identidad: este rover tiene que estar más cerca de SU verdad
         # que de la de cualquier otro. Si dos se intercambiaron el ID, los
@@ -359,6 +362,7 @@ def correr_modo(cfg, con_perspectiva: bool, umbral_mm: float, umbral_grados: flo
     print("\n  umbrales: posición {:.2f} mm ({:.4f} celdas)  |  orientación {:.2f}°".format(
         umbral_mm, umbral_celdas, umbral_grados))
     print("  esquinas {} reservadas y nunca reportadas como rover".format(ids_esquina))
+    print("  El error angular compara el marcador crudo, antes del ajuste del montaje físico.")
     print("  'pos mm' se mide contra la posición REAL del rover, con el paralaje ya\n"
           "  corregido usando la pose deducida de los cuatro marcadores. La columna\n"
           "  'paralaje mm' es cuánto habría errado sin esa corrección.")

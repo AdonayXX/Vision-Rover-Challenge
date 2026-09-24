@@ -21,6 +21,9 @@ DEFAULT_FILES = [
     os.path.join(CODE_DIR, "control_movimiento.py"),
     os.path.join(CODE_DIR, "sesion_comandos.py"),
     os.path.join(CODE_DIR, "command_protocol.py"),
+    os.path.join(CODE_DIR, "sensores_rover.py"),
+    os.path.join(CODE_DIR, "hardware_sensores.py"),
+    os.path.join(CODE_DIR, "config_sensores.json"),
     os.path.join(CODE_DIR, "ideaboard.py"),
 ]
 

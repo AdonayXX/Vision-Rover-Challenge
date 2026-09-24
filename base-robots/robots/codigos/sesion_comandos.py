@@ -1,5 +1,6 @@
 """Sesión TCP de pruebas, independiente del hardware y con memoria acotada."""
 import time
+import json
 from command_protocol import parse_command, MAX_LINE
 
 
@@ -9,11 +10,13 @@ def would_block(error):
 
 
 class CommandSession:
-    def __init__(self, controller, watchdog=0.5, clock=time.monotonic):
+    def __init__(self, controller, watchdog=0.5, clock=time.monotonic, sensors=None):
         from command_protocol import finite
         if finite(watchdog) <= 0:
             raise ValueError("Watchdog debe ser positivo")
         self.controller, self.watchdog, self.clock = controller, watchdog, clock
+        self.sensors = sensors
+        self.reply = b"OK\n"
         self.last_motion = None
         self.buffer = b""
         self.pending = b""
@@ -24,11 +27,14 @@ class CommandSession:
         if self.last_motion is not None and self.clock() - self.last_motion >= self.watchdog:
             self.controller.stop("watchdog")
             self.last_motion = None
+        if self.sensors is not None:
+            self.sensors.update(moving=self.controller.mode is not None)
         self.controller.update()
 
     def process_command(self, text):
         # Cobrar el vencimiento ANTES de aceptar una renovación tardía.
         self.tick()
+        self.reply = b"OK\n"
         parsed = parse_command(text)
         if not parsed["valid"]:
             self.controller.stop("comando_invalido")
@@ -41,12 +47,22 @@ class CommandSession:
                 self.last_motion = None
             elif command == "PING":
                 pass
+            elif command == "SENSORS":
+                status = self.sensors.snapshot() if self.sensors is not None else {"v": 1, "enabled": False}
+                status["motion_reason"] = self.controller.reason
+                self.reply = (json.dumps(status) + "\n").encode("ascii")
             elif command == "KEEPALIVE":
                 if self.controller.mode is None:
                     return False
                 self.last_motion = self.clock()
             else:
                 if command == "MOTOR":
+                    if self.sensors is not None:
+                        reason = self.sensors.reason(parsed["left"], parsed["right"])
+                        if reason:
+                            self.controller.stop(reason)
+                            self.last_motion = None
+                            return False
                     self.controller.start_motor(parsed["left"], parsed["right"])
                 elif command == "TURN":
                     self.controller.start_turn(parsed["angle"], parsed["speed"])
@@ -85,9 +101,10 @@ class CommandSession:
                 if len(raw) > MAX_LINE:
                     raise ValueError("Linea demasiado larga")
                 valid = self.process_command(raw.decode("ascii"))
-                self.pending += b"OK\n" if valid else b"ERROR\n"
-                if len(self.pending) > 512:
+                response = self.reply if valid else b"ERROR\n"
+                if len(response) > 8192 or len(self.pending) + len(response) > max(512, len(response)):
                     raise ValueError("Cliente no lee respuestas")
+                self.pending += response
                 if not valid:
                     # Descartar las órdenes que llegaron detrás de una inválida.
                     self.buffer = b""
