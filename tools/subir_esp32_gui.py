@@ -29,6 +29,9 @@ DEFAULT_FILES = [
     os.path.join(CODE_DIR, "safemode.py"),
     os.path.join(CODE_DIR, "cliente_vision_rover.py"),
     os.path.join(CODE_DIR, "telemetria.py"),
+    os.path.join(CODE_DIR, "modelo_rover.py"),
+    os.path.join(CODE_DIR, "autonomia.py"),
+    os.path.join(CODE_DIR, "modelo_movimiento.json"),
 ]
 
 

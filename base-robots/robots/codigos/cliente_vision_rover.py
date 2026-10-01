@@ -44,6 +44,9 @@ class ClienteVision:
         self.mensaje = None
         self.recibido_ms = None
         self.estado = "sin_conexion"
+        # Desfase local - ts_ms de la entrega mas rapida. A diferencia del de
+        # las estadisticas, no se reinicia por ventana: lo usa el control.
+        self.desfase_reloj = None
         self.reiniciar_estadisticas()
         self.conexiones = 0
 
@@ -56,6 +59,8 @@ class ClienteVision:
                 pass
         self.sock = None
         self.buffer = b""
+        self.mensaje = None
+        self.desfase_reloj = None
         self.estado = motivo
         self.proximo_intento = self.reloj() + self.reconectar_ms
 
@@ -146,6 +151,8 @@ class ClienteVision:
         self.validar_ms_total += t2 - t1
         self.validar_ms_max = max(self.validar_ms_max, t2 - t1)
         desfase = t2 - mensaje["ts_ms"]
+        if self.desfase_reloj is None or desfase < self.desfase_reloj:
+            self.desfase_reloj = desfase
         if self.desfase_min is None or desfase < self.desfase_min:
             self.desfase_min = desfase
         edad = desfase - self.desfase_min

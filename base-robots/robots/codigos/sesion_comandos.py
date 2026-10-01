@@ -10,13 +10,15 @@ def would_block(error):
 
 
 class CommandSession:
-    def __init__(self, controller, watchdog=0.5, clock=time.monotonic, sensors=None, info=None):
+    def __init__(self, controller, watchdog=0.5, clock=time.monotonic, sensors=None, info=None,
+                 mission=None):
         from command_protocol import finite
         if finite(watchdog) <= 0:
             raise ValueError("Watchdog debe ser positivo")
         self.controller, self.watchdog, self.clock = controller, watchdog, clock
         self.sensors = sensors
         self.info = info  # callable -> dict: motivo del ultimo reinicio, uptime
+        self.mission = mission  # mision autonoma en la placa (autonomia.IrAPunto)
         self.reply = b"OK\n"
         self.last_motion = None
         self.buffer = b""
@@ -42,8 +44,17 @@ class CommandSession:
             self.last_motion = None
             return False
         command = parsed["command"]
+        if self.mission is not None and command in ("STOP", "MOTOR", "TURN", "HEADING"):
+            # Una orden manual siempre le quita el control a la mision.
+            self.mission.detener("orden_" + command.lower())
         try:
-            if command == "STOP":
+            if command == "IR":
+                if self.mission is None:
+                    return False
+                self.controller.stop("mision")
+                self.last_motion = None
+                self.mission.iniciar(parsed["col"], parsed["row"])
+            elif command == "STOP":
                 self.controller.stop()
                 self.last_motion = None
             elif command == "PING":
@@ -53,6 +64,8 @@ class CommandSession:
                 status["motion_reason"] = self.controller.reason
                 if self.info is not None:
                     status.update(self.info())
+                if self.mission is not None:
+                    status["mision"] = self.mission.informe()
                 self.reply = (json.dumps(status) + "\n").encode("ascii")
             elif command == "KEEPALIVE":
                 if self.controller.mode is None:

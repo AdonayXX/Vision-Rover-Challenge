@@ -13,6 +13,7 @@ TURN = "TURN"
 HEADING = "HEADING"
 KEEPALIVE = "KEEPALIVE"
 SENSORS = "SENSORS"
+IR = "IR"  # mision autonoma en la placa: ir a (col, row); solo desarrollo
 MAX_LINE = 128
 
 
@@ -41,7 +42,8 @@ def parse_command(message):
             raise ValueError("Mensaje vacio")
         command = parts[0].strip().upper()
         fields = {PING: (), STOP: (), KEEPALIVE: (), SENSORS: (), MOTOR: ("left", "right"),
-                  TURN: ("angle", "speed"), HEADING: ("heading", "speed", "duration")}
+                  TURN: ("angle", "speed"), HEADING: ("heading", "speed", "duration"),
+                  IR: ("col", "row")}
         if command not in fields or len(parts) != len(fields[command]) + 1:
             raise ValueError("Comando o cantidad de parametros invalida")
         result = {"valid": True, "command": command}

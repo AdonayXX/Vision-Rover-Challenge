@@ -84,6 +84,20 @@ class MotionController:
         self._begin("MOTOR")
         self.left, self.right = left, right
 
+    def set_motor(self, left, right):
+        """Control continuo: cambia la potencia sin reiniciar la rampa.
+
+        Con start_motor cada orden (cada 50 ms) volveria a arrancar la rampa
+        desde cero y el rover nunca llegaria a la potencia pedida.
+        """
+        if self.mode != "MOTOR":
+            self.start_motor(left, right)
+            return
+        left, right = finite(left), finite(right)
+        if not -1 <= left <= 1 or not -1 <= right <= 1:
+            raise ValueError("Velocidad fuera de rango")
+        self.left, self.right = left, right
+
     def start_turn(self, degrees, speed=0.30):
         self.stop()
         degrees, speed = finite(degrees), finite(speed)

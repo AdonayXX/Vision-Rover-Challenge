@@ -13,6 +13,8 @@ from sesion_comandos import CommandSession, would_block
 from wifi_config import obtener_credenciales_wifi
 import registro_fallos
 from cliente_vision_rover import ClienteVision
+from autonomia import IrAPunto
+from modelo_rover import ModeloRover
 
 
 def _nada():
@@ -82,6 +84,17 @@ def activar_watchdog(segundos):
         return _nada
 
 
+def cargar_modelo(ruta="modelo_movimiento.json"):
+    try:
+        with open(ruta) as fuente:
+            modelo = ModeloRover.desde_resumen(json.load(fuente)["resumen"])
+        print("Modelo de movimiento cargado:", ruta)
+        return modelo
+    except (OSError, ValueError, KeyError) as error:
+        print("AVISO: sin modelo calibrado ({}); valores por defecto".format(error))
+        return ModeloRover()
+
+
 def memoria_libre():
     try:
         import gc
@@ -119,7 +132,8 @@ def serve_client(
     server=None,
     red_ok=None,
     alimentar=_nada,
-    info=None
+    info=None,
+    mission=None
 ):
     """Atiende un cliente. Devuelve el cliente que lo reemplaza, o None.
 
@@ -136,7 +150,8 @@ def serve_client(
             watchdog,
             clock,
             sensors=sensors,
-            info=info
+            info=info,
+            mission=mission
         )
 
         revisado = clock()
@@ -155,6 +170,9 @@ def serve_client(
 
     finally:
         try:
+            if mission is not None:
+                # Una mision lanzada desde la PC no sobrevive a esa conexion.
+                mission.detener("conexion_cerrada")
             controller.stop("conexion_cerrada")
         finally:
             client.close()
@@ -320,6 +338,10 @@ def main(config_path="config_robot.json"):
                                         config.get("vision_port", 2026)))
             print("Vision:", config["vision_host"], config.get("vision_port", 2026))
         informe = [time.monotonic() + 10]
+        mision = None
+        if vision:
+            mision = IrAPunto(vision[0], cargar_modelo(), controller,
+                              config.get("robot_id", 10))
 
         def tick():
             alimentar()
@@ -329,6 +351,11 @@ def main(config_path="config_robot.json"):
                 vision[0].poll(puede_bloquear=controller.mode is None)
             except Exception as error:
                 print("Error vision:", error)
+            try:
+                mision.tick()
+            except Exception as error:
+                mision.detener("error: {}".format(error))
+                print("Error mision:", error)
             if time.monotonic() >= informe[0]:
                 informe[0] = time.monotonic() + 10
                 print("Vision:", vision[0].estadisticas(memoria_libre()))
@@ -385,7 +412,8 @@ def main(config_path="config_robot.json"):
                     server=server,
                     red_ok=red_ok,
                     alimentar=tick,
-                    info=info
+                    info=info,
+                    mission=mision
                 )
 
             except Exception as error:
