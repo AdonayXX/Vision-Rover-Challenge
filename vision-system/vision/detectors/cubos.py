@@ -28,6 +28,37 @@ que sea el plástico: un cubo rojo a la sombra sigue teniendo matiz de rojo aunq
 le bajen el croma y la luminosidad. Por eso no hace falta medir los cubos reales
 antes de arrancar.
 
+El umbral de croma sale del tablero, no de un número
+---------------------------------------------------
+Un umbral fijo sirve para **una** luz. Con mucha, un cubo de acrílico refleja y
+su tapa —que es casi todo lo que la cámara ve de él— se lava; con poca, el color
+se apaga. En los dos casos el croma del cubo cae y la mancha queda más chica que
+un cubo o no queda. Probado en la cancha: con exposiciones de -4 a -8 aparecía
+uno u otro cubo, nunca los tres, porque no hay una exposición buena para los
+tres colores a la vez.
+
+El tablero, en cambio, **está siempre en el cuadro y es acromático por
+construcción**: el croma que tenga es ruido y tinte de esa luz. Entonces el
+umbral se pide como un múltiplo del croma del propio tablero en ese cuadro,
+entre un piso y un techo. Es la misma exigencia en cualquier sala.
+
+Cuatro cosas acompañan a ese umbral:
+
+- **se busca solo dentro de la cancha**, con un margen. Un piso apenas teñido o
+  un objeto de color al lado del tablero ya no pasan desapercibidos, y se
+  unirían a un cubo que esté en el borde;
+- **los agujeros de una mancha se rellenan**: un brillo quemado en la tapa es
+  blanco, no tiene croma, y sin esto le restaría área al cubo;
+- **el tinte de la luz se resta antes de mirar**: la mediana del color del
+  tablero es el color de la luz, y se le quita a todo el cuadro. Con luz de día
+  y balance de blancos fijo el tablero sale teñido, y sin esto el umbral
+  adaptativo subiría solo hasta su techo;
+- **el matiz se saca de los píxeles no quemados**: un canal en el tope del
+  sensor miente sobre el color, y un azul recortado se lee celeste.
+
+Las motas de color del tablero que pasen el umbral no importan: son decenas de
+píxeles y el filtro de área pide miles.
+
 El problema de verdad: la mancha no es el cubo
 ----------------------------------------------
 Lo que la cámara ve de un cubo **no es una cara**: es la **tapa más una o dos
@@ -202,6 +233,93 @@ def mascara_de_color(imagen_bgr: np.ndarray, cfg: ConfigVision) -> tuple[np.ndar
     return cv2.morphologyEx(mascara, cv2.MORPH_CLOSE, nucleo), lab
 
 
+def _poligono_cancha(forma, sistema: SistemaCoordenadas, cfg: ConfigVision,
+                     margen: float) -> np.ndarray:
+    """Máscara de la cancha, agrandada `margen` celdas hacia afuera."""
+    t = cfg.tablero
+    esquinas = np.array([[-margen, -margen], [t.cols + margen, -margen],
+                         [t.cols + margen, t.rows + margen], [-margen, t.rows + margen]],
+                        dtype=np.float64)
+    mascara = np.zeros(forma[:2], np.uint8)
+    cv2.fillConvexPoly(mascara, np.round(sistema.a_pixeles(esquinas)).astype(np.int32), 1)
+    return mascara
+
+
+def umbral_de_croma(croma: np.ndarray, cancha: np.ndarray, cfg: ConfigVision) -> float:
+    """El croma que se le pide a un píxel en ESTE cuadro para contar como coloreado.
+
+    Sale del propio tablero: `croma_factor_tablero` por el percentil 95 de su
+    croma, acotado entre `croma_piso` y `croma_minimo`. Se usa el p95 y no uno
+    más alto porque los objetos de color —tres cubos, algún cable— ocupan un par
+    de puntos porcentuales de la cancha: del p98 para arriba ya no se estaría
+    midiendo el tablero sino lo que se quiere encontrar.
+
+    Se submuestrea uno de cada cuatro píxeles por lado: es una estadística sobre
+    medio millón de valores, y con treinta mil dice lo mismo.
+    """
+    dc = cfg.deteccion_cubos
+    muestra = croma[::4, ::4][cancha[::4, ::4] > 0]
+    if muestra.size == 0:
+        return float(dc.croma_minimo)
+    p95 = float(np.percentile(muestra, 95))
+    return float(min(dc.croma_minimo, max(dc.croma_piso, dc.croma_factor_tablero * p95)))
+
+
+def segmentar(imagen_bgr: np.ndarray, cfg: ConfigVision,
+              sistema: SistemaCoordenadas) -> tuple[np.ndarray, np.ndarray, float]:
+    """Separa lo coloreado DENTRO de la cancha. Devuelve `(máscara, Lab, umbral)`.
+
+    Es lo que usa el detector. A diferencia de `mascara_de_color`, conoce la
+    geometría, y eso le permite las dos cosas que aquella no puede: pedir el
+    croma en relación al tablero de este cuadro, y no mirar fuera de la cancha.
+    El umbral se devuelve para que el diagnóstico pueda mostrarlo.
+    """
+    dc = cfg.deteccion_cubos
+    lab = cv2.cvtColor(imagen_bgr, cv2.COLOR_BGR2LAB)
+    cancha = _poligono_cancha(lab.shape, sistema, cfg, 0.0)
+    # El tinte de la luz se le resta a TODO el cuadro antes de mirar nada. El
+    # tablero es gris por construcción, así que la mediana de su a* y su b* es,
+    # sin más, el color de la luz —o del balance de blancos fijo, que con luz de
+    # día queda corrido—. Sin esto un tablero teñido tiene croma en todos lados,
+    # el umbral adaptativo sube hasta su techo y los matices salen corridos.
+    for canal in (1, 2):
+        muestra = lab[::4, ::4, canal][cancha[::4, ::4] > 0]
+        if muestra.size:
+            tinte = int(round(float(np.median(muestra)) - 128.0))
+            if tinte > 0:
+                lab[:, :, canal] = cv2.subtract(lab[:, :, canal], tinte)
+            elif tinte < 0:
+                lab[:, :, canal] = cv2.add(lab[:, :, canal], -tinte)
+    a = lab[:, :, 1].astype(np.float32) - 128.0
+    b = lab[:, :, 2].astype(np.float32) - 128.0
+    croma = np.hypot(a, b)
+
+    umbral = umbral_de_croma(croma, cancha, cfg)
+    zona = _poligono_cancha(lab.shape, sistema, cfg, dc.margen_cancha_celdas)
+    mascara = ((croma >= umbral) & (zona > 0)).astype(np.uint8)
+    nucleo = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    mascara = cv2.morphologyEx(mascara, cv2.MORPH_CLOSE, nucleo)
+    # Rellenar los agujeros: un brillo quemado en la tapa no tiene croma, y sin
+    # esto le restaría área a un cubo que está entero. El contorno exterior —de
+    # donde sale la posición— no se mueve.
+    contornos, _ = cv2.findContours(mascara, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(mascara, contornos, -1, 1, -1)
+    return mascara, lab, umbral
+
+
+def _matiz_de_region(lab: np.ndarray, region: np.ndarray, sano: np.ndarray) -> tuple[float, float]:
+    """Matiz y croma de una mancha, usando los píxeles NO quemados si alcanzan.
+
+    Un canal en el tope del sensor miente sobre el color. Si al menos un quinto
+    de la mancha no está quemado, el matiz se saca de ahí; si casi toda lo está,
+    no queda otra que usarla entera.
+    """
+    util = region & sano
+    if int(util.sum()) * 5 < int(region.sum()):
+        util = region
+    return matiz_y_croma(cv2.mean(lab, mask=util)[:3])
+
+
 # --------------------------------------------------------------------------
 # El modelo del cubo
 # --------------------------------------------------------------------------
@@ -316,9 +434,10 @@ def detectar_cubos(
     sin declarar nada— por dos motivos: para saber dónde está el nadir, que es
     hacia donde se desplaza la tapa, y para construir el modelo de la silueta.
 
-    Si dos manchas se clasifican del mismo color se conserva la más grande: el
-    color es la identidad y **no puede haber dos cubos del mismo color**, así que
-    la segunda es un reflejo o un objeto ajeno.
+    Si dos manchas se clasifican del mismo color se conserva la que encaja con
+    el modelo del cubo y, a igualdad de eso, la más grande: el color es la
+    identidad y **no puede haber dos cubos del mismo color**, así que la otra es
+    un reflejo o un objeto ajeno.
 
     Devuelve la tupla ordenada por color para que dos corridas den lo mismo. Eso
     **no** habilita a indexar por posición: hay que buscar por `color`.
@@ -331,7 +450,8 @@ def detectar_cubos(
     nadir = np.array(pose_de_camara.nadir_celdas, dtype=np.float64)
     factor = pose_de_camara.factor_paralaje(cfg.elementos.cubos.lado_mm)
 
-    mascara, lab = mascara_de_color(imagen_bgr, cfg)
+    mascara, lab, _ = segmentar(imagen_bgr, cfg, sistema)
+    sano = (imagen_bgr.max(axis=2) < dc.nivel_recorte).astype(np.uint8)
     cantidad, etiquetas, stats, centros = cv2.connectedComponentsWithStats(mascara, 8)
 
     # Área de referencia: la que ocuparía la cara de un cubo en esta imagen.
@@ -353,13 +473,13 @@ def detectar_cubos(
         if not (area_cara * dc.area_minima_relativa <= area <= area_cara * dc.area_maxima_relativa):
             if rechazos is not None and area >= area_cara * _RECHAZO_MINIMO_RELATIVO:
                 region = (etiquetas == etiqueta).astype(np.uint8)
-                matiz, croma = matiz_y_croma(cv2.mean(lab, mask=region)[:3])
+                matiz, croma = _matiz_de_region(lab, region, sano)
                 anotar("area_chica" if area < area_cara * dc.area_minima_relativa
                        else "area_grande", etiqueta, area, matiz, croma, clasificar(matiz, cfg))
             continue
 
         region = (etiquetas == etiqueta).astype(np.uint8)
-        matiz, croma = matiz_y_croma(cv2.mean(lab, mask=region)[:3])
+        matiz, croma = _matiz_de_region(lab, region, sano)
         color = clasificar(matiz, cfg)
         if color is None:
             if rechazos is not None:
@@ -387,7 +507,12 @@ def detectar_cubos(
             confiable=residuo <= dc.residuo_maximo_celdas,
         )
         anterior = candidatos.get(color)
-        gana = anterior is None or cubo.area_px > anterior.area_px
+        # Entre dos manchas del mismo color gana la que ENCAJA con un cubo, y
+        # recién a igualdad de eso la más grande. Con el umbral bajo hay más
+        # cosas coloreadas a la vista, y "la más grande" sola dejaría que un
+        # objeto ajeno le quitara la identidad a un cubo bien visto.
+        gana = anterior is None or (
+            (cubo.confiable, cubo.area_px) > (anterior.confiable, anterior.area_px))
         if rechazos is not None and anterior is not None:
             # La que pierde es un reflejo o un objeto ajeno; se anota cuál fue.
             perdedora = etiqueta_de[color] if gana else etiqueta

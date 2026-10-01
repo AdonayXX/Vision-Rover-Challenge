@@ -23,8 +23,8 @@ Esta herramienta **no corrige nada**. Mira un cuadro y contesta, con números:
    recortado en el máximo. Lo que el sensor recortó no lo recupera ningún
    programa: se arregla bajando la exposición o la luz.
 2. **¿Cuánto color tiene el tablero?** El detector vive de que el tablero sea
-   acromático. Si la luz lo tiñe, su croma sube, y esa cifra es la que dice
-   cuánto se puede bajar el umbral de los cubos sin que el tablero se cuele.
+   acromático. Muestra el tinte que le pone la luz —que el detector resta— y
+   el croma que le queda, que es de donde sale el umbral de ESTE cuadro.
 3. **¿Qué cubos se detectaron**, con qué residuo y con cuánto margen de croma?
 4. **¿Qué manchas se descartaron**, y en qué compuerta?
 5. **Alrededor de cada mancha descartada por chica**, ¿hay color débil —una
@@ -55,7 +55,7 @@ import numpy as np
 
 try:  # como paquete
     from ..configuracion import cargar_config, con_exposicion
-    from ..detectors.cubos import RechazoCubo, detectar_cubos, mascara_de_color
+    from ..detectors.cubos import RechazoCubo, detectar_cubos, segmentar
     from ..geometry.coordenadas import (
         ErrorGeometria, construir_sistema, detectar_marcadores, pose_camara,
     )
@@ -64,7 +64,7 @@ try:  # como paquete
 except ImportError:  # como script suelto
     from vision.configuracion import cargar_config, con_exposicion  # type: ignore[no-redef]
     from vision.detectors.cubos import (  # type: ignore[no-redef]
-        RechazoCubo, detectar_cubos, mascara_de_color,
+        RechazoCubo, detectar_cubos, segmentar,
     )
     from vision.geometry.coordenadas import (  # type: ignore[no-redef]
         ErrorGeometria, construir_sistema, detectar_marcadores, pose_camara,
@@ -123,10 +123,10 @@ def analizar(imagen: np.ndarray, cfg, matriz_camara) -> dict | None:
 
     rechazos: list[RechazoCubo] = []
     cubos = detectar_cubos(imagen, sistema, cfg, pose, rechazos)
-    mascara, lab = mascara_de_color(imagen, cfg)
+    mascara, lab, umbral = segmentar(imagen, cfg, sistema)
     croma = _croma(lab)
     cancha = _mascara_cancha(imagen.shape, sistema, cfg)
-    recortado = (imagen.max(axis=2) >= NIVEL_RECORTE)
+    recortado = (imagen.max(axis=2) >= cfg.deteccion_cubos.nivel_recorte)
 
     lado_celdas = cfg.elementos.cubos.lado_mm / cfg.tablero.cell_mm
     px = sistema.a_pixeles(np.array([[0.0, 0.0], [lado_celdas, 0.0]], dtype=np.float64))
@@ -138,10 +138,15 @@ def analizar(imagen: np.ndarray, cfg, matriz_camara) -> dict | None:
     tablero = (cancha == 1) & (cv2.dilate(mascara, nucleo) == 0)
     croma_tablero = croma[tablero]
     gris = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
+    # El tinte se mide sobre la imagen ORIGINAL: el Lab que devuelve `segmentar`
+    # ya lo trae restado, y ahí daría siempre cero.
+    crudo = cv2.cvtColor(imagen, cv2.COLOR_BGR2LAB)
+    tinte = tuple(float(np.median(crudo[:, :, k][cancha == 1])) - 128.0 for k in (1, 2))
 
     return {
-        "sistema": sistema, "cubos": cubos, "rechazos": rechazos, "mascara": mascara,
+        "umbral": umbral, "sistema": sistema, "cubos": cubos, "rechazos": rechazos, "mascara": mascara,
         "croma": croma, "recortado": recortado, "lado_px": lado_px, "lab": lab,
+        "tinte": tinte,
         "brillo_medio": float(gris[cancha == 1].mean()),
         "recorte_cancha": float(recortado[cancha == 1].mean()),
         "croma_tablero": (
@@ -164,10 +169,12 @@ def informar(r: dict, cfg) -> None:
 
     p50, p95, p99, p999 = r["croma_tablero"]
     print("\n  2. EL TABLERO (tiene que ser acromático)")
-    print("     croma: mediana {:.1f} · p95 {:.1f} · p99 {:.1f} · p99,9 {:.1f}".format(
+    print("     tinte de la luz (a*, b*) ......... ({:+.0f}, {:+.0f})  se le resta a todo el cuadro".format(
+        *r["tinte"]))
+    print("     croma ya sin tinte: mediana {:.1f} · p95 {:.1f} · p99 {:.1f} · p99,9 {:.1f}".format(
         p50, p95, p99, p999))
-    print("     umbral de cubo (croma_minimo) .... {:.1f}".format(dc.croma_minimo))
-    print("     margen entre el tablero (p95) y el umbral: {:.1f}".format(dc.croma_minimo - p95))
+    print("     umbral usado en este cuadro ...... {:.1f}  (= {} × p95, entre {} y {})".format(
+        r["umbral"], dc.croma_factor_tablero, dc.croma_piso, dc.croma_minimo))
     print("     (del p99 para arriba pueden colarse tapas de cubo lavadas, que están en la")
     print("      cancha y bajo el umbral: el tinte del tablero lo dicen la mediana y el p95)")
 
@@ -207,10 +214,10 @@ def informar(r: dict, cfg) -> None:
         for x in sorted(chicas, key=lambda x: -x.area_relativa):
             v = _ventana(croma.shape, x.centro_px, lado_px * 1.2)
             cr = croma[v]
-            debil = float(((cr >= 8.0) & (cr < dc.croma_minimo)).mean())
+            debil = float(((cr >= 8.0) & (cr < r["umbral"])).mean())
             print("     {:<6} ({:>4.0f},{:>4.0f}) {:>22.0%} {:>12.0%} {:>10.0%}".format(
                 x.color, x.centro_px[0], x.centro_px[1], debil,
-                float((cr >= dc.croma_minimo).mean()), float(recortado[v].mean())))
+                float((cr >= r["umbral"]).mean()), float(recortado[v].mean())))
         print("     Mucho 'croma débil': el color está, por debajo del umbral. Es recuperable.")
         print("     Mucho 'recortado': el sensor lo quemó. Hay que bajar exposición o luz.")
     print("\n  Una celda = {:.0f} mm.".format(cell))

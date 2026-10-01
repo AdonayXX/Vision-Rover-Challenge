@@ -209,6 +209,13 @@ luminosa quema la imagen, y los cubos de acrílico —que reflejan— pierden el
 justo en la tapa, que es casi todo lo que la cámara ve de ellos. El síntoma es un
 cubo que no aparece, o que queda en ámbar con la edad creciendo.
 
+**El detector se adapta solo a la luz**, hasta donde la imagen lo permite: el
+umbral de color se calcula en cada cuadro contra el propio tablero, y el tinte de
+la luz se le resta al cuadro. Un cubo más oscuro, más claro o con la tapa lavada
+por un reflejo se sigue encontrando. Lo que no tiene arreglo por programa es un
+cubo **quemado**: si el sensor llegó al tope, el color no está en la imagen. Para
+eso está la exposición.
+
 Al arrancar, el sistema **pregunta la exposición**
 junto con la cámara y el perfil. Enter deja la del archivo; un número la cambia
 para esa corrida, sin editar nada. Para no contestar cada vez, o para arrancar
