@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import cv2
@@ -423,8 +423,15 @@ class DeteccionCubos:
     """
 
     croma_minimo: float
+<<<<<<< HEAD
     croma_minimo_por_color: dict[str, float]
     matiz_tolerancia_recuperacion_grados: float
+=======
+    croma_piso: float
+    croma_factor_tablero: float
+    margen_cancha_celdas: float
+    nivel_recorte: int
+>>>>>>> upstream/main
     matices_grados: dict[str, float]
     matiz_tolerancia_grados: float
     area_minima_relativa: float
@@ -880,12 +887,19 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
     dc = d["deteccion_cubos"]
     deteccion_cubos = DeteccionCubos(
         croma_minimo=float(dc["croma_minimo"]),
+<<<<<<< HEAD
         croma_minimo_por_color={
             k: float(v) for k, v in dc.get("croma_minimo_por_color", {}).items()
         },
         matiz_tolerancia_recuperacion_grados=float(
             dc.get("matiz_tolerancia_recuperacion_grados", dc["matiz_tolerancia_grados"])
         ),
+=======
+        croma_piso=float(dc["croma_piso"]),
+        croma_factor_tablero=float(dc["croma_factor_tablero"]),
+        margen_cancha_celdas=float(dc["margen_cancha_celdas"]),
+        nivel_recorte=int(dc["nivel_recorte"]),
+>>>>>>> upstream/main
         matices_grados={k: float(v) for k, v in dc["matices_lab_grados"].items()},
         matiz_tolerancia_grados=float(dc["matiz_tolerancia_grados"]),
         area_minima_relativa=float(dc["area_minima_relativa"]),
@@ -1161,6 +1175,23 @@ def _revisar_zonas(cfg: ConfigVision) -> str | None:
     return None
 
 
+def con_exposicion(cfg: ConfigVision, valor: float) -> ConfigVision:
+    """Devuelve la configuración con OTRA exposición de cámara, sin tocar el archivo.
+
+    Es lo que usa `--exposicion` al arrancar. La exposición declarada en el JSON
+    se midió con una luz; en otra sala, con más luz, el mismo número quema la
+    imagen y lava el color de los cubos. Poder pisarla desde la línea de comandos
+    deja probar valores en la cancha sin editar un archivo versionado, que es
+    como un número de una sala termina commiteado para todas.
+
+    La exposición sigue siendo **fija**: esto elige *cuál* valor fijo, no la pasa
+    a automático. Por eso fuerza `fijar` en verdadero aunque el archivo dijera
+    otra cosa. La configuración es inmutable, así que se devuelve una nueva.
+    """
+    exposicion = replace(cfg.camara.exposicion, fijar=True, valor=float(valor))
+    return replace(cfg, camara=replace(cfg.camara, exposicion=exposicion))
+
+
 def avisos_config(cfg: ConfigVision) -> list[str]:
     """Lo que conviene saber pero **no** impide arrancar.
 
@@ -1402,6 +1433,7 @@ def revisar_config(cfg: ConfigVision) -> str | None:
         return "deteccion_cubos.recorte_robusto debe estar en (0, 1]"
     if dc_cfg.croma_minimo <= 0:
         return "deteccion_cubos.croma_minimo debe ser > 0"
+<<<<<<< HEAD
     if not (0.0 < dc_cfg.matiz_tolerancia_recuperacion_grados <= dc_cfg.matiz_tolerancia_grados):
         return (
             "deteccion_cubos.matiz_tolerancia_recuperacion_grados debe estar en "
@@ -1422,6 +1454,17 @@ def revisar_config(cfg: ConfigVision) -> str | None:
                 "deteccion_cubos.croma_minimo_por_color.{0} ({1}) no puede superar "
                 "croma_minimo ({2})".format(color, minimo, dc_cfg.croma_minimo)
             )
+=======
+    if not (0.0 < dc_cfg.croma_piso <= dc_cfg.croma_minimo):
+        return ("deteccion_cubos.croma_piso debe estar en (0, croma_minimo]: es el piso "
+                "del umbral adaptativo y croma_minimo es su techo")
+    if dc_cfg.croma_factor_tablero <= 0:
+        return "deteccion_cubos.croma_factor_tablero debe ser > 0"
+    if dc_cfg.margen_cancha_celdas < 0:
+        return "deteccion_cubos.margen_cancha_celdas no puede ser negativo"
+    if not (1 <= dc_cfg.nivel_recorte <= 255):
+        return "deteccion_cubos.nivel_recorte debe estar entre 1 y 255"
+>>>>>>> upstream/main
     colores_dibujo = set(cfg.sintetico.colores_cubo_bgr)
     faltan_colores = sorted(set(cfg.elementos.cubos.colores) - colores_dibujo)
     if faltan_colores:

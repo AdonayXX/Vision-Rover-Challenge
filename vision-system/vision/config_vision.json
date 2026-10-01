@@ -238,24 +238,45 @@
   },
   "deteccion_cubos": {
     "_acerca_de": "Detección de cubos por color (vision/detectors/cubos.py). El tablero es acromático —grises, blancos, negros— así que todo lo que tenga color saturado es, por definición, un objeto de interés. Ese es el filtro que separa el fondo del contenido casi gratis.",
+<<<<<<< HEAD
     "croma_minimo": 25.4,
     "_nota_croma": "Croma mínimo GLOBAL en Lab, `raiz(a*² + b*²)`, para que un píxel cuente como coloreado. 25.4 quedó fijado el 17-sep-2026 sobre la Logitech C270: mantiene el azul estable y con margen frente al residuo máximo. Se usa Lab y no HSV para el umbral Y para la clasificación —un solo espacio— porque el matiz de HSV se vuelve inestable justo donde más importa: con poca luz o poca saturación da saltos entre extremos.",
     "croma_minimo_por_color": {
       "green": 22.0
     },
     "_nota_croma_por_color": "Recuperación selectiva para plásticos cuya cara menos saturada cae por debajo del umbral global. Solo se aplica a píxeles cuyo matiz corresponde a ese color dentro de `matiz_tolerancia_recuperacion_grados`; el resto de la imagen sigue exigiendo 25.4. En el verde real, 22.0 dio residuo 0.128-0.140 en 5/5 cuadros con la C270, contra ~0.30 con solo el umbral global.",
+=======
+    "croma_minimo": 28.0,
+    "_NOTA_UMBRAL_ADAPTATIVO": "Desde oct-2026 el umbral de croma NO es fijo: se calcula en cada cuadro como `croma_factor_tablero` por el percentil 95 del croma DEL TABLERO en ese mismo cuadro, acotado entre `croma_piso` y `croma_minimo`. O sea que `croma_minimo` pasó a ser el TECHO: nunca se exige más que eso. El motivo: con mucha luz, un cubo de acrílico refleja y su tapa se lava; con poca, el color se apaga. En los dos casos el croma del cubo cae por debajo de 28 y la mancha quedaba más chica que un cubo, o no quedaba. Un número fijo sirve para UNA luz. El tablero, en cambio, está siempre en el cuadro y es acromático por construcción: lo que él tenga de croma es ruido y tinte de esa luz, y pedir un múltiplo de eso es pedir lo mismo en cualquier sala.",
+    "croma_piso": 10.0,
+    "_nota_piso": "Lo menos que puede valer el umbral adaptativo, aunque el tablero salga perfectamente gris. Es una guarda y no una medición fina: por debajo de esto, el ruido de color de cualquier webcam ya pasa.",
+    "croma_factor_tablero": 1.5,
+    "_nota_factor": "Cuántas veces el p95 del croma del tablero se exige para que un píxel cuente como coloreado. Es RELATIVO al cuadro, que es lo que lo vuelve independiente de la escena. Referencia medida sobre dos capturas reales del tablero (jul-2026): p95 de 9 a 10 y p99,9 de 17 a 18, con las motas sueltas más grandes de unos 100 píxeles, treinta veces menos que el área mínima de un cubo. Las motas que pasan el umbral las descarta el filtro de área, no este número.",
+    "margen_cancha_celdas": 3.0,
+    "_nota_margen_cancha": "Los cubos se buscan SOLO dentro de la cancha, agrandada este margen. Con el umbral fijo en 28 no hacía falta; con el umbral bajo, un piso apenas teñido o un objeto de color al lado del tablero se unirían a un cubo que esté en el borde. El margen existe porque la tapa de un cubo parado sobre el límite se ve corrida hacia afuera por el paralaje: tres celdas son un cubo entero.",
+    "nivel_recorte": 250,
+    "_nota_recorte_sensor": "Un píxel con algún canal en este nivel o más se considera QUEMADO, y no se usa para decidir el matiz de la mancha si hay suficientes que no lo están. Un canal recortado miente sobre el color: un azul con el azul y el verde en el tope se lee celeste. No es 255 exacto porque la compresión MJPG ensucia el tope en un par de niveles.",
+    "_nota_croma": "Croma mínimo en Lab, `raiz(a*² + b*²)`, para que un píxel cuente como coloreado. El croma de Lab ES la saturación en sentido perceptual. Se usa Lab y no HSV para el umbral Y para la clasificación —un solo espacio— porque el matiz de HSV se vuelve inestable justo donde más importa: con poca luz o poca saturación da saltos entre extremos.",
+>>>>>>> upstream/main
     "matices_lab_grados": {
       "red": 39.9,
       "green": 171.0,
       "blue": 306.2,
       "yellow": 103.0
     },
+<<<<<<< HEAD
     "_POR_QUE_POR_MATIZ": "Se clasifica por el MATIZ —el ángulo `atan2(b*, a*)`— y no por distancia RGB. El matiz aguanta mucho mejor los cambios de iluminación. Las referencias se pueden calibrar con los objetos reales: el verde se midió alrededor de 171° el 17-sep-2026 con la C270.",
     "_EL_AMARILLO_ES_EXCLUSION": "El amarillo está en la lista aunque esta edición no tenga obstáculos, y NO es un cubo: una mancha que caiga más cerca del amarillo se descarta en vez de forzarse a uno de los tres colores de cubo.",
     "matiz_tolerancia_grados": 45.0,
     "_nota_tolerancia": "Cuánto puede apartarse el matiz medido del de referencia para aceptar la clasificación. La clase más cercana se decide primero y luego se exige esta tolerancia; una mancha muy alejada de todas las referencias se descarta en vez de forzarse.",
     "matiz_tolerancia_recuperacion_grados": 20.0,
     "_nota_tolerancia_recuperacion": "La recuperación por croma bajo es deliberadamente más estrecha que la clasificación normal. Solo rescata píxeles muy cercanos al matiz calibrado del color para no convertir pequeñas variaciones cromáticas del fondo en parte del cubo.",
+=======
+    "_POR_QUE_POR_MATIZ": "Se clasifica por el MATIZ —el ángulo `atan2(b*, a*)`— y no por la distancia a un color de referencia. El matiz es casi invariante a la iluminación y a lo saturado que sea el plástico: un cubo rojo a la sombra sigue teniendo matiz de rojo, aunque su croma y su luminosidad bajen. Por eso NO hace falta medir los cubos reales antes de arrancar: los valores de acá son los de los primarios sRGB puros y alcanzan, porque los tres colores del reto están de 94 a 170 grados entre sí.",
+    "_EL_AMARILLO_ES_EXCLUSION": "El amarillo está en la lista aunque esta edición no tenga obstáculos, y NO es un cubo: una mancha que caiga más cerca del amarillo se descarta. Existe porque verde y amarillo están a solo 33 grados —el par más ajustado con diferencia— y sin esa clase, cualquier objeto amarillo que ande por la cancha se leería como cubo verde.",
+    "matiz_tolerancia_grados": 60.0,
+    "_nota_tolerancia": "Cuánto puede apartarse el matiz medido del de referencia para aceptar la clasificación. Subió de 45 a 60 en oct-2026: los matices de referencia son los de los primarios sRGB puros, y un cubo de acrílico real bajo luz fuerte se corre de ahí —el azul hacia el celeste, el rojo hacia el rosado—. Las clases siguen sin solaparse: gana siempre la referencia MÁS CERCANA, y el amarillo sigue siendo exclusión, así que la tolerancia solo decide desde dónde una mancha deja de ser de ningún color.",
+>>>>>>> upstream/main
     "area_minima_relativa": 0.25,
     "area_maxima_relativa": 3.0,
     "_nota_area": "Tamaño admisible de la mancha, como fracción del área que ocuparía la cara de un cubo. Se expresa relativo y no en píxeles porque los píxeles dependen de la resolución y de la altura de la cámara. El mínimo bajo (0,25) es a propósito: un cubo empujado por un rover pierde alrededor del 22 % de su área, y hay que seguir encontrándolo.",

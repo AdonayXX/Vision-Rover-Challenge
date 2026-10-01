@@ -138,6 +138,23 @@ Dos casos en que la cuenta está completa y la ronda **no** se cierra:
 En `READY`, si algún cubo ya está dentro de su zona, el panel lo grita en rojo:
 **`CUBOS YA EN ZONA`**. Es el único momento en que todavía se puede corregir.
 
+### A qué hora entró cada cubo
+
+Debajo de la cuenta de acopio, el panel muestra **una fila por zona** con el
+estado de su cubo, y la etiqueta de la zona sobre el video dice lo mismo:
+
+| Fila | Qué significa |
+|---|---|
+| `entró a 1:23 · hace 12.4 s` | entró al minuto 1:23 del cronómetro y lleva 12,4 s adentro |
+| `dentro hace 12.4 s` | está adentro, pero no entró durante esta ronda: ya estaba al arrancar, o no hay ronda |
+| `afuera` / `sin cubo` | no está en su zona, o no se lo ve |
+
+**La hora es la de la estadía actual, no la de la primera vez.** Si el cubo
+sale de la zona por el motivo que sea —un rover lo saca, o titila en el borde—
+la hora se borra en ese mismo cuadro y vuelve a cero; al volver a entrar se toma
+de nuevo. Al preparar otra ronda se vacían las de la anterior. El acta guarda
+esa misma hora por cubo, en `entro_en_ronda`.
+
 ---
 
 ## 6. El acta
@@ -181,6 +198,47 @@ cientos—. Si alguna hay que conservar, se archiva a mano.
 | La ronda se cerró sola antes de tiempo | mirá el motivo en el acta: `geometria_perdida` si se perdió la cancha, `reto_cumplido` si se completó |
 | `SIN COORDENADAS` en rojo durante la ronda | tenés los segundos que marca el panel para destapar un marcador |
 | Terminó y no hay acta | la ronda nunca tuvo geometría. El sistema lo dice en consola al cerrar |
+
+---
+
+## Si la sala tiene mucha luz
+
+La exposición de la cámara es **fija** y está declarada en
+`vision/config_vision.json`. Ese número se midió con una luz: en una sala más
+luminosa quema la imagen, y los cubos de acrílico —que reflejan— pierden el color
+justo en la tapa, que es casi todo lo que la cámara ve de ellos. El síntoma es un
+cubo que no aparece, o que queda en ámbar con la edad creciendo.
+
+**El detector se adapta solo a la luz**, hasta donde la imagen lo permite: el
+umbral de color se calcula en cada cuadro contra el propio tablero, y el tinte de
+la luz se le resta al cuadro. Un cubo más oscuro, más claro o con la tapa lavada
+por un reflejo se sigue encontrando. Lo que no tiene arreglo por programa es un
+cubo **quemado**: si el sensor llegó al tope, el color no está en la imagen. Para
+eso está la exposición.
+
+Al arrancar, el sistema **pregunta la exposición**
+junto con la cámara y el perfil. Enter deja la del archivo; un número la cambia
+para esa corrida, sin editar nada. Para no contestar cada vez, o para arrancar
+sin nadie delante, el mismo valor se pasa como opción:
+
+```bash
+.venv/bin/python -m vision.sistema --ventana --exposicion -8
+```
+
+**Más negativo es menos luz.** Con `-6` en el archivo, probá `-7` y `-8`. Al
+arrancar, el sistema dice si la cámara **aceptó** el valor: pedirlo no es lo
+mismo que tenerlo. Sigue siendo exposición fija; esto elige cuál, no la vuelve
+automática.
+
+Para elegir el valor con números y no a ojo, la misma opción existe en el
+diagnóstico de cubos, que dice cuánto de la cancha está quemado:
+
+```bash
+.venv/bin/python -m vision.tools.diagnostico_cubos --exposicion -8
+```
+
+Cuando un valor resulte bueno para la sala de competencia, se escribe en el
+archivo de configuración de **esa** máquina.
 
 ---
 

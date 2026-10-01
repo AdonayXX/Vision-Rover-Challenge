@@ -211,6 +211,102 @@ def correr_modo(cfg, con_perspectiva, umbral_mm, salida, quiere_anotar) -> bool:
     return todo_bien
 
 
+# --------------------------------------------------------------------------
+# La luz
+# --------------------------------------------------------------------------
+
+
+def _ruido_de_camara(imagen, semilla: int = 7, sigma: float = 3.9, tinte=(0.0, 0.0)):
+    """Ruido de color como el de una webcam real, y el tinte de la luz, en Lab.
+
+    El generador dibuja un tablero perfectamente gris, y contra eso cualquier
+    umbral funciona. El `sigma` sale de dos capturas reales del tablero: deja el
+    p95 del croma entre 9 y 10, que es lo que se midió. El ruido va suavizado
+    porque el de la compresión MJPG viene en manchas, no píxel a píxel.
+    """
+    rng = np.random.default_rng(semilla)
+    lab = cv2.cvtColor(imagen, cv2.COLOR_BGR2LAB).astype(np.float32)
+    for canal, corrimiento in ((1, tinte[0]), (2, tinte[1])):
+        ruido = cv2.GaussianBlur(
+            rng.normal(0.0, 1.0, imagen.shape[:2]).astype(np.float32), (0, 0), 1.5)
+        lab[..., canal] += ruido / ruido.std() * sigma + corrimiento
+    return cv2.cvtColor(np.clip(lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+
+
+def _brillo(imagen, ganancia: float):
+    return np.clip(imagen.astype(np.float32) * ganancia, 0, 255).astype(np.uint8)
+
+
+def _tapas_lavadas(imagen, verdad, cuanto: float):
+    """La tapa de cada cubo, mezclada con blanco: lo que hace un reflejo parejo."""
+    salida = imagen.astype(np.float32)
+    for cubo in verdad.cubos:
+        tapa = np.zeros(imagen.shape[:2], np.uint8)
+        cv2.fillConvexPoly(tapa, np.array(cubo.tapa_px, np.float32).astype(np.int32), 1)
+        salida[tapa == 1] = salida[tapa == 1] * (1.0 - cuanto) + 255.0 * cuanto
+    return salida.astype(np.uint8)
+
+
+def verificar_luz(cfg, umbral_mm: float) -> bool:
+    """Los tres cubos, con la luz cambiada. Tienen que seguir estando los tres.
+
+    Es la prueba que faltaba cuando el umbral de croma era un número fijo: en
+    una cancha con mucha luz natural aparecía un cubo u otro, nunca los tres,
+    porque los cubos de acrílico reflejan y la tapa se lava. Cada caso de acá es
+    una forma en que la luz le saca croma a un cubo, sobre un tablero con el
+    ruido de color de una cámara de verdad.
+
+    Lo que NO se le exige: recuperar un cubo quemado del todo. Lo que el sensor
+    recortó no está en la imagen, y eso se arregla con la exposición.
+    """
+    persp = Perspectiva(activa=True,
+                        inclinacion_grados=cfg.sintetico.perspectiva.inclinacion_grados)
+    base, verdad = generar(cfg, rovers=(), perspectiva=persp)
+    marcadores = detectar_marcadores(
+        base, cfg.marcadores_esquina.nombre_diccionario,
+        cfg.deteccion_marcadores.refinamiento_esquinas)
+    sistema = construir_sistema(base, cfg, marcadores)
+    pose = pose_camara(sistema, verdad.camara.matriz)
+    cell = cfg.tablero.cell_mm
+
+    casos = (
+        ("luz normal, tablero con ruido de cámara", _ruido_de_camara(base)),
+        ("poca luz: brillo x0,4", _ruido_de_camara(_brillo(base, 0.4))),
+        ("mucha luz: brillo x2", _ruido_de_camara(_brillo(base, 2.0))),
+        ("reflejo: tapas lavadas al 50 %", _ruido_de_camara(_tapas_lavadas(base, verdad, 0.5))),
+        ("reflejo: tapas lavadas al 70 %", _ruido_de_camara(_tapas_lavadas(base, verdad, 0.7))),
+        ("luz teñida: tablero amarillento", _ruido_de_camara(base, tinte=(0.0, 10.0))),
+        ("luz teñida: tablero azulado", _ruido_de_camara(base, tinte=(2.0, -10.0))),
+    )
+
+    print("=" * 78)
+    print("LA LUZ — los tres cubos, con la iluminación cambiada")
+    print("=" * 78)
+    print("  {:<42} {:>9} {:>10}  {}".format("caso", "cubos", "peor mm", "estado"))
+    print("  " + "-" * 74)
+    todo_bien = True
+    for nombre, imagen in casos:
+        cubos = {c.color: c for c in detectar_cubos(imagen, sistema, cfg, pose)}
+        errores, problemas = [], []
+        for real in verdad.cubos:
+            c = cubos.get(real.color)
+            if c is None:
+                problemas.append("falta {}".format(real.color))
+            elif not c.confiable:
+                problemas.append("{} no confiable".format(real.color))
+            else:
+                errores.append(math.hypot(c.col - real.col, c.row - real.row) * cell)
+        peor = max(errores) if errores else float("nan")
+        if errores and peor > umbral_mm:
+            problemas.append("fuera de umbral")
+        todo_bien = todo_bien and not problemas
+        print("  {:<42} {:>9} {:>10.2f}  {}".format(
+            nombre, "{} de {}".format(len(errores), len(verdad.cubos)), peor,
+            "OK" if not problemas else "FALLA: " + ", ".join(problemas)))
+    print("\n  resultado: {}\n".format("TODO OK" if todo_bien else "HAY CASOS QUE FALLAN"))
+    return todo_bien
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Verifica la detección de cubos contra la verdad del generador sintético."
@@ -233,6 +329,7 @@ def main(argv: list[str] | None = None) -> int:
             sufijo = "_perspectiva" if con_persp else "_cenital"
             salida = "{}{}{}{}".format(base or salida, sufijo, punto, ext) if punto else salida + sufijo
         resultados.append(correr_modo(cfg, con_persp, args.umbral_mm, salida, args.anotar))
+    resultados.append(verificar_luz(cfg, args.umbral_mm))
 
     print("=" * 78)
     print("RESULTADO GENERAL: {}".format("TODO OK" if all(resultados) else "HAY FALLAS"))
