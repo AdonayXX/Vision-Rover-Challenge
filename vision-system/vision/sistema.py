@@ -790,16 +790,13 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 70)
     print("SISTEMA DE VISIÓN — Vision-Rover-Challenge · protocolo v{}".format(VERSION_PROTOCOLO))
     print("Entrada: {}".format(descripcion))
-<<<<<<< HEAD
     print("[vision] detector={} (subpixel en resolucion original)".format(
         "ArUco3 con respaldo clasico" if cfg.deteccion_marcadores.usar_aruco3 else "clasico"))
-=======
     if not args.sintetico:
         print("Exposición: {:g} ({})".format(
             cfg.camara.exposicion.valor,
             "elegida al arrancar" if args.exposicion is not None
             else "la del archivo de configuración"))
->>>>>>> upstream/main
     if args.sintetico:
         print("")
         print("  ##################################################################")
