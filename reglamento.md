@@ -340,6 +340,8 @@ A partir del cambio del sistema oficial de visión al estado `READY`, los rovers
 
 12.2.12. Continuar operando de forma razonable cuando un objeto quede temporalmente oculto y la telemetría conserve su última posición conocida.
 
+12.2.13. Durante cada intento, ambos rovers deberán participar en el transporte de objetos. Para completar válidamente los tres cubos, cada rover deberá haber transportado o empujado al menos un cubo hacia su zona de acopio.
+
 12.3. La orientación de los cubos no forma parte de la información requerida para completar la tarea.
 
 12.4. La posición y el color son suficientes para identificar cada cubo dentro del contrato de telemetría.
