@@ -665,33 +665,23 @@ A partir del cambio del sistema oficial de visión al estado `READY`, los rovers
 
 ---
 
-## 26. Penalizaciones y descalificación
+## 26. Descalificación
 
-26.1. Podrán aplicarse penalizaciones por:
+26.1. Serán causas de descalificación:
 
-26.1.1. Intervención manual durante el intento.
+26.1.1. Modificar física o electrónicamente un robot.
 
-26.1.2. Salida de un rover de la superficie de competencia.
+26.1.2. Agregar o sustituir componentes.
 
-26.1.3. Incumplimiento de las condiciones de autonomía.
+26.1.3. Cambiar el microcontrolador o la tarjeta principal.
 
-26.1.4. Incumplimiento de las condiciones de inicio o ejecución definidas por la organización.
+26.1.4. Utilizar una plataforma robótica diferente.
 
-26.2. Serán causas de descalificación:
+26.1.5. Controlar manualmente los robots durante la ejecución.
 
-26.2.1. Modificar física o electrónicamente un robot.
+26.1.6. Utilizar una computadora, teléfono, servicio en la nube u otro sistema externo para tomar decisiones o controlar los rovers durante un intento.
 
-26.2.2. Agregar o sustituir componentes.
-
-26.2.3. Cambiar el microcontrolador o la tarjeta principal.
-
-26.2.4. Utilizar una plataforma robótica diferente.
-
-26.2.5. Controlar manualmente los robots durante la ejecución.
-
-26.2.6. Utilizar una computadora, teléfono, servicio en la nube u otro sistema externo para tomar decisiones o controlar los rovers durante un intento.
-
-26.2.7. Incumplir las condiciones técnicas establecidas por la organización.
+26.1.7. Incumplir las condiciones técnicas establecidas por la organización.
 
 ---
 
