@@ -12,6 +12,7 @@ from control_movimiento import MotionController, calibrate_drift
 from sesion_comandos import CommandSession, would_block
 from wifi_config import obtener_credenciales_wifi
 import registro_fallos
+from cliente_vision_rover import ClienteVision
 
 
 def _nada():
@@ -79,6 +80,15 @@ def activar_watchdog(segundos):
     except Exception as error:
         print("AVISO: watchdog de placa no disponible:", error)
         return _nada
+
+
+def memoria_libre():
+    try:
+        import gc
+        gc.collect()
+        return gc.mem_free()
+    except (ImportError, AttributeError):
+        return None
 
 
 def motivo_reinicio():
@@ -187,10 +197,15 @@ def main(config_path="config_robot.json"):
     fallos_previos = registro_fallos.leer()
     registro_fallos.borrar()
 
+    vision = []  # se rellena al tener red; info() lo lee por referencia
+
     def info():
-        return {"reset_reason": reinicio,
-                "uptime_s": round(time.monotonic() - arranque, 1),
-                "fallos": dict(fallos_previos, **registro_fallos.leer())}
+        datos = {"reset_reason": reinicio,
+                 "uptime_s": round(time.monotonic() - arranque, 1),
+                 "fallos": dict(fallos_previos, **registro_fallos.leer())}
+        if vision:
+            datos["vision"] = vision[0].estadisticas(memoria_libre())
+        return datos
 
     controller = MotionController(robot)
 
@@ -298,12 +313,33 @@ def main(config_path="config_robot.json"):
         revisado = -1e9
         alimentar = activar_watchdog(15)
 
+        # Paso 1 del rover autonomo: leer la vision oficial desde la placa.
+        # Solo mide; todavia no decide movimiento con lo que lee.
+        if config.get("vision_host"):
+            vision.append(ClienteVision(pool, config["vision_host"],
+                                        config.get("vision_port", 2026)))
+            print("Vision:", config["vision_host"], config.get("vision_port", 2026))
+        informe = [time.monotonic() + 10]
+
+        def tick():
+            alimentar()
+            if not vision:
+                return
+            try:
+                vision[0].poll(puede_bloquear=controller.mode is None)
+            except Exception as error:
+                print("Error vision:", error)
+            if time.monotonic() >= informe[0]:
+                informe[0] = time.monotonic() + 10
+                print("Vision:", vision[0].estadisticas(memoria_libre()))
+                vision[0].reiniciar_estadisticas()
+
         # ---------------------------------
         # Esperar clientes
         # ---------------------------------
 
         while True:
-            alimentar()
+            tick()
             if pending is None:
                 controller.stop(
                     "esperando_cliente"
@@ -348,7 +384,7 @@ def main(config_path="config_robot.json"):
                     sensors=sensors,
                     server=server,
                     red_ok=red_ok,
-                    alimentar=alimentar,
+                    alimentar=tick,
                     info=info
                 )
 

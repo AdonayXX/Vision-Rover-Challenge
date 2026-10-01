@@ -27,6 +27,8 @@ DEFAULT_FILES = [
     os.path.join(CODE_DIR, "ideaboard.py"),
     os.path.join(CODE_DIR, "registro_fallos.py"),
     os.path.join(CODE_DIR, "safemode.py"),
+    os.path.join(CODE_DIR, "cliente_vision_rover.py"),
+    os.path.join(CODE_DIR, "telemetria.py"),
 ]
 
 
