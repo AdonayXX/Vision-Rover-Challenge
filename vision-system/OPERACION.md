@@ -201,6 +201,40 @@ cientos—. Si alguna hay que conservar, se archiva a mano.
 
 ---
 
+## Si la sala tiene mucha luz
+
+La exposición de la cámara es **fija** y está declarada en
+`vision/config_vision.json`. Ese número se midió con una luz: en una sala más
+luminosa quema la imagen, y los cubos de acrílico —que reflejan— pierden el color
+justo en la tapa, que es casi todo lo que la cámara ve de ellos. El síntoma es un
+cubo que no aparece, o que queda en ámbar con la edad creciendo.
+
+Al arrancar, el sistema **pregunta la exposición**
+junto con la cámara y el perfil. Enter deja la del archivo; un número la cambia
+para esa corrida, sin editar nada. Para no contestar cada vez, o para arrancar
+sin nadie delante, el mismo valor se pasa como opción:
+
+```bash
+.venv/bin/python -m vision.sistema --ventana --exposicion -8
+```
+
+**Más negativo es menos luz.** Con `-6` en el archivo, probá `-7` y `-8`. Al
+arrancar, el sistema dice si la cámara **aceptó** el valor: pedirlo no es lo
+mismo que tenerlo. Sigue siendo exposición fija; esto elige cuál, no la vuelve
+automática.
+
+Para elegir el valor con números y no a ojo, la misma opción existe en el
+diagnóstico de cubos, que dice cuánto de la cancha está quemado:
+
+```bash
+.venv/bin/python -m vision.tools.diagnostico_cubos --exposicion -8
+```
+
+Cuando un valor resulte bueno para la sala de competencia, se escribe en el
+archivo de configuración de **esa** máquina.
+
+---
+
 ## Dos cosas que el sistema no deja hacer, a propósito
 
 - **Arrancar en `RUNNING`.** `--fase` solo acepta `IDLE` y `READY`. Una ronda sin

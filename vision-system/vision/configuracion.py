@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import cv2
@@ -1142,6 +1142,23 @@ def _revisar_zonas(cfg: ConfigVision) -> str | None:
                 cfg.ronda.duracion_ms, cfg.conteo_acopio.permanencia_minima_ms)
         )
     return None
+
+
+def con_exposicion(cfg: ConfigVision, valor: float) -> ConfigVision:
+    """Devuelve la configuración con OTRA exposición de cámara, sin tocar el archivo.
+
+    Es lo que usa `--exposicion` al arrancar. La exposición declarada en el JSON
+    se midió con una luz; en otra sala, con más luz, el mismo número quema la
+    imagen y lava el color de los cubos. Poder pisarla desde la línea de comandos
+    deja probar valores en la cancha sin editar un archivo versionado, que es
+    como un número de una sala termina commiteado para todas.
+
+    La exposición sigue siendo **fija**: esto elige *cuál* valor fijo, no la pasa
+    a automático. Por eso fuerza `fijar` en verdadero aunque el archivo dijera
+    otra cosa. La configuración es inmutable, así que se devuelve una nueva.
+    """
+    exposicion = replace(cfg.camara.exposicion, fijar=True, valor=float(valor))
+    return replace(cfg, camara=replace(cfg.camara, exposicion=exposicion))
 
 
 def avisos_config(cfg: ConfigVision) -> list[str]:
