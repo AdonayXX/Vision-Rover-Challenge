@@ -45,7 +45,9 @@ import threading
 import time
 
 try:  # como paquete
-    from .configuracion import CONFIG_POR_DEFECTO, ConfigVision, avisos_config, cargar_config
+    from .configuracion import (
+        CONFIG_POR_DEFECTO, ConfigVision, avisos_config, cargar_config, con_exposicion,
+    )
     from .detectors.cubos import detectar_cubos
     from .detectors.rovers import detectar_rovers
     from .geometry.coordenadas import (
@@ -67,7 +69,7 @@ try:  # como paquete
     from .sources.generador_sintetico import FuenteSintetica
 except ImportError:  # como script suelto
     from vision.configuracion import (  # type: ignore[no-redef]
-        CONFIG_POR_DEFECTO, ConfigVision, avisos_config, cargar_config,
+        CONFIG_POR_DEFECTO, ConfigVision, avisos_config, cargar_config, con_exposicion,
     )
     from vision.detectors.cubos import detectar_cubos  # type: ignore[no-redef]
     from vision.detectors.rovers import detectar_rovers  # type: ignore[no-redef]
@@ -505,6 +507,37 @@ class Arbitro:
         )
 
 
+def preguntar_exposicion(cfg: ConfigVision) -> float | None:
+    """Pregunta con qué exposición arrancar. Devuelve `None` si se deja la del archivo.
+
+    Va junto a las otras dos preguntas del arranque —qué cámara y qué perfil—
+    porque es la tercera cosa que cambia de una sala a otra: la exposición del
+    archivo se midió con una luz, y con más luz quema la imagen y lava el color
+    de los cubos. Enter conserva la del archivo, así que quien no tiene el
+    problema no tiene que saber nada.
+
+    Se pregunta ANTES de abrir la cámara, porque la exposición se fija al
+    abrirla. Y solo si hay alguien para contestar: sin terminal no se pregunta
+    nada y vale la del archivo, o la de `--exposicion`.
+    """
+    actual = cfg.camara.exposicion.valor
+    print("\n  Exposición de la cámara (fija). Más negativo = menos luz.")
+    print("  En el archivo de configuración: {:g}. Si la sala tiene mucha luz o los".format(actual))
+    print("  cubos brillan, probá {:g} o {:g}.".format(actual - 1, actual - 2))
+    while True:
+        try:
+            respuesta = input("  Exposición [Enter = {:g}]: ".format(actual)).strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return None
+        if not respuesta:
+            return None
+        try:
+            return float(respuesta.replace(",", "."))
+        except ValueError:
+            print("  Valor inválido: tiene que ser un número, por ejemplo -7.")
+
+
 def abrir_fuente(cfg: ConfigVision, args):
     """Devuelve `(fuente, descripción)`. Cámara por defecto; sintético si se pide.
 
@@ -524,6 +557,20 @@ def abrir_fuente(cfg: ConfigVision, args):
         camara.cerrar()
         raise ErrorCamara("la cámara no entregó imágenes")
     alto, ancho = primero.imagen.shape[:2]
+
+    if getattr(args, "exposicion", None) is not None:
+        # Pedir un valor no es lo mismo que tenerlo: hay cámaras y sistemas que
+        # dicen que sí y lo ignoran. Se muestra lo que la cámara contestó.
+        informe = next((i for i in camara.informes if i.nombre == "exposición"), None)
+        if informe is None:
+            print("  ⚠ Exposición pedida: {:g}, pero la cámara no informó nada.".format(
+                args.exposicion))
+        else:
+            print("  Exposición pedida: {:g} → {} (la cámara "
+                  "quedó en {:g})".format(args.exposicion, informe.veredicto, informe.despues))
+            if informe.veredicto != "ACEPTADO":
+                print("  ⚠ La cámara NO tomó ese valor. En macOS es lo esperable: no deja "
+                      "tocar la exposición por esta vía. La prueba que vale es en Windows.")
 
     perfil = elegir_perfil(cfg.calibracion, BASE_VISION, ancho, alto,
                            nombre=args.camara, interactivo=sys.stdin.isatty())
@@ -674,6 +721,11 @@ def main(argv: list[str] | None = None) -> int:
                              "preparación produce una ronda que parece válida y no lo es")
     parser.add_argument("--duracion", type=float, default=0.0,
                         help="segundos a correr; 0 = hasta 'quit' o Ctrl-C")
+    parser.add_argument("--exposicion", type=float, default=None,
+                        help="exposición FIJA de la cámara para esta corrida, en lugar de "
+                             "la del archivo de configuración. Más negativo = menos luz: "
+                             "con -6 en el archivo, probar -7 o -8 si la sala es muy "
+                             "luminosa. No la vuelve automática")
     parser.add_argument("--ventana", action="store_true",
                         help="abrir la vista en vivo: la imagen con lo detectado encima")
     parser.add_argument("--ventana-hz", type=float, default=12.0,
@@ -681,6 +733,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     cfg = cargar_config(args.config)
+    if args.exposicion is None and not args.sintetico and sys.stdin and sys.stdin.isatty():
+        # Sin `--exposicion` y con alguien delante, se pregunta. El valor queda en
+        # `args` para que el resto del arranque lo trate igual que al de la opción.
+        args.exposicion = preguntar_exposicion(cfg)
+    if args.exposicion is not None:
+        if args.sintetico:
+            print("[aviso] --exposicion no tiene efecto con --sintetico: no hay cámara.")
+        cfg = con_exposicion(cfg, args.exposicion)
     try:
         fuente, descripcion, perfil_info = abrir_fuente(cfg, args)
     except (ErrorCamara, ErrorCalibracion) as exc:
@@ -718,6 +778,11 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 70)
     print("SISTEMA DE VISIÓN — Vision-Rover-Challenge · protocolo v{}".format(VERSION_PROTOCOLO))
     print("Entrada: {}".format(descripcion))
+    if not args.sintetico:
+        print("Exposición: {:g} ({})".format(
+            cfg.camara.exposicion.valor,
+            "elegida al arrancar" if args.exposicion is not None
+            else "la del archivo de configuración"))
     if args.sintetico:
         print("")
         print("  ##################################################################")

@@ -594,6 +594,7 @@ poder compararlos con los de otro día.
 | La calibración da **MALA** y el patrón está plano | Poca variedad de vistas | Repetí cubriendo las nueve zonas y las cuatro inclinaciones |
 | A la derecha se ve **peor** que a la izquierda | Cargaste el perfil de otra cámara | Poné tu nombre exacto en `--camara` |
 | `faltan marcadores de esquina` | Uno tapado, cortado o mal iluminado | Ver [`MONTAJE.md`](MONTAJE.md), sección 2 |
+| Un cubo no aparece, o queda ámbar con la edad creciendo lejos de donde está | Mucha luz o un reflejo sobre el cubo: el color se lava y la mancha no alcanza | Corré `python -m vision.tools.diagnostico_cubos`: dice en qué compuerta se cae cada cubo y guarda el cuadro crudo. Una foto de la pantalla no sirve para diagnosticar |
 | **No me deja preparar la ronda** (apretás `r` y no pasa nada) | O no se ven las coordenadas, o el perfil cargado no es el de esta cámara | El panel dice cuál de las dos. Ver [`OPERACION.md`](OPERACION.md), sección 4 |
 
 **Regla general:** si un paso no da lo que este manual dice que tiene que dar,

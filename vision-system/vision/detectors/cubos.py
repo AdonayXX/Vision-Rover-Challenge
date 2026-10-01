@@ -61,6 +61,16 @@ El costo del ajuste es **robusto**: se queda con la fracción de puntos que mejo
 encaja y descarta el resto. Cuando un rover tapa parte del cubo, el borde de la
 mancha por ese lado no es el borde del cubo sino el del chasis, y esos puntos
 tirarían del ajuste hacia un lugar equivocado.
+
+Lo que se descarta, se puede preguntar
+--------------------------------------
+Una mancha coloreada puede caerse en tres compuertas —el tamaño, el matiz y el
+residuo del ajuste— y desde afuera las tres se ven igual: el cubo no aparece, o
+aparece viejo. `detectar_cubos` acepta una lista opcional donde deja anotado
+**qué descartó y por qué**. No cambia nada de lo que detecta: es la misma regla
+que rige para los marcadores, donde un filtro mudo que empieza a rechazar
+objetos de verdad es indistinguible de una cámara que dejó de verlos. La lee
+`tools/diagnostico_cubos.py`.
 """
 
 from __future__ import annotations
@@ -107,6 +117,31 @@ class CuboDetectado:
     area_px: int
     ocluido: bool
     confiable: bool
+
+
+@dataclass(frozen=True, slots=True)
+class RechazoCubo:
+    """Una mancha coloreada que NO llegó a ser cubo, y en qué compuerta se cayó.
+
+    `motivo` es uno de: `area_chica`, `area_grande`, `matiz` (no es ninguno de
+    los tres colores, o es amarillo) o `duplicado` (había otra mancha más grande
+    del mismo color). `area_relativa` va medida contra la cara de un cubo, igual
+    que los umbrales de la configuración, para que el número se compare directo.
+    """
+
+    motivo: str
+    centro_px: tuple[float, float]
+    area_relativa: float
+    matiz_grados: float
+    croma: float
+    color: str | None
+
+
+#: Por debajo de esta fracción de la cara de un cubo, una mancha no se anota como
+#: rechazo. NO es un umbral de detección —esos están en la configuración—: es
+#: solo para que el listado de diagnóstico no se llene de motas de ruido de
+#: unos pocos píxeles, que nunca fueron candidatas a nada.
+_RECHAZO_MINIMO_RELATIVO = 0.03
 
 
 # --------------------------------------------------------------------------
@@ -273,6 +308,7 @@ def detectar_cubos(
     sistema: SistemaCoordenadas,
     cfg: ConfigVision,
     pose_de_camara: PoseCamara,
+    rechazos: list[RechazoCubo] | None = None,
 ) -> tuple[CuboDetectado, ...]:
     """Encuentra los cubos de un cuadro y devuelve dónde apoya cada uno.
 
@@ -286,6 +322,9 @@ def detectar_cubos(
 
     Devuelve la tupla ordenada por color para que dos corridas den lo mismo. Eso
     **no** habilita a indexar por posición: hay que buscar por `color`.
+
+    Si se pasa `rechazos`, se le agrega un `RechazoCubo` por cada mancha
+    descartada. Con `None` —el caso de la ronda— no se calcula nada de más.
     """
     dc = cfg.deteccion_cubos
     lado_celdas = cfg.elementos.cubos.lado_mm / cfg.tablero.cell_mm
@@ -293,23 +332,38 @@ def detectar_cubos(
     factor = pose_de_camara.factor_paralaje(cfg.elementos.cubos.lado_mm)
 
     mascara, lab = mascara_de_color(imagen_bgr, cfg)
-    cantidad, etiquetas, stats, _ = cv2.connectedComponentsWithStats(mascara, 8)
+    cantidad, etiquetas, stats, centros = cv2.connectedComponentsWithStats(mascara, 8)
 
     # Área de referencia: la que ocuparía la cara de un cubo en esta imagen.
     esquina = np.array([[0.0, 0.0], [lado_celdas, 0.0]], dtype=np.float64)
     px = sistema.a_pixeles(esquina)
     area_cara = max(1.0, float(np.hypot(px[1, 0] - px[0, 0], px[1, 1] - px[0, 1])) ** 2)
 
+    def anotar(motivo: str, etiqueta: int, area: int, matiz: float, croma: float,
+               color: str | None) -> None:
+        rechazos.append(RechazoCubo(
+            motivo=motivo,
+            centro_px=(float(centros[etiqueta][0]), float(centros[etiqueta][1])),
+            area_relativa=area / area_cara, matiz_grados=matiz, croma=croma, color=color))
+
     candidatos: dict[str, CuboDetectado] = {}
+    etiqueta_de: dict[str, int] = {}
     for etiqueta in range(1, cantidad):
         area = int(stats[etiqueta, cv2.CC_STAT_AREA])
         if not (area_cara * dc.area_minima_relativa <= area <= area_cara * dc.area_maxima_relativa):
+            if rechazos is not None and area >= area_cara * _RECHAZO_MINIMO_RELATIVO:
+                region = (etiquetas == etiqueta).astype(np.uint8)
+                matiz, croma = matiz_y_croma(cv2.mean(lab, mask=region)[:3])
+                anotar("area_chica" if area < area_cara * dc.area_minima_relativa
+                       else "area_grande", etiqueta, area, matiz, croma, clasificar(matiz, cfg))
             continue
 
         region = (etiquetas == etiqueta).astype(np.uint8)
         matiz, croma = matiz_y_croma(cv2.mean(lab, mask=region)[:3])
         color = clasificar(matiz, cfg)
         if color is None:
+            if rechazos is not None:
+                anotar("matiz", etiqueta, area, matiz, croma, None)
             continue
 
         contornos, _ = cv2.findContours(region, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
@@ -333,7 +387,14 @@ def detectar_cubos(
             confiable=residuo <= dc.residuo_maximo_celdas,
         )
         anterior = candidatos.get(color)
-        if anterior is None or cubo.area_px > anterior.area_px:
+        gana = anterior is None or cubo.area_px > anterior.area_px
+        if rechazos is not None and anterior is not None:
+            # La que pierde es un reflejo o un objeto ajeno; se anota cuál fue.
+            perdedora = etiqueta_de[color] if gana else etiqueta
+            anotar("duplicado", perdedora, int(stats[perdedora, cv2.CC_STAT_AREA]),
+                   matiz, croma, color)
+        if gana:
             candidatos[color] = cubo
+            etiqueta_de[color] = etiqueta
 
     return tuple(candidatos[c] for c in sorted(candidatos))
