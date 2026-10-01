@@ -253,6 +253,62 @@ class ControlTests(unittest.TestCase):
         self.assertTrue(sock.closed)
         self.assert_stopped()
 
+    def test_new_client_replaces_ghost_session(self):
+        class Server:
+            def __init__(self):
+                self.waiting = [OSError(11, "nadie"), ("nuevo", ("10.0.0.2", 1))]
+
+            def accept(self):
+                item = self.waiting.pop(0)
+                if isinstance(item, Exception):
+                    raise item
+                return item
+        ghost = Socket([b"MOTOR|.5|.5\n"])
+        replacement = serve_client(ghost, self.control, clock=self.clock,
+                                   sleep=self.clock.advance, server=Server())
+        self.assertEqual(replacement[0], "nuevo")
+        self.assertTrue(ghost.closed)
+        self.assert_stopped()
+
+    def test_lost_wifi_ends_session_and_stops(self):
+        sock = Socket([b"MOTOR|.5|.5\n"])
+        with self.assertRaises(ConnectionError):
+            serve_client(sock, self.control, clock=self.clock,
+                         sleep=lambda s: self.clock.advance(.5), red_ok=lambda: False)
+        self.assertTrue(sock.closed)
+        self.assert_stopped()
+
+    def test_sensors_reply_includes_reset_reason(self):
+        session = CommandSession(self.control, clock=self.clock,
+                                 info=lambda: {"reset_reason": "BROWNOUT", "uptime_s": 4.2})
+        sock = Socket([b"SENSORS\n"])
+        session.poll(sock)
+        self.assertIn(b'"reset_reason": "BROWNOUT"', sock.sent)
+
+    def test_failure_log_survives_in_nvm(self):
+        import registro_fallos
+        nvm = bytearray(8192)
+        self.assertEqual(registro_fallos.leer(nvm), {})
+        registro_fallos.guardar("modo_seguro", "BROWNOUT", nvm)
+        registro_fallos.guardar("sesion", "OSError: " + "x" * 500, nvm)
+        datos = registro_fallos.leer(nvm)
+        self.assertEqual(datos["modo_seguro"], "BROWNOUT")
+        self.assertEqual(len(datos["sesion"]), 120)
+        registro_fallos.borrar(nvm)
+        self.assertEqual(registro_fallos.leer(nvm), {})
+
+    def test_motor_ramp_limits_inrush_and_stop_is_instant(self):
+        control = MotionController(self.robot, self.sensor, clock=self.clock, ramp_seconds=.05)
+        control.start_motor(.4, .4)
+        self.clock.advance(.025)
+        control.update()
+        self.assertAlmostEqual(self.robot.motor_1.throttle, .2)
+        self.clock.advance(.05)
+        control.update()
+        self.assertAlmostEqual(self.robot.motor_1.throttle, .4)
+        control.stop()
+        self.assertEqual(self.robot.motor_1.throttle, 0)
+
     def test_repeated_error_updates_message_and_clear_on_recovery(self):
         state = RobotState(10)
         state.error("A", "primero")

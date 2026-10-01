@@ -48,10 +48,10 @@ def clasificar_color(signature, profiles, tolerance=.15, margin=.04):
 
 
 def validar_config(cfg):
-    if type(cfg.get("diagnostic_only", False)) is not bool or type(cfg["ultrasonic"].get("allow_unverified_echo_diagnostic", False)) is not bool:
-        raise ValueError("Opciones de diagnostico deben ser booleanos")
-    if type(cfg.get("enabled")) is not bool or type(cfg["ultrasonic"].get("echo_3v3_confirmed")) is not bool:
-        raise ValueError("enabled y echo_3v3_confirmed deben ser booleanos")
+    if type(cfg.get("diagnostic_only", False)) is not bool:
+        raise ValueError("diagnostic_only debe ser booleano")
+    if type(cfg.get("enabled")) is not bool:
+        raise ValueError("enabled debe ser booleano")
     if cfg["ir"]["pins"] != ["IO36", "IO39", "IO34", "IO35"]:
         raise ValueError("IR requiere el cableado declarado IO36/IO39/IO34/IO35")
     if cfg["ultrasonic"]["trigger"] != "IO25" or cfg["ultrasonic"]["echo"] != "IO26":
@@ -64,6 +64,10 @@ def validar_config(cfg):
             raise ValueError("Parametro de sensores invalido: " + key)
     positivo(cfg, "max_age_ms", 1000)
     positivo(cfg["ultrasonic"], "stop_mm", 1000)
+    if not isinstance(cfg["ultrasonic"].get("blocks_motion", True), bool):
+        raise ValueError("ultrasonic.blocks_motion debe ser true o false")
+    positivo(cfg["ultrasonic"], "timeout_ms", 1000)
+    positivo(cfg["ultrasonic"], "ping_interval_ms", 1000)
     positivo(cfg["color"], "settle_seconds", .5)
     brightness = cfg["color"].get("brightness", 1)
     if isinstance(brightness, bool) or not isinstance(brightness, (float, int)) or not math.isfinite(brightness) or not 0 < brightness <= 1:
@@ -111,6 +115,7 @@ class SensoresRover:
         self.hw, self.cfg, self.clock = hardware, cfg, clock
         self.distance, self.ir, self.raw, self.signature, self.color = None, None, None, None, None
         self.distance_at = self.ir_at = self.color_at = None
+        self.invalid_echoes = 0
         self.errors = dict(hardware.errors)
         self.next_ir = self.next_color = 0
         self.phase = 0
@@ -119,6 +124,7 @@ class SensoresRover:
         self.sweeps = []
         self.sweep_signatures = []
         self.color_seq = 0
+        self.scan_started_at = self.color_started_at = None
         self.scanning = False
 
     def _set_pixel(self, color):
@@ -168,12 +174,20 @@ class SensoresRover:
                 ready, distance = self.hw.sonar.poll()
                 if ready:
                     if distance is None or not math.isfinite(distance) or not 20 <= distance <= 4000:
-                        self.distance = None
-                        self.errors["ultrasonic"] = "sin_eco_valido"
+                        self.invalid_echoes += 1
+                        # Un timeout aislado entre ecos coherentes no invalida
+                        # de inmediato la ultima distancia. Dos consecutivos
+                        # si bloquean; sin una lectura previa, bloquear desde
+                        # el primero. La antiguedad sigue limitando el permiso.
+                        if self.distance_at is None or self.invalid_echoes >= 2:
+                            self.distance = None
+                            self.errors["ultrasonic"] = "sin_eco_valido"
                     else:
+                        self.invalid_echoes = 0
                         self.distance, self.distance_at = distance, self.clock()
                         self.errors.pop("ultrasonic", None)
             except Exception as exc:
+                self.invalid_echoes = 2
                 self.distance = None
                 self.errors["ultrasonic"] = str(exc)
         if self.hw.ir is not None and now >= self.next_ir:
@@ -199,8 +213,11 @@ class SensoresRover:
                 self.sweep_signatures = []
                 self.color = self.signature = self.raw = None
                 self.color_at = None
+                self.scan_started_at = self.color_started_at = None
                 return
             if not self.scanning:
+                if not self.sweeps:
+                    self.scan_started_at = self.clock()
                 self._set_pixel((0, 0, 0))
                 self.phase, self.samples, self.scanning = 0, [], True
                 self.phase_samples = []
@@ -227,6 +244,7 @@ class SensoresRover:
                     self.raw, self.signature = self._consolidate_sweeps()
                     self.color = self._vote_color()
                     self.color_at = self.clock()
+                    self.color_started_at = self.scan_started_at
                     self.color_seq += 1
                     self.sweeps = []
                 self.scanning = False
@@ -242,6 +260,7 @@ class SensoresRover:
             self.phase_samples = []
             self.sweeps = []
             self.sweep_signatures = []
+            self.color_at = self.color_started_at = self.scan_started_at = None
             self.errors["color"] = str(exc)
             self._set_pixel((0, 0, 0))
 
@@ -252,9 +271,10 @@ class SensoresRover:
         if left == 0 and right == 0:
             return None
         if self.motion_inhibited:
-            return "diagnostico_sin_motores" if self.cfg.get("diagnostic_only") else "echo_electrico_sin_verificar"
-        if self.errors:
-            return "sensores_no_listos: " + ", ".join(sorted(self.errors))
+            return "diagnostico_sin_motores"
+        errors = self._blocking_errors()
+        if errors:
+            return "sensores_no_listos: " + ", ".join(sorted(errors))
         limit = self.cfg["max_age_ms"]
         if self.ir is None or self.age(self.ir_at) >= limit:
             return "ir_sin_datos_frescos"
@@ -262,7 +282,7 @@ class SensoresRover:
         if ranges is not None and any(not lo <= v <= hi for v, (lo, hi) in zip(self.ir, ranges)):
             return "ir_fuera_del_suelo_calibrado"
         # La sonda frontal no protege la parte trasera ni los lados.
-        if left + right > 0:
+        if left + right > 0 and self.sonar_blocks:
             if self.distance is None or self.age(self.distance_at) >= limit:
                 return "ultrasonido_sin_datos_frescos"
             if self.distance <= self.cfg["ultrasonic"]["stop_mm"]:
@@ -271,13 +291,22 @@ class SensoresRover:
 
     @property
     def motion_inhibited(self):
-        return (self.cfg.get("diagnostic_only", False) or
-                self.cfg["ultrasonic"].get("echo_3v3_confirmed") is not True)
+        return self.cfg.get("diagnostic_only", False)
+
+    @property
+    def sonar_blocks(self):
+        # false: el ultrasonido solo informa distancia. Empujando, el cubo
+        # queda a <20 mm, donde el HC-SR04 no mide y bloquearia el empuje.
+        return self.cfg["ultrasonic"].get("blocks_motion", True)
+
+    def _blocking_errors(self):
+        if self.sonar_blocks:
+            return dict(self.errors)
+        return {k: v for k, v in self.errors.items() if k != "ultrasonic"}
 
     def snapshot(self):
         return {"v": 1, "enabled": True, "distance_mm": self.distance,
                 "diagnostic_only": self.cfg.get("diagnostic_only", False),
-                "echo_3v3_confirmed": self.cfg["ultrasonic"].get("echo_3v3_confirmed", False),
                 "warnings": list(getattr(self.hw, "warnings", [])),
                 "distance_age_ms": self.age(self.distance_at), "ir": self.ir,
                 "ir_age_ms": self.age(self.ir_at),
@@ -285,6 +314,10 @@ class SensoresRover:
                 "color_raw": self.raw, "color_signature": self.signature,
                 "color_sweep_signatures": self.sweep_signatures,
                 "color": self.color, "color_age_ms": self.age(self.color_at),
+                "color_started_age_ms": self.age(self.color_started_at),
                 "color_seq": self.color_seq,
                 "color_calibrated": perfiles_completos(self.cfg["color"]["profiles"]),
-                "stop_mm": self.cfg["ultrasonic"]["stop_mm"], "errors": dict(self.errors)}
+                "stop_mm": self.cfg["ultrasonic"]["stop_mm"],
+                "ultrasonic_blocks": self.sonar_blocks,
+                "ultrasonic_error": self.errors.get("ultrasonic"),
+                "errors": self._blocking_errors()}

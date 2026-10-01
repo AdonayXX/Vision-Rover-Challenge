@@ -23,10 +23,6 @@ from test_control import Clock, Robot, Socket
 class SensorTests(unittest.TestCase):
     def setUp(self):
         self.cfg = json.loads((BASE / "codigos/config_sensores.json").read_text())
-        # El hardware simulado sí está verificado. La configuración real sigue
-        # en diagnóstico y NO se habilita como efecto secundario de las pruebas.
-        self.cfg["diagnostic_only"] = False
-        self.cfg["ultrasonic"]["echo_3v3_confirmed"] = True
         self.clock, self.robot = Clock(), Robot()
         self.hw = SimpleNamespace(errors={}, sonar=Mock(),
                                   ir=[SimpleNamespace(value=12000) for _ in range(4)],
@@ -55,26 +51,62 @@ class SensorTests(unittest.TestCase):
         self.assertIsNotNone(self.sensors.reason(.2, .2))
 
     def test_obstacle_stops_locally_without_new_pc_command(self):
+        self.cfg["ultrasonic"]["blocks_motion"] = True
         self.assertTrue(self.session.process_command("MOTOR|.2|.2"))
         self.session.tick()
         self.assertGreater(self.robot.motor_1.throttle, 0)
-        self.hw.sonar.poll.return_value = (True, 50)
+        self.hw.sonar.poll.return_value = (True, self.cfg["ultrasonic"]["stop_mm"] - 1)
         self.clock.advance(.05)
         self.session.tick()
         self.assertEqual(self.controller.reason, "obstaculo_frontal")
         self.assertEqual((self.robot.motor_1.throttle, self.robot.motor_2.throttle), (0, 0))
 
     def test_obstacle_rejects_new_forward_command(self):
-        self.hw.sonar.poll.return_value = (True, 30)
+        self.cfg["ultrasonic"]["blocks_motion"] = True
+        self.hw.sonar.poll.return_value = (True, self.cfg["ultrasonic"]["stop_mm"] - 1)
         self.assertFalse(self.session.process_command("MOTOR|.2|.2"))
         self.assertIsNone(self.controller.mode)
 
-    def test_echo_timeout_is_not_infinite_clear_distance(self):
+    def test_one_isolated_echo_timeout_keeps_last_fresh_distance(self):
         self.sensors.update()
         self.hw.sonar.poll.return_value = (True, None)
         self.sensors.update()
+        self.assertEqual(self.sensors.snapshot()["distance_mm"], 250)
+        self.assertNotIn("ultrasonic", self.sensors.errors)
+
+    def test_non_blocking_sonar_allows_push_with_cube_too_close(self):
+        self.cfg["ultrasonic"]["blocks_motion"] = False
+        self.hw.sonar.poll.return_value = (True, None)  # cubo a <20 mm
+        self.sensors.update()
+        self.sensors.update()
+        self.assertIsNone(self.sensors.reason(.2, .2))
+        snap = self.sensors.snapshot()
+        self.assertEqual(snap["errors"], {})
+        self.assertEqual(snap["ultrasonic_error"], "sin_eco_valido")
+        self.assertFalse(snap["ultrasonic_blocks"])
+
+    def test_two_consecutive_echo_timeouts_are_not_infinite_clear_distance(self):
+        self.cfg["ultrasonic"]["blocks_motion"] = True
+        self.sensors.update()
+        self.hw.sonar.poll.return_value = (True, None)
+        self.sensors.update()
+        self.sensors.update()
         self.assertIsNone(self.sensors.snapshot()["distance_mm"])
+        self.assertEqual(self.sensors.errors["ultrasonic"], "sin_eco_valido")
         self.assertIsNotNone(self.sensors.reason(.2, .2))
+
+    def test_first_echo_timeout_blocks_without_prior_valid_distance(self):
+        self.cfg["ultrasonic"]["blocks_motion"] = True
+        self.hw.sonar.poll.return_value = (True, None)
+        self.sensors.update()
+        self.assertIsNone(self.sensors.snapshot()["distance_mm"])
+        self.assertEqual(self.sensors.errors["ultrasonic"], "sin_eco_valido")
+
+    def test_pending_echo_is_not_reported_as_invalid(self):
+        self.hw.sonar.poll.return_value = (False, None)
+        self.sensors.update()
+        self.assertNotIn("ultrasonic", self.sensors.errors)
+        self.assertIsNone(self.sensors.distance)
 
     def test_sensor_error_does_not_prevent_stop(self):
         self.hw.sonar.poll.side_effect = OSError("desconectado")
@@ -95,10 +127,13 @@ class SensorTests(unittest.TestCase):
 
     def test_color_scan_is_cooperative_and_resets_on_motion(self):
         # Siete barridos: un fallo apagado y un pico completo no deben ganar.
+        self.cfg["color"]["sweeps_per_result"] = 7
         for red in (20000, 20000, 20000, 20000, 20000, 4000, 60000):
             self.feed_color_sweep((4000, red, 7000, 8000))
         result = self.sensors.snapshot()
         self.assertEqual(result["color_seq"], 1)
+        self.assertGreater(result["color_started_age_ms"], 9000)
+        self.assertLess(result["color_age_ms"], 100)
         self.assertEqual(result["color_raw"], [4000, 20000, 7000, 8000])
         self.assertEqual(len(result["color_sweep_signatures"]), 7)
         self.assertAlmostEqual(sum(result["color_signature"]), 1)
@@ -108,6 +143,7 @@ class SensorTests(unittest.TestCase):
         self.assertEqual(self.sensors.sweeps, [])
         self.assertEqual(self.sensors.sweep_signatures, [])
         self.assertIsNone(self.sensors.snapshot()["color_raw"])
+        self.assertIsNone(self.sensors.snapshot()["color_started_age_ms"])
         self.assertEqual(self.hw.pixel[0], (0, 0, 0))
 
     def test_color_waits_and_does_not_reuse_partial_phase_after_motion(self):
@@ -290,7 +326,8 @@ class SensorTests(unittest.TestCase):
         _check_local_sensors(result, "EMPUJAR", "red")
 
     def test_invalid_config_is_rejected(self):
-        for key, value in (("stop_mm", -1), ("stop_mm", float("nan")), ("echo_3v3_confirmed", "false")):
+        for key, value in (("stop_mm", -1), ("stop_mm", float("nan")),
+                           ("timeout_ms", 0), ("ping_interval_ms", "80")):
             cfg = copy.deepcopy(self.cfg)
             cfg["ultrasonic"][key] = value
             with self.assertRaises(ValueError):
@@ -307,20 +344,18 @@ class SensorTests(unittest.TestCase):
             self.assertEqual(result["color"]["profiles"]["red"], {
                 "artificial": [.8, .1, .1], "natural": [.7, .2, .1]
             })
-            self.assertEqual(result["ultrasonic"]["echo_3v3_confirmed"],
-                             self.cfg["ultrasonic"]["echo_3v3_confirmed"])
+            self.assertEqual(result["ultrasonic"], self.cfg["ultrasonic"])
 
-    def test_hardware_does_not_activate_unconfirmed_echo_or_adc2(self):
+    def test_hardware_builds_sonar_from_json_and_rejects_adc2_color(self):
         self.cfg["color"]["analog"] = "IO4"
-        self.cfg["ultrasonic"]["echo_3v3_confirmed"] = False
         board = SimpleNamespace(**{name: name for name in ("IO25", "IO26", "IO32", "IO33", "IO4", "IO36", "IO39", "IO34", "IO35")})
         analog = Mock()
         with patch.dict(sys.modules, {"board": board, "analogio": analog, "neopixel": Mock()}), \
              patch("hardware_sensores.Sonar") as sonar:
             hw = HardwareSensores(self.cfg)
-        sonar.assert_not_called()
+        sonar.assert_called_once_with("IO25", "IO26", timeout_ms=60, ping_interval_ms=80)
         self.assertIsNone(hw.light)
-        self.assertEqual(set(hw.errors), {"ultrasonic", "color"})
+        self.assertEqual(set(hw.errors), {"color"})
         self.assertEqual([c.args[0] for c in analog.AnalogIn.call_args_list], ["IO36", "IO39", "IO34", "IO35"])
 
     def test_sonar_poll_has_bounded_timeout_and_no_wait_loop(self):
@@ -330,12 +365,17 @@ class SensorTests(unittest.TestCase):
         from unittest.mock import MagicMock
         sonar.echo = MagicMock()
         sonar.echo.__len__.return_value = 0
+        sonar.delay_us = Mock()
+        sonar.timeout_seconds = .06
+        sonar.ping_interval_seconds = .08
         sonar.pending, sonar.started, sonar.next_ping = False, 0, 0
-        with patch("hardware_sensores.time.monotonic", self.clock), patch("hardware_sensores.time.sleep") as sleep:
+        with patch("hardware_sensores.time.monotonic", self.clock):
             self.assertEqual(sonar.poll(), (False, None))
-            sleep.assert_called_once_with(.00001)
+            self.assertEqual([call.args[0] for call in sonar.delay_us.call_args_list], [2, 10])
             self.assertFalse(sonar.trigger.value)
-            self.clock.advance(.031)
+            self.clock.advance(.059)
+            self.assertEqual(sonar.poll(), (False, None))
+            self.clock.advance(.002)
             self.assertEqual(sonar.poll(), (True, None))
             self.assertFalse(sonar.pending)
 
@@ -345,9 +385,23 @@ class SensorTests(unittest.TestCase):
         sonar.echo = MagicMock()
         sonar.echo.__len__.return_value = 1
         sonar.echo.__getitem__.return_value = 1000
+        sonar.timeout_seconds = .06
+        sonar.ping_interval_seconds = .08
         sonar.pending, sonar.started, sonar.next_ping = True, 0, .08
         with patch("hardware_sensores.time.monotonic", self.clock):
             self.assertEqual(sonar.poll(), (True, 171.5))
+
+    def test_sonar_rejects_distances_outside_physical_range(self):
+        from unittest.mock import MagicMock
+        for duration in (54, 65535):
+            sonar = Sonar.__new__(Sonar)
+            sonar.echo = MagicMock()
+            sonar.echo.__len__.return_value = 1
+            sonar.echo.__getitem__.return_value = duration
+            sonar.timeout_seconds = .06
+            sonar.pending, sonar.started, sonar.next_ping = True, 0, .08
+            with patch("hardware_sensores.time.monotonic", self.clock):
+                self.assertEqual(sonar.poll(), (True, None))
 
     def test_monitor_only_queries_sensors_and_stops(self):
         import leer_sensores
@@ -364,7 +418,6 @@ class SensorTests(unittest.TestCase):
 
     def test_diagnostic_mode_blocks_all_motion_but_allows_readings(self):
         self.cfg["diagnostic_only"] = True
-        self.cfg["ultrasonic"]["echo_3v3_confirmed"] = False
         for command in ("MOTOR|.2|.2", "MOTOR|-.2|-.2", "MOTOR|.2|-.2",
                         "TURN|30|.2", "HEADING|0|.2|1"):
             self.assertFalse(self.session.process_command(command), command)
@@ -374,27 +427,21 @@ class SensorTests(unittest.TestCase):
         self.assertTrue(self.session.process_command("SENSORS"))
         status = json.loads(self.session.reply)
         self.assertEqual(status["distance_mm"], 250)
-        self.assertFalse(status["echo_3v3_confirmed"])
         self.assertTrue(status["diagnostic_only"])
         self.assertTrue(self.session.process_command("STOP"))
 
-    def test_leaving_diagnostics_does_not_confirm_echo(self):
-        self.cfg["ultrasonic"]["echo_3v3_confirmed"] = False
+    def test_leaving_diagnostics_allows_motion_with_fresh_ultrasonic_data(self):
         self.sensors.update()
-        self.assertEqual(self.sensors.reason(.2, -.2), "echo_electrico_sin_verificar")
+        self.assertIsNone(self.sensors.reason(.2, -.2))
 
-    def test_explicit_diagnostic_echo_reading_preserves_warning(self):
-        self.cfg["diagnostic_only"] = True
-        self.cfg["ultrasonic"]["echo_3v3_confirmed"] = False
-        self.cfg["ultrasonic"]["allow_unverified_echo_diagnostic"] = True
+    def test_hardware_creates_ultrasonic_without_electrical_flags(self):
         board = SimpleNamespace(**{name: name for name in ("IO25", "IO26", "IO32", "IO33", "IO36", "IO39", "IO34", "IO35")})
         neopixel = SimpleNamespace(NeoPixel=Mock(return_value=[(0, 0, 0)]))
         with patch.dict(sys.modules, {"board": board, "analogio": Mock(), "neopixel": neopixel}), \
              patch("hardware_sensores.Sonar") as sonar:
             hw = HardwareSensores(self.cfg)
-        sonar.assert_called_once_with("IO25", "IO26")
-        self.assertTrue(hw.warnings)
-        self.assertFalse(self.cfg["ultrasonic"]["echo_3v3_confirmed"])
+        sonar.assert_called_once_with("IO25", "IO26", timeout_ms=60, ping_interval_ms=80)
+        self.assertEqual(hw.warnings, [])
         self.assertIsNone(self.controller.mode)
 
 

@@ -10,12 +10,13 @@ def would_block(error):
 
 
 class CommandSession:
-    def __init__(self, controller, watchdog=0.5, clock=time.monotonic, sensors=None):
+    def __init__(self, controller, watchdog=0.5, clock=time.monotonic, sensors=None, info=None):
         from command_protocol import finite
         if finite(watchdog) <= 0:
             raise ValueError("Watchdog debe ser positivo")
         self.controller, self.watchdog, self.clock = controller, watchdog, clock
         self.sensors = sensors
+        self.info = info  # callable -> dict: motivo del ultimo reinicio, uptime
         self.reply = b"OK\n"
         self.last_motion = None
         self.buffer = b""
@@ -50,6 +51,8 @@ class CommandSession:
             elif command == "SENSORS":
                 status = self.sensors.snapshot() if self.sensors is not None else {"v": 1, "enabled": False}
                 status["motion_reason"] = self.controller.reason
+                if self.info is not None:
+                    status.update(self.info())
                 self.reply = (json.dumps(status) + "\n").encode("ascii")
             elif command == "KEEPALIVE":
                 if self.controller.mode is None:

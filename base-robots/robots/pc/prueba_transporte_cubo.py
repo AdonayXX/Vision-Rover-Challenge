@@ -64,26 +64,35 @@ class DevelopmentTelemetryState(TelemetryState):
 
 
 class RobotClient:
-    def __init__(self, host, port=5000, timeout=1.5, connect_timeout=6.0):
+    def __init__(self, host, port=5000, timeout=1.5, connect_timeout=6.0, wait_seconds=0):
         self.host, self.port, self.timeout = host, port, timeout
         self.connect_timeout = connect_timeout
+        # Tras una caida el rover tarda en reiniciar y volver al Wi-Fi.
+        self.wait_seconds = wait_seconds
         self.sock = None
         self.last = None
 
     def connect(self):
         self.close(send_stop=False)
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        sock.settimeout(self.connect_timeout)
-        try:
-            sock.connect((self.host, self.port))
-        except OSError as error:
-            sock.close()
-            raise ConnectionError(
-                "No se pudo conectar TCP a {}:{}: {}. Conecta PC y rover al mismo "
-                "Wi-Fi y usa la IP que anuncia el rover al conectar."
-                .format(self.host, self.port, error)
-            ) from error
+        deadline = time.monotonic() + self.wait_seconds
+        while True:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            sock.settimeout(self.connect_timeout)
+            try:
+                sock.connect((self.host, self.port))
+                break
+            except OSError as error:
+                sock.close()
+                last_error = error
+            if time.monotonic() >= deadline:
+                raise ConnectionError(
+                    "No se pudo conectar TCP a {}:{}: {}. Conecta PC y rover al mismo "
+                    "Wi-Fi y usa la IP que anuncia el rover al conectar."
+                    .format(self.host, self.port, last_error)
+                ) from last_error
+            print("Rover sin respuesta; reintentando (puede estar reiniciando)...", flush=True)
+            time.sleep(1)
         sock.settimeout(self.timeout)
         self.sock = sock
         self.buffer = b""
@@ -152,6 +161,30 @@ class RobotClient:
                 pass
         self.sock = None
         return confirmed
+
+
+_RESET_HINTS = {
+    "BROWNOUT": "cayo el voltaje (bateria baja o pico de los motores)",
+    "WATCHDOG": "el programa se colgo y el watchdog reinicio la placa",
+}
+_FAILURE_LABELS = {
+    "modo_seguro": "la placa entro en modo seguro",
+    "error_fatal": "el programa del rover fallo",
+    "sesion": "ultima sesion cortada por error",
+}
+
+
+def _print_reset_reason(status):
+    """Sin cable USB, esta es la unica pista de por que se cayo el rover."""
+    reason = status.get("reset_reason")
+    if reason is None:
+        print("Rover sin diagnostico de reinicio: sube el firmware actualizado.")
+        return
+    print("Rover encendido hace {} s; ultimo reinicio: {}".format(status.get("uptime_s"), reason))
+    if reason in _RESET_HINTS:
+        print("AVISO: el rover se reinicio solo: " + _RESET_HINTS[reason])
+    for key, text in sorted((status.get("fallos") or {}).items()):
+        print("Registro de fallos del rover: {} -> {}".format(_FAILURE_LABELS.get(key, key), text))
 
 
 def _finite(value, name):
@@ -386,14 +419,46 @@ def _push_clear(state, color, target, planner, args, details=None, robot_start=N
     return clear
 
 
-def _verify_approach_and_push(vision, state, color, target, planner, args):
+def _resuming_push(state, color, target, args):
+    """True si el rover ya esta detras del cubo, en la linea cubo->destino.
+
+    Pasa al relanzar tras un corte (BROWNOUT) a mitad del empuje: el rover
+    esta pegado al cubo a proposito y no debe exigirse empezar lejos de el.
+    """
+    rover, cube = state.rover(state.robot_id), state.cube(color)
+    if rover is None or cube is None:
+        return False
+    scale = state.message["grid"]["cell_mm"]
+    # Solo mas cerca que el punto de aproximacion: desde ahi el flujo normal
+    # (APROXIMAR) ya funciona.
+    if distancia_mm(rover, cube, scale) >= args.approach_center_distance_mm - args.approach_tolerance_mm:
+        return False
+    to_cube = (cube["col"] - rover["col"], cube["row"] - rover["row"])
+    to_goal = (target["col"] - cube["col"], target["row"] - cube["row"])
+    norms = math.hypot(*to_cube) * math.hypot(*to_goal)
+    if norms == 0:
+        return False
+    cos = (to_cube[0] * to_goal[0] + to_cube[1] * to_goal[1]) / norms
+    return cos >= math.cos(math.radians(args.abort_push_angle_deg))
+
+
+def _verify_approach_and_push(vision, state, color, target, planner, args, resume=False):
     """Reintenta observaciones vencidas; nunca autoriza un bloqueo geométrico."""
     deadline = time.monotonic() + args.vision_timeout
     last_reason = "captura_vieja"
     while time.monotonic() < deadline:
         vision.poll()
         reason = _mission_reason(state, color, args.todos)
-        if reason is None:
+        if reason is None and resume:
+            details = []
+            clear = _push_clear(state, color, target, planner, args, details=details)
+            if clear is False:
+                raise RuntimeError("Corredor de empuje bloqueado: " + "; ".join(details))
+            if clear is True:
+                print("Corredor de empuje: libre para cubo y cuerpo del rover.")
+                return
+            reason = "captura_vieja"
+        elif reason is None:
             behind = punto_detras_del_cubo(state.cube(color), target,
                                           args.approach_center_distance_mm,
                                           state.message["grid"]["cell_mm"])
@@ -423,11 +488,14 @@ def _verify_approach_and_push(vision, state, color, target, planner, args):
 
 
 def _check_local_sensors(status, action, color):
-    if status.get("diagnostic_only") or status.get("echo_3v3_confirmed") is False:
-        raise RuntimeError("Modo diagnostico/cableado pendiente: motores bloqueados. Usa leer_sensores.py")
+    if status.get("diagnostic_only") is not False:
+        raise RuntimeError("Modo diagnostico: motores bloqueados. Usa leer_sensores.py")
     if status.get("errors"):
         raise RuntimeError("Sensores locales: " + str(status["errors"]))
-    for field in ("ir_age_ms", "distance_age_ms"):
+    fields = ["ir_age_ms"]
+    if status.get("ultrasonic_blocks", True):
+        fields.append("distance_age_ms")
+    for field in fields:
         age = status.get(field)
         if not isinstance(age, (float, int)) or not math.isfinite(age) or not 0 <= age < 400:
             raise RuntimeError("Sensor local sin lectura fresca: " + field)
@@ -442,13 +510,111 @@ def _check_local_sensors(status, action, color):
                 color, status.get("color")))
 
 
-def _send_motion(robot, state, color, args, command, motion=None, action="AVANZAR", error=None):
+_COLOR_STALE_GRACE_S = 2.0
+
+
+def _wait_new_color(robot, vision, state, color, args, mission_deadline=None):
+    """Solo STOP/SENSORS: dos intentos completos, cada uno de hasta 15 s.
+
+    La edad del INICIO de los siete barridos prueba que ninguno precede al
+    STOP confirmado. Un firmware sin ese dato no autoriza el empuje.
+    """
+    try:
+        robot.send(cmd_stop(), force=True)  # No reutilizar el ACK almacenado.
+        stopped_at = time.monotonic()
+        baseline = robot.sensors()
+        _check_local_sensors(baseline, "PREPARAR", color)
+        if "color_started_age_ms" not in baseline:
+            raise RuntimeError("Actualizar sensores_rover.py: falta inicio verificable del barrido RGB")
+        seq = baseline.get("color_seq")
+        if type(seq) is not int or seq < 0:
+            raise RuntimeError("color_seq invalido")
+        if not baseline.get("color_calibrated"):
+            raise RuntimeError("Color sin calibrar")
+        stale_since = None
+        for attempt in range(args.color_attempts):
+            deadline = time.monotonic() + args.color_timeout_seconds
+            if mission_deadline is not None:
+                deadline = min(deadline, mission_deadline)
+            while time.monotonic() < deadline:
+                vision.poll()
+                reason = _mission_reason(state, color, args.todos)
+                # El rover esta parado midiendo color. Pegado al rover, el cubo
+                # parpadea en la camara: un parpadeo breve se espera (nunca
+                # autoriza movimiento); una perdida prolongada cancela.
+                if reason and _transient_vision_reason(reason):
+                    if stale_since is None:
+                        stale_since = time.monotonic()
+                    if time.monotonic() - stale_since > _COLOR_STALE_GRACE_S:
+                        raise RuntimeError("STOP durante color: " + reason)
+                    time.sleep(.05)
+                    continue
+                if reason:
+                    raise RuntimeError("STOP durante color: " + reason)
+                stale_since = None
+                requested_at = time.monotonic()
+                status = robot.sensors()
+                received_at = time.monotonic()
+                _check_local_sensors(status, "PREPARAR", color)
+                current = status.get("color_seq")
+                if type(current) is not int or current < seq:
+                    raise RuntimeError("color_seq invalido o reinicio del rover")
+                if current > seq:
+                    seq = current
+                    age, start_age = status.get("color_age_ms"), status.get("color_started_age_ms")
+                    valid_age = lambda v: type(v) in (int, float) and math.isfinite(v) and v >= 0
+                    # El instante de solicitud es una cota conservadora del
+                    # reloj remoto; incluir red y redondeo impide rejuvenecer.
+                    if not (valid_age(age) and valid_age(start_age) and start_age >= age):
+                        raise RuntimeError("Inicio/fin de color no verificable")
+                    if start_age + 1 > (requested_at - stopped_at) * 1000:
+                        print("STOP: descartado barrido iniciado antes de confirmar parada", flush=True)
+                    elif age + (received_at - requested_at) * 1000 >= 400:
+                        print("Color descartado: llego vencido; esperando otra lectura", flush=True)
+                    elif received_at >= deadline:
+                        raise RuntimeError("Timeout de color; rover detenido")
+                    else:
+                        print("Color esperado={} detectado={} seq={} edad_ms={} firma={} intento={}".format(
+                            color, status.get("color"), seq, age,
+                            status.get("color_signature"), attempt + 1), flush=True)
+                        detected = status.get("color")
+                        if detected is not None and detected != color:
+                            raise RuntimeError("Color incorrecto: esperado {}, detectado {}".format(color, detected))
+                        if detected == color:
+                            return {"seq": seq, "expires": requested_at + (400 - age) / 1000,
+                                    "status": status, "used": False}
+                        break  # Desconocido: otro resultado completo, nunca reclasificar.
+                time.sleep(.05)
+            else:
+                raise RuntimeError("Timeout esperando una medicion completa de color; rover detenido")
+        raise RuntimeError("Color desconocido persistente; rover detenido")
+    except BaseException:
+        robot.stop()
+        raise
+
+
+def _send_motion(robot, state, color, args, command, motion=None, action="AVANZAR", error=None,
+                 color_ticket=None, color_latched=False):
     if args.usar_sensores:
-        _check_local_sensors(robot.sensors(), action, color)
+        status = robot.sensors()
+        # Con el color ya confirmado en este empuje, el sensor pegado al cubo
+        # no puede volver a medir (lee gris); no se le exige otra lectura.
+        _check_local_sensors(status, "AVANZAR" if color_latched else action, color)
+        if action == "EMPUJAR" and not color_latched and (color_ticket is None or
+                color_ticket.get("used", False) or
+                status.get("color_seq") != color_ticket["seq"] or
+                time.monotonic() >= color_ticket["expires"]):
+            robot.stop()
+            raise RuntimeError("Empuje sin una medicion nueva posterior a STOP")
+        if action == "EMPUJAR" and not color_latched:
+            color_ticket["used"] = True
     # El calculo de rutas puede consumir el plazo de frescura del cuadro.
     if _mission_reason(state, color, args.todos) is not None:
         robot.stop()
     elif motion is not None:
+        print("Movimiento objetivo={} rover={} cubo={} destinos={} comando={} color={}".format(
+            color, state.rover(state.robot_id), state.cube(color), state.message["depots"],
+            command, None if color_ticket is None else color_ticket.get("status")), flush=True)
         return motion.execute(robot, state, command,
                               lambda: _mission_reason(state, color, args.todos) is None,
                               action, error)
@@ -463,9 +629,10 @@ def run(args):
         max_age_ms=args.max_age_ms,
     )
     vision = VisionClient(state, args.vision_host, args.vision_port)
-    robot = RobotClient(args.robot_ip, args.robot_port)
+    robot = RobotClient(args.robot_ip, args.robot_port, wait_seconds=60)
     motion = VisualSteps(vision, args.motion_pulse_seconds, args.turn_pulse_seconds,
-                         monotonic=time.monotonic, wall=time.time, sleep=time.sleep)
+                         monotonic=time.monotonic, wall=time.time, sleep=time.sleep,
+                         max_steps=args.max_pulses)
     planner = RoutePlanner(
         robot_radius_mm=args.robot_radius_mm,
         peer_radius_mm=args.robot_radius_mm,
@@ -478,6 +645,15 @@ def run(args):
     started = None
     goal_since = None
     retreat_target = None
+    color_ticket = None
+    # Rojo confirmado para el empuje en curso; vale mientras el cubo siga
+    # pegado al rover segun la vision.
+    color_confirmed = False
+    retreats = 0
+    previous_rover = None
+    traveled_mm = 0
+    push_origin = None
+    stale_since = None
 
     try:
         print("Esperando telemetría de visión...")
@@ -493,7 +669,12 @@ def run(args):
                 cube_color, target_label, target["col"], target["row"]
             )
         )
+        resume = _resuming_push(state, cube_color, target, args)
         conflicts = _position_conflicts(state, state.rover(args.robot_id), planner)
+        if resume:
+            # Pegado al cubo objetivo a proposito: solo cuentan los demas.
+            conflicts = [c for c in conflicts if not c.startswith("cubo {}:".format(cube_color))]
+            print("Rover detras del cubo y en linea con el destino: se retoma el empuje.")
         if conflicts:
             raise RuntimeError("Recoloca el rover antes de iniciar: " + "; ".join(conflicts))
         if args.solo_verificar:
@@ -504,7 +685,7 @@ def run(args):
             if _goal_reached(state.message, cube, target, target_label, args.goal_tolerance_mm):
                 print("El cubo ya esta dentro de su destino.")
                 return 0
-            _verify_approach_and_push(vision, state, cube_color, target, planner, args)
+            _verify_approach_and_push(vision, state, cube_color, target, planner, args, resume)
             print("Verificacion lista; no se abrio conexion de motores.")
             if args.usar_sensores:
                 print("Esta verificacion solo revisa vision/rutas. Sensores de placa: comprobar con leer_sensores.py.")
@@ -518,26 +699,41 @@ def run(args):
             vision.poll()
             time.sleep(0.02)
         if args.usar_sensores:
+            if not args.sensor_mira_cubo:
+                raise RuntimeError("Confirma fisicamente sensor frente al cubo; requiere --sensor-mira-cubo")
             status = robot.sensors()
             _check_local_sensors(status, "PREPARAR", cube_color)
             print("Sensores locales: distancia={} mm, IR={}, color={}".format(
                 status.get("distance_mm"), status.get("ir"), status.get("color")))
+            _print_reset_reason(status)
             if not status.get("color_calibrated"):
                 raise RuntimeError("Falta calibrar el sensor de color. Ejecuta leer_sensores.py antes de la mision")
         started = time.monotonic()
-        stage = "APROXIMAR"
+        stage = "ALINEAR" if resume else "APROXIMAR"
 
         while time.monotonic() - started < args.max_seconds:
             vision.poll()
             reason = _mission_reason(state, cube_color, args.todos)
             if reason is not None:
                 goal_since = None
-                robot.stop()
+                stopped = robot.stop()
                 if last_status != reason:
                     print("STOP por telemetría:", reason)
                     last_status = reason
-                time.sleep(0.02)
-                continue
+                # Entre pulsos los motores ya deben estar detenidos. Una
+                # captura vencida puede esperar su reemplazo, sin autorizar
+                # movimiento ni aumentar el limite de edad. Durante un pulso
+                # VisualSteps sigue abortando de inmediato por datos viejos.
+                if _transient_vision_reason(reason) and stopped:
+                    # Un permiso de color no sobrevive a una espera de vision.
+                    color_ticket = None
+                    if stale_since is None:
+                        stale_since = time.monotonic()
+                    if time.monotonic() - stale_since < args.vision_timeout:
+                        time.sleep(.02)
+                        continue
+                raise RuntimeError("Prueba cancelada por telemetria: " + reason)
+            stale_since = None
             if not motion.ready(state):
                 # El paso anterior ya confirmo STOP. Drenar telemetria sin
                 # volver a mandar giros ni repetir STOP por cada republicacion.
@@ -549,6 +745,11 @@ def run(args):
             cell_mm = grid["cell_mm"]
             rover = state.rover(args.robot_id)
             cube = state.cube(cube_color)
+            if previous_rover is not None:
+                traveled_mm += distancia_mm(rover, previous_rover, cell_mm)
+            previous_rover = dict(rover)
+            if traveled_mm >= args.max_travel_mm:
+                raise RuntimeError("Limite de desplazamiento acumulado alcanzado")
             cube_to_goal = distancia_mm(cube, target, cell_mm)
             if stage == "RETIRAR":
                 # Retrocede por el corredor de llegada, sin girar junto al cubo.
@@ -650,6 +851,7 @@ def run(args):
                 if abs(angle) <= args.push_angle_tolerance_deg:
                     robot.stop()
                     stage = "EMPUJAR"
+                    push_origin = (cube["col"], cube["row"])
                     print("Alineado; iniciando empuje...")
                     continue
                 _send_motion(robot, state, cube_color, args,
@@ -660,6 +862,53 @@ def run(args):
                 )
 
             elif stage == "EMPUJAR":
+                deviation_mm = point_segment_distance(
+                    (cube["col"], cube["row"]), push_origin,
+                    (target["col"], target["row"])) * cell_mm
+                if deviation_mm > args.max_cube_deviation_mm:
+                    raise RuntimeError("Cubo desviado {:.1f} mm del corredor inicial".format(deviation_mm))
+                in_contact = (distancia_mm(rover, cube, cell_mm) <
+                              args.approach_center_distance_mm - args.approach_tolerance_mm)
+                if color_confirmed and not in_contact:
+                    print("El cubo se separo del rover; se vuelve a confirmar el color.", flush=True)
+                    color_confirmed = False
+                if args.usar_sensores and not color_confirmed and color_ticket is None:
+                    # El color se calibra a ~1 cm: desde la posicion de
+                    # alineado (~8 cm) el sensor solo ve luz ambiente. Cerrar
+                    # la distancia con avances normales, sin permiso de empuje.
+                    distance = robot.sensors().get("distance_mm")
+                    if distance is None and retreats < 3:
+                        # <20 mm: aplastado contra el cubo, el LED no tiene
+                        # hueco para reflejar y el color sale gris.
+                        retreats += 1
+                        print("Sensor pegado al cubo; retrocediendo para medir color.", flush=True)
+                        _send_motion(robot, state, cube_color, args,
+                                     _motor_pair(-args.push_speed, 0, args.turn_sign),
+                                     motion, "RETROCEDER")
+                        time.sleep(args.loop_seconds)
+                        continue
+                    if distance is not None and distance > args.contact_mm:
+                        decision = decidir_movimiento_hacia(
+                            rover, target, cell_mm,
+                            tolerancia_mm=0,
+                            tolerancia_angular_deg=args.push_angle_tolerance_deg,
+                        )
+                        angle = decision["medidas"]["giro_grados"]
+                        print("Acercando al cubo: {:.0f} mm > contacto {:.0f} mm".format(
+                            distance, args.contact_mm), flush=True)
+                        _send_motion(robot, state, cube_color, args,
+                            _motor_command("AVANZAR", angle, args.push_speed,
+                                           args.turn_speed, args.push_steering_gain,
+                                           turn_sign=args.turn_sign),
+                            motion, "AVANZAR", angle,
+                        )
+                        time.sleep(args.loop_seconds)
+                        continue
+                    color_ticket = _wait_new_color(robot, vision, state, cube_color, args,
+                                                   started + args.max_seconds)
+                    # Descartar TODA geometria previa a los ~10 s de barrido.
+                    # El siguiente ciclo calcula corredor y rumbo nuevamente.
+                    continue
                 corridor = _push_clear(state, cube_color, target, planner, args)
                 if corridor is None:
                     robot.stop()
@@ -678,15 +927,20 @@ def run(args):
                 angle = decision["medidas"]["giro_grados"]
                 if abs(angle) > args.abort_push_angle_deg:
                     robot.stop()
-                    stage = "ALINEAR"
-                    print("Se perdió alineación ({:.1f}°); realineando...".format(angle))
-                    continue
+                    raise RuntimeError("Se perdio alineacion durante empuje ({:.1f} grados)".format(angle))
                 _send_motion(robot, state, cube_color, args,
                     _motor_command("AVANZAR", angle, args.push_speed,
                                    args.turn_speed, args.push_steering_gain,
                                    turn_sign=args.turn_sign),
-                    motion, "EMPUJAR", angle,
+                    motion, "EMPUJAR", angle, color_ticket=color_ticket,
+                    color_latched=color_confirmed,
                 )
+                if args.usar_sensores and not color_confirmed:
+                    print("Rojo confirmado: se empuja sin volver a medir mientras el cubo siga pegado.",
+                          flush=True)
+                color_confirmed = args.usar_sensores
+                retreats = 0
+                color_ticket = None
 
             time.sleep(args.loop_seconds)
 
@@ -715,6 +969,11 @@ def build_parser():
     p.add_argument("--solo-verificar", action="store_true", help="Comprobar vision y rutas sin conectar motores")
     p.add_argument("--usar-sensores", action="store_true",
                    help="Exigir sensores del rover y confirmacion local de color antes del empuje")
+    p.add_argument("--sensor-mira-cubo", action="store_true",
+                   help="Confirmacion fisica: sensor orientado a la cara del cubo a distancia calibrada")
+    p.add_argument("--color-timeout-seconds", type=float, default=15)
+    p.add_argument("--color-attempts", type=int, default=2,
+                   help="Resultados completos permitidos si el color es desconocido (1 a 3)")
     p.add_argument("--goal-hold-seconds", type=float, default=0.5)
     p.add_argument("--motion-pulse-seconds", type=float, default=0.12,
                    help="Duracion maxima solicitada de avance antes de STOP y nueva observacion")
@@ -733,6 +992,9 @@ def build_parser():
     p.add_argument("--max-age-ms", type=float, default=600)
     p.add_argument("--vision-timeout", type=float, default=15)
     p.add_argument("--max-seconds", type=float, default=120)
+    p.add_argument("--max-pulses", type=int, default=60)
+    p.add_argument("--max-travel-mm", type=float, default=1000)
+    p.add_argument("--max-cube-deviation-mm", type=float, default=25)
     p.add_argument("--robot-radius-mm", type=float, default=85)
     p.add_argument("--clearance-mm", type=float, default=10)
     p.add_argument("--approach-center-distance-mm", type=float, default=150,
@@ -740,6 +1002,8 @@ def build_parser():
     p.add_argument("--approach-tolerance-mm", type=float, default=25)
     p.add_argument("--goal-tolerance-mm", type=float, default=20)
     p.add_argument("--angle-tolerance-deg", type=float, default=7)
+    p.add_argument("--contact-mm", type=float, default=35,
+                   help="Distancia del ultrasonido a la que el sensor de color ya ve el cubo")
     p.add_argument("--push-angle-tolerance-deg", type=float, default=5)
     p.add_argument("--abort-push-angle-deg", type=float, default=18)
     p.add_argument("--approach-speed", type=float, default=0.24)
@@ -756,6 +1020,8 @@ def build_parser():
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
+    if not args.solo_verificar and not args.usar_sensores:
+        parser.error("Movimiento requiere --usar-sensores; para diagnostico sin motores usa --solo-verificar")
     if args.todos and any(v is not None for v in (args.cube, args.depot, args.dest_col, args.dest_row)):
         parser.error("--todos ya selecciona cada cubo y su zona del mismo color")
     if (args.dest_col is None) != (args.dest_row is None):
@@ -765,9 +1031,11 @@ def main(argv=None):
     for name in (
         "max_age_ms", "vision_timeout", "max_seconds", "robot_radius_mm",
         "clearance_mm", "approach_center_distance_mm", "approach_tolerance_mm",
-        "goal_tolerance_mm", "angle_tolerance_deg", "push_angle_tolerance_deg",
+        "goal_tolerance_mm", "angle_tolerance_deg", "push_angle_tolerance_deg", "contact_mm",
         "abort_push_angle_deg", "approach_speed", "push_speed", "turn_speed",
         "steering_gain", "push_steering_gain", "loop_seconds", "goal_hold_seconds",
+        "color_timeout_seconds",
+        "max_travel_mm", "max_cube_deviation_mm",
     ):
         try:
             value = _finite(getattr(args, name), name)
@@ -775,6 +1043,10 @@ def main(argv=None):
             parser.error(str(error))
         if value < 0:
             parser.error(name + " no puede ser negativo")
+    if not 0 < args.color_timeout_seconds <= 30 or not 1 <= args.color_attempts <= 3:
+        parser.error("Color requiere timeout en (0, 30] e intentos entre 1 y 3")
+    if args.max_pulses < 1 or min(args.max_travel_mm, args.max_cube_deviation_mm) <= 0:
+        parser.error("Limites de pulsos y desplazamiento deben ser positivos")
     if not all(0 < getattr(args, name) <= 1 for name in
                ("approach_speed", "push_speed", "turn_speed")):
         parser.error("Las velocidades deben estar en (0, 1]")

@@ -64,6 +64,10 @@ El robot se aproxima por una ruta con margen para su cuerpo, se alinea y empuja
 en línea recta con corrección de rumbo. Confirma el cubo completamente dentro
 de la zona, cerca del centro y durante 0,5 segundos. Se detiene si pierde datos
 frescos, encuentra un corredor bloqueado o supera 120 segundos por cubo.
+Entre pulsos, si STOP ya está confirmado y solo venció la captura, espera hasta
+`--vision-timeout` segundos por datos frescos y vuelve a calcular la ruta.
+Una pérdida de frescura durante el pulso, un STOP sin confirmar o la ausencia
+del cubo siguen cancelando la prueba. El límite de edad sigue siendo 600 ms.
 Si el cubo necesita rodear un obstáculo, esta prueba se detiene: no implementa
 empuje en varias etapas. Se debe recolocar la escena para dejar libre ese corredor.
 
@@ -74,8 +78,26 @@ real de los motores. La entrega física debe verificarse sobre la cancha.
 Para probar **un único cubo** desde la raíz:
 
 ```powershell
-.\vision-system\.venv\Scripts\python.exe -X utf8 -B -u .\base-robots\robots\pc\prueba_transporte_cubo.py --robot-id 10 --cube red --depot red
+.\empujar_rojo_auto.ps1 -SoloVerificar
+.\empujar_rojo_auto.ps1 -RobotIp <IP_ACTUAL_DEL_ROVER> -SensorMiraCubo
 ```
+
+El lanzador comprueba primero la ruta y después conecta el rover. Usa las
+velocidades y límites predeterminados del controlador. `-SensorMiraCubo`
+confirma que el sensor de color mira hacia la cara del cubo a la altura de
+las palas. Si se omite `-RobotIp`, solicita la dirección actual al iniciar.
+La prueba exige sensores operativos y color calibrado en la placa.
+
+En el montaje verificado el 30-09-2026, la cámara del tablero es la **Logitech
+C270**, índice **1**. Los dos menús preguntan cosas distintas: cámara y perfil;
+el perfil 0 corresponde a Argomtech CAM40, y el 1 a Logitech C270. Para elegir
+explícitamente la combinación verificada, desde `vision-system`:
+
+```powershell
+.\.venv\Scripts\python.exe -m vision.sistema --indice 1 --camara logitech_c270 --ventana
+```
+
+El índice puede cambiar al reconectar dispositivos; comprobar siempre la imagen.
 
 Para revisar filtros de detección, cierra la ventana de visión y ejecuta desde
 `vision-system`: `python -m vision.tools.diagnostico_cubos`. Muestra el motivo

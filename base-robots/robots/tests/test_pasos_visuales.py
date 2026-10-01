@@ -53,6 +53,17 @@ class VisualStepTests(unittest.TestCase):
         self.rover["age_ms"] = 300  # Timestamp nuevo, pero pose recordada del pasado.
         self.assertFalse(self.motion.ready(self.state))
 
+    def test_image_that_would_expire_mid_pulse_waits_instead_of_moving(self):
+        # 541 ms + pulso de 120 ms > 600 ms: antes se cancelaba la prueba.
+        self.state.max_age_ms = 600
+        self.state.capture_age_ms = lambda: 541
+        self.assertFalse(self.motion.execute(self.robot, self.state, "MOTOR|.2|.2", lambda: True, "AVANZAR"))
+        self.assertEqual(self.robot.sent, [])
+        self.assertEqual(self.motion.steps, 0)
+        self.state.capture_age_ms = lambda: 300
+        self.assertTrue(self.motion.execute(self.robot, self.state, "MOTOR|.2|.2", lambda: True, "AVANZAR"))
+        self.assertEqual(len(self.robot.sent), 1)
+
     def test_repeated_frames_do_not_repeat_motor_commands(self):
         for _ in range(5):
             self.motion.execute(self.robot, self.state, "MOTOR|.2|.2", lambda: True, "AVANZAR")
@@ -77,6 +88,26 @@ class VisualStepTests(unittest.TestCase):
         self.robot.send = fail
         with self.assertRaisesRegex(ConnectionError, "no confirmo AVANZAR"):
             self.motion.execute(self.robot, self.state, "MOTOR|.2|.2", lambda: True, "AVANZAR")
+        self.assertIsNotNone(self.robot.stopped_at)
+
+    def test_old_cube_cannot_use_new_rover_pose_to_authorize_another_pulse(self):
+        self.motion.after_ms = 100100
+        self.state.message.update(ts_ms=100300, cubes=[{"age_ms": 250}])
+        self.assertFalse(self.motion.ready(self.state))
+        self.state.message["cubes"][0]["age_ms"] = 0
+        self.assertTrue(self.motion.ready(self.state))
+
+    def test_pulse_limit_never_sends_extra_motor_command(self):
+        self.motion.steps = self.motion.max_steps
+        with self.assertRaisesRegex(RuntimeError, "Limite de pulsos"):
+            self.motion.execute(self.robot, self.state, "MOTOR|.2|.2", lambda: True, "AVANZAR")
+        self.assertEqual(self.robot.sent, [])
+        self.assertIsNotNone(self.robot.stopped_at)
+
+    def test_losing_vision_during_pulse_stops_and_cancels(self):
+        checks = iter((True, False))
+        with self.assertRaisesRegex(RuntimeError, "telemetria"):
+            self.motion.execute(self.robot, self.state, "MOTOR|.2|.2", lambda: next(checks), "AVANZAR")
         self.assertIsNotNone(self.robot.stopped_at)
 
 

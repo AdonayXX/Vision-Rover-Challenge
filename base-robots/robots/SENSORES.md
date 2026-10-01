@@ -1,22 +1,17 @@
 # Sensores locales y visión
 
-El código está integrado en PC y firmware, pero NO se ha cargado ni probado en
-el hardware. La configuración actual está en `diagnostic_only=true`: bloquea
-TODOS los movimientos, incluidos los del control manual, y permite leer sensores.
-Por solicitud del usuario se habilitó `allow_unverified_echo_diagnostic=true`
-para leer el montaje existente de Cenfotec. `echo_3v3_confirmed` sigue en false:
-NO se ha medido ni certificado el voltaje. Una lectura válida no lo certifica.
-Este modo NO protege contra sobretensión; solo impide órdenes de motor.
-No equivale a una puesta en marcha ni resuelve por sí solo el rumbo.
+El sensor ultrasónico fue probado físicamente en una CRCibernetica IdeaBoard con
+ESP32 y CircuitPython 9.2.4. La alimentación **Motores y Ultrasónico** debe estar
+activada. Con esa alimentación activa, IO25 genera TRIG, IO26 recibe ECHO y las
+mediciones respondieron de forma coherente entre aproximadamente 8 y 26 cm.
+La configuración actual usa `diagnostic_only=false`; esta es la única opción
+global que inhibe los motores por modo diagnóstico.
 
 ## Cableado y límites eléctricos
 
-- HC-SR04: Trig IO25, Echo IO26. VCC va a alimentación, **no a la señal IO26**.
-  Verificar que el V+ usado entregue la tensión admitida por el sensor
-  (5 V en el HC-SR04 estándar), no asumir que V+ es 5 V si el jumper toma Vin.
-  Echo de un HC-SR04 estándar es 5 V: verificar divisor/adaptación a 3,3 V antes
-  de conectarlo al ESP32. Sin confirmación se permite únicamente la excepción
-  de lectura diagnóstica explícitamente solicitada; no se autoriza navegación.
+- HC-SR04/compatible: VCC a V+, GND a GND, Trig IO25 y Echo IO26. La habilitación
+  de alimentación **Motores y Ultrasónico** de la IdeaBoard debe estar activa.
+  Si el módulo tiene un quinto pin OUT, queda sin conectar.
 - IR analógicos: Sen1 IO36, Sen2 IO39, Sen3 IO34, Sen4 IO35; alimentación 3,3 V.
 - Color: NeoPixel DI IO32. AO IO4 es ADC2 y **no funciona con Wi-Fi en ESP32**.
   El usuario indicó que moverá AO: `color.analog` ya está preparado en `IO33`.
@@ -26,17 +21,13 @@ No equivale a una puesta en marcha ni resuelve por sí solo el rumbo.
   existente sigue bajo `use_imu` en config_robot.json; no se activa por asumir
   que cualquier dispositivo QWIIC es un giroscopio.
 
-Cambiar conexiones con placa y alimentación de motores apagadas. Una opción en
-JSON NO protege eléctricamente el pin: confirmar físicamente antes de marcarla.
-
 Referencias: [ADC2 y Wi-Fi en CircuitPython](https://docs.circuitpython.org/en/stable/shared-bindings/analogio/index.html),
-[pines ESP32](https://documentation.espressif.com/esp32-wroom-32_datasheet_en.html),
-[niveles del HC-SR04](https://learn.adafruit.com/distance-measurement-ultrasound-hcsr04?view=all).
+[pines ESP32](https://documentation.espressif.com/esp32-wroom-32_datasheet_en.html).
 
 ## Subir y leer sin movimiento
 
-1. Completar el cambio de AO a IO33 con la placa apagada. La configuración actual
-   es solo de diagnóstico: no modificar credenciales ni signos de motores.
+1. Mantener AO del sensor de color en IO33. No modificar credenciales ni signos
+   de motores durante una actualización de sensores.
 2. Usar **Subir paquete completo** en la interfaz de carga. Incluye
    `hardware_sensores.py`, `sensores_rover.py`, `config_sensores.json`, receptor,
    controlador y protocolo. El botón de Wi-Fi por sí solo no actualiza el paquete.
@@ -47,12 +38,12 @@ Referencias: [ADC2 y Wi-Fi en CircuitPython](https://docs.circuitpython.org/en/s
 ```
 
 El monitor confirma STOP y solo consulta `SENSORS`; nunca envía movimiento.
-El firmware rechaza también MOTOR, TURN y HEADING aunque se conecte otro cliente.
 Debe mostrar distancia, cuatro IR y `color_raw` (ambiente/R/G/B). Revisar
 `errors`: si faltan pines/módulos/eco, se informa, no se inventa una lectura.
 El código usa `pulseio`, `digitalio`, `analogio`, `neopixel`; deben estar
 disponibles en la versión de CircuitPython de la placa. El eco se atiende
-cooperativamente con vencimiento de 30 ms; no hay espera larga bloqueando STOP.
+cooperativamente con timeout de 60 ms e intervalo de 80 ms; no hay espera larga
+bloqueando STOP. El pulso TRIG usa `microcontroller.delay_us()`.
 
 ## Color: calibrar cada cubo
 
@@ -98,7 +89,12 @@ Hace falta confirmar su montaje antes de usar la comprobación de empuje.
 
 ## Qué controla cada sensor
 
-- **Ultrasonido:** la placa rechaza o detiene avance con distancia <= `stop_mm`
+- **Ultrasonido (freno DESACTIVADO con `ultrasonic.blocks_motion=false`):** el
+  HC-SR04 no mide por debajo de ~20 mm y, empujando, el cubo queda más cerca;
+  el freno bloqueaba el empuje. Con `false` solo informa `distance_mm` (usado
+  para acercarse al cubo antes de medir color) y el rover NO frena ante
+  obstáculos: la protección queda en visión y en el color antes de cada empuje.
+  Con `true` (comportamiento original): la placa rechaza o detiene avance con distancia <= `stop_mm`
   (inicialmente 80 mm), sin esperar la PC. Falta de eco/fallo/lectura vieja
   bloquea movimiento; un eco ausente NO equivale a camino libre.
   Es una medida desde el sensor, no entre centros de objetos. Solo mira al
@@ -122,8 +118,7 @@ empujar. Por debajo del rango mínimo útil, la lectura se considera inválida.
 El BAT autónomo ahora incluye `--usar-sensores` y no acepta firmware antiguo
 sin `SENSORS`. La prueba `--solo-verificar` continúa siendo solo de visión/rutas.
 STOP y el watchdog de 0,5 s se conservan; consultar sensores no renueva permiso
-para mover. Todo sigue sujeto a verificación física antes de una misión.
-Para salir del diagnóstico habrá que verificar la conexión eléctrica, completar
-la calibración, y subir la configuración con `echo_3v3_confirmed=true` y
-`diagnostic_only=false`. No marcar el voltaje como confirmado solo porque se
-reciben distancias. La excepción diagnóstica no habilita motores fuera de ese modo.
+para mover. Todo sigue sujeto a verificar rutas, cámara, STOP, watchdog y
+polaridad de motores antes de una misión. Para bloquear todos los movimientos
+durante una prueba de banco, usar `diagnostic_only=true`; no hay otra bandera
+de habilitación en el software.

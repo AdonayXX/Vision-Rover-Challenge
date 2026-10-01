@@ -18,7 +18,8 @@ class MotionController:
                  left_gain=1.0, right_gain=1.0, max_step=0.25,
                  turn_timeout=10.0, max_duration=30.0,
                  kp=0.015, ki=0.0005, kd=0.002, max_correction=0.30,
-                 tolerance=2.0, slow_angle=30.0, slow_speed=0.15, safety=None):
+                 tolerance=2.0, slow_angle=30.0, slow_speed=0.15, safety=None,
+                 ramp_seconds=0.0):
         self.robot, self.sensor, self.clock = robot, sensor, clock
         self.safety = safety
         self.drift = finite(drift)
@@ -29,7 +30,7 @@ class MotionController:
                       tolerance, slow_angle, slow_speed):
             if finite(value) <= 0:
                 raise ValueError("Ganancias, limites y tiempos deben ser positivos")
-        for value in (kp, ki, kd, max_correction):
+        for value in (kp, ki, kd, max_correction, ramp_seconds):
             if finite(value) < 0:
                 raise ValueError("PID y correccion deben ser no negativos")
         self.gyro_sign, self.left_sign, self.right_sign = gyro_sign, left_sign, right_sign
@@ -37,6 +38,9 @@ class MotionController:
         self.max_step, self.turn_timeout, self.max_duration = max_step, turn_timeout, max_duration
         self.kp, self.ki, self.kd = kp, ki, kd
         self.max_correction = max_correction
+        # Arranque suave de MOTOR: el pico de corriente de un arranque
+        # instantaneo hace caer el voltaje y reinicia el ESP32 (BROWNOUT).
+        self.ramp_seconds = ramp_seconds
         self.tolerance, self.slow_angle, self.slow_speed = tolerance, slow_angle, slow_speed
         self.mode = None
         self.reason = "inicio"
@@ -63,8 +67,8 @@ class MotionController:
     def _begin(self, mode):
         self.stop()
         if self.safety is not None and self.safety.motion_inhibited:
-            self.stop("diagnostico_o_cableado_pendiente")
-            raise ValueError("Movimiento bloqueado: diagnostico o cableado pendiente")
+            self.stop("diagnostico_sin_motores")
+            raise ValueError("Movimiento bloqueado: modo diagnostico")
         if mode != "MOTOR" and self.sensor is None:
             raise ValueError("Movimiento angular requiere IMU")
         self.started = self.previous = self.clock()
@@ -110,7 +114,10 @@ class MotionController:
                 return
             if self.mode == "MOTOR":
                 self.previous = now
-                self._drive(self.left, self.right)
+                scale = 1.0
+                if self.ramp_seconds > 0:
+                    scale = min(1.0, (now - self.started) / self.ramp_seconds)
+                self._drive(self.left * scale, self.right * scale)
                 return
             if self.mode == "TURN" and now - self.started >= self.turn_timeout:
                 self.stop("timeout_giro")

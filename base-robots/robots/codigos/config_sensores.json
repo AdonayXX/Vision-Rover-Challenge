@@ -1,13 +1,14 @@
 {
   "enabled": true,
-  "diagnostic_only": true,
+  "diagnostic_only": false,
   "max_age_ms": 400,
   "ultrasonic": {
     "trigger": "IO25",
     "echo": "IO26",
-    "echo_3v3_confirmed": false,
-    "allow_unverified_echo_diagnostic": true,
-    "stop_mm": 80
+    "stop_mm": 22,
+    "blocks_motion": false,
+    "timeout_ms": 60,
+    "ping_interval_ms": 80
   },
   "ir": {
     "pins": [
@@ -25,7 +26,7 @@
     "settle_seconds": 0.3,
     "samples_per_phase": 5,
     "sample_interval_seconds": 0.01,
-    "sweeps_per_result": 7,
+    "sweeps_per_result": 4,
     "min_color_votes": 2,
     "polarity": 1,
     "min_signal": 300,

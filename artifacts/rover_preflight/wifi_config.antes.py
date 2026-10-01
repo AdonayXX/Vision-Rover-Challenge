@@ -2,7 +2,7 @@
 
 
 _SSID_PLACEHOLDERS = ("", "TU_RED_WIFI")
-_PASSWORD_PLACEHOLDERS = ("TU_PASSWORD",)
+_PASSWORD_PLACEHOLDERS = ("", "TU_PASSWORD")
 
 
 def _pedir_no_vacio(prompt, input_fn):
@@ -19,8 +19,6 @@ def obtener_credenciales_wifi(config, input_fn=input):
     Si ``ask_wifi_on_boot`` es true se preguntan siempre las credenciales.
     Tambien se preguntan automaticamente cuando el JSON conserva los valores
     de ejemplo, para evitar intentar conectarse a ``TU_RED_WIFI``.
-    Una contraseña guardada como "" es valida para una red abierta; no debe
-    bloquear el arranque autonomo esperando una respuesta por USB.
     """
 
     ask_on_boot = config.get("ask_wifi_on_boot", False)
@@ -31,8 +29,7 @@ def obtener_credenciales_wifi(config, input_fn=input):
     configured_password = str(config.get("wifi_password", ""))
 
     needs_ssid = ask_on_boot or configured_ssid in _SSID_PLACEHOLDERS
-    needs_password = (needs_ssid or config.get("wifi_password") is None or
-                      configured_password in _PASSWORD_PLACEHOLDERS)
+    needs_password = ask_on_boot or configured_password in _PASSWORD_PLACEHOLDERS
 
     if needs_ssid or needs_password:
         print("\n=== Configuracion Wi-Fi del rover ===")

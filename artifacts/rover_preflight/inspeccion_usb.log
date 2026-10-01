@@ -1,0 +1,28 @@
+SALIDA INICIAL:
+
+INTERRUPCION PARA INSPECCION:
+Traceback (most recent call last):
+  File "code.py", line 4, in <module>
+  File "wifi_command_receiver.py", line 165, in main
+  File "wifi_config.py", line 44, in obtener_credenciales_wifi
+KeyboardInterrupt: 
+]0;🐍Wi-Fi: No IP | 44@wifi_config.py KeyboardInterrupt | 9.2.4\
+Code done running.
+]0;🐍Wi-Fi: off | Done | 9.2.4\
+Press any key to enter the REPL. Use CTRL-D to reload.
+]0;🐍Wi-Fi: off | REPL | 9.2.4\
+Adafruit CircuitPython 9.2.4 on 2025-01-29; CRCibernetica IdeaBoard with ESP32
+>>> 
+
+Adafruit CircuitPython 9.2.4 on 2025-01-29; CRCibernetica IdeaBoard with ESP32
+>>> 
+>>> 
+CONFIGURACION SIN CREDENCIALES:
+import os,json,microcontroller,wifi; c=json.load(open('config_robot.json')); print('DIAGNOSTICO',json.dumps({'reset_reason':str(microcontroller.cpu.reset_reason),'ask_wifi_on_boot':c.get('ask_wifi_on_boot'),'ssid_guardado':bool(c.get('wifi_ssid')) and c.get('wifi_ssid')!='TU_RED_WIFI','password_guardado':bool(c.get('wifi_password')) and c.get('wifi_password')!='TU_PASSWORD','ip':str(wifi.radio.ipv4_address),'files':[(n,os.stat(n)[6]) for n in os.listdir('/') if n.endswith('.py') or n.endswith('.json')]})); print('CODE',open('code.py').read())
+]0;🐍Wi-Fi: No IP | REPL | 9.2.4\DIAGNOSTICO {"password_guardado": false, "ip": "None", "files": [["code.py", 131], ["prueba.py", 1129], ["wifi_command_receiver.py", 6582], ["config_robot.json", 544], ["wifi_config.py", 1512], ["control_movimiento.py", 7327], ["sesion_comandos.py", 5150], ["command_protocol.py", 2954], ["ideaboard.py", 7108], ["sensores_rover.py", 14615], ["hardware_sensores.py", 4250], ["config_sensores.json", 1754], ["prueba_aislada_ultrasonic.py", 1644]], "ask_wifi_on_boot": false, "ssid_guardado": true, "reset_reason": "microcontroller.ResetReason.POWER_ON"}
+CODE """Solo IdeaBoard: guardar en la placa como code.py para la prueba de banco."""
+from wifi_command_receiver import main
+
+main()
+
+>>> 

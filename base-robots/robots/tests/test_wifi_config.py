@@ -37,6 +37,32 @@ class WifiConfigTests(unittest.TestCase):
             ("RedNueva", "clave-nueva"),
         )
 
+    def test_saved_open_network_boots_without_serial_input(self):
+        config = {"wifi_ssid": "RedAbierta", "wifi_password": "",
+                  "ask_wifi_on_boot": False}
+        def unexpected_input(prompt):
+            self.fail("Una red abierta no debe esperar USB: " + prompt)
+        self.assertEqual(obtener_credenciales_wifi(config, unexpected_input),
+                         ("RedAbierta", ""))
+
+    def test_missing_or_null_password_still_requests_configuration(self):
+        for config in ({"wifi_ssid": "Casa"},
+                       {"wifi_ssid": "Casa", "wifi_password": None}):
+            prompts = []
+            def answer(prompt):
+                prompts.append(prompt)
+                return "clave-prueba"
+            self.assertEqual(obtener_credenciales_wifi(config, answer),
+                             ("Casa", "clave-prueba"))
+            self.assertEqual(prompts, ["Password: "])
+
+    def test_new_ssid_requests_password_even_if_previous_password_is_empty(self):
+        answers = iter(("RedNueva", "clave-nueva"))
+        config = {"wifi_ssid": "TU_RED_WIFI", "wifi_password": "",
+                  "ask_wifi_on_boot": False}
+        self.assertEqual(obtener_credenciales_wifi(config, lambda _: next(answers)),
+                         ("RedNueva", "clave-nueva"))
+
     def test_placeholders_trigger_prompt(self):
         answers = iter(("Hotspot", "12345678"))
         config = {

@@ -87,6 +87,26 @@ class TurnPolarityTests(unittest.TestCase):
             self.assertLessEqual(abs((target - theta + 180) % 360 - 180), 7)
 
 
+class ResumePushTests(unittest.TestCase):
+    def state(self, rover):
+        from types import SimpleNamespace
+        cube = {"col": 30.0, "row": 22.0}
+        return SimpleNamespace(robot_id=10, message={"grid": {"cell_mm": 20}},
+                               rover=lambda _id: rover, cube=lambda _c: cube)
+
+    def test_behind_cube_on_push_line_resumes(self):
+        args = trial.build_parser().parse_args([])
+        target = {"col": 39.25, "row": 21.5}
+        self.assertTrue(trial._resuming_push(self.state({"col": 25.3, "row": 22.0}), "red", target, args))
+
+    def test_far_or_beside_cube_does_not_resume(self):
+        args = trial.build_parser().parse_args([])
+        target = {"col": 39.25, "row": 21.5}
+        self.assertFalse(trial._resuming_push(self.state({"col": 15.0, "row": 22.0}), "red", target, args))
+        self.assertFalse(trial._resuming_push(self.state({"col": 30.0, "row": 26.0}), "red", target, args))
+        self.assertFalse(trial._resuming_push(self.state({"col": 34.0, "row": 22.0}), "red", target, args))
+
+
 class SingleRoverTests(unittest.TestCase):
     def test_measured_border_conflict_is_reported_before_connecting(self):
         state = scene()
@@ -211,14 +231,14 @@ class SingleRoverTests(unittest.TestCase):
 
     def test_three_colors_sequentially_on_the_same_robot(self):
         with patch.object(trial, "run", return_value=0) as run:
-            self.assertEqual(trial.main(["--todos", "--robot-ip", "127.0.0.1"]), 0)
+            self.assertEqual(trial.main(["--todos", "--usar-sensores", "--robot-ip", "127.0.0.1"]), 0)
         self.assertEqual([(c.args[0].robot_id, c.args[0].cube, c.args[0].depot)
                           for c in run.call_args_list],
                          [(10, color, color) for color in trial.COLORS])
 
     def test_failed_task_prevents_starting_next_cube(self):
         with patch.object(trial, "run", return_value=1) as run:
-            self.assertEqual(trial.main(["--todos", "--robot-ip", "127.0.0.1"]), 1)
+            self.assertEqual(trial.main(["--todos", "--usar-sensores", "--robot-ip", "127.0.0.1"]), 1)
             run.assert_called_once()
 
     def test_verification_never_connects_robot(self):
@@ -256,7 +276,7 @@ class SingleRoverTests(unittest.TestCase):
              patch.object(trial, "RobotClient", return_value=robot), \
              patch.object(trial.time, "monotonic", side_effect=lambda: clock[0]), \
              patch.object(trial.time, "sleep", side_effect=sleep):
-            with self.assertRaisesRegex(RuntimeError, "Tiempo máximo"):
+            with self.assertRaisesRegex(RuntimeError, "telemetria"):
                 trial.run(args)
         self.assertTrue(commands)
         self.assertGreater(robot.stop.call_count, 0)
@@ -295,6 +315,53 @@ class SingleRoverTests(unittest.TestCase):
         args = trial.build_parser().parse_args([])
         planner = trial.RoutePlanner(85, 85, 10, required_colors=())
         self.assertIsNone(trial._push_clear(state, "red", {"col": 39.25, "row": 20}, planner, args))
+
+    def test_stale_between_pulses_waits_stopped_then_replans(self):
+        self._check_stale_wait(recovers=True, stop_confirmed=True)
+
+    def test_stale_between_pulses_times_out_without_motion(self):
+        self._check_stale_wait(recovers=False, stop_confirmed=True)
+
+    def test_stale_without_confirmed_stop_aborts_without_retry(self):
+        self._check_stale_wait(recovers=True, stop_confirmed=False)
+
+    def _check_stale_wait(self, recovers, stop_confirmed):
+        state = scene()
+        state.message["rovers"][0]["col"] = 10
+        args = trial.build_parser().parse_args([
+            "--cube", "red", "--depot", "red", "--robot-ip", "127.0.0.1",
+            "--max-seconds", "3", "--vision-timeout", "0.5"])
+        clock = [0.0]
+        robot, vision = Mock(), Mock()
+        robot.stop.return_value = stop_confirmed
+
+        def poll():
+            stale = clock[0] >= 2 and (not recovers or clock[0] < 2.3)
+            state.fault = "captura_vieja" if stale else None
+
+        def plan(*args, **kwargs):
+            self.assertIsNone(state.reason("red"))
+            self.assertGreaterEqual(clock[0], 2.3)
+            raise RuntimeError("ruta recalculada con imagen fresca")
+
+        vision.poll.side_effect = poll
+        with patch.object(trial, "DevelopmentTelemetryState", return_value=state), \
+             patch.object(trial, "VisionClient", return_value=vision), \
+             patch.object(trial, "RobotClient", return_value=robot), \
+             patch.object(trial.RoutePlanner, "plan", side_effect=plan) as route, \
+             patch.object(trial.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(trial.time, "sleep", side_effect=lambda s: clock.__setitem__(0, clock[0] + s)):
+            expected = "imagen fresca" if recovers and stop_confirmed else "telemetria"
+            with self.assertRaisesRegex(RuntimeError, expected):
+                trial.run(args)
+        robot.send.assert_not_called()
+        self.assertGreater(robot.stop.call_count, 0)
+        self.assertEqual(route.call_count, int(recovers and stop_confirmed))
+        if not stop_confirmed:
+            self.assertLess(clock[0], 2.1)
+        elif not recovers:
+            self.assertGreaterEqual(clock[0], 2.5)
+            self.assertLess(clock[0], 2.6)
 
     def test_live_tcp_stream_with_old_frames_does_not_reconnect(self):
         state = scene()

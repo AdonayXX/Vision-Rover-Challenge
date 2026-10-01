@@ -25,6 +25,8 @@ DEFAULT_FILES = [
     os.path.join(CODE_DIR, "hardware_sensores.py"),
     os.path.join(CODE_DIR, "config_sensores.json"),
     os.path.join(CODE_DIR, "ideaboard.py"),
+    os.path.join(CODE_DIR, "registro_fallos.py"),
+    os.path.join(CODE_DIR, "safemode.py"),
 ]
 
 

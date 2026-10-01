@@ -5,7 +5,7 @@ import tkinter as tk
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Control manual del CenfoBot por Wi-Fi")
-    parser.add_argument("--host", default="10.50.42.207", help="IP del rover")
+    parser.add_argument("--host", default="10.50.40.229", help="IP del rover")
     parser.add_argument("--port", type=int, default=5000, help="Puerto TCP del rover")
     return parser.parse_args()
 
