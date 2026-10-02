@@ -89,6 +89,13 @@
     "duracion_ms": 600000,
     "_COMO_SE_PRUEBA_SIN_ESPERAR": "Bajá los dos valores acá. No hay comando que adelante el paso de READY a RUNNING —se quitó a propósito— así que esta es la forma de probar el ciclo completo en veinte segundos en vez de en once minutos."
   },
+  "arbitro": {
+    "_acerca_de": "El simulador hace de ÁRBITRO para quien desarrolla sin cancha: decide el campo `in_depot` de cada cubo. Estos dos valores tienen que ser los mismos que los de vision/config_vision.json, bloque `conteo_acopio`, para que el veredicto que ven acá sea el que van a ver en la cancha.",
+    "tolerancia_mm": 2.5,
+    "_nota_tolerancia": "Cuánto se agranda, por cada lado, la ventana donde tiene que caer el centro del cubo. Es la holgura del árbitro frente al error de ubicación, y NO viaja en el mensaje: lo que viaja es el veredicto, en `cubes[i].in_depot`.",
+    "permanencia_minima_ms": 1000,
+    "_nota_permanencia": "Cuánto tiene que sostenerse un cubo dentro de su zona para que `in_depot` pase a true. Solo demora ENTRAR: al salir, pasa a false en el mismo mensaje."
+  },
   "semilla_aleatoria": 20260725,
   "_nota_semilla": "Semilla fija para que dos corridas den lo mismo y un bug del equipo sea reproducible. Poner null para tener ruido distinto en cada corrida."
 }

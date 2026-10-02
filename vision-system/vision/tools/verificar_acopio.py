@@ -48,26 +48,30 @@ import math
 import sys
 
 try:  # como paquete
-    from ..configuracion import CuboDemo, Perspectiva, cargar_config, geometrias_deposito
+    from ..configuracion import (
+        CuboDemo, Perspectiva, cargar_config, geometrias_arbitro, geometrias_deposito,
+    )
     from ..detectors.cubos import cuadrado, detectar_cubos
     from ..detectors.rovers import detectar_rovers
     from ..geometry.coordenadas import (
         ErrorGeometria, construir_sistema, detectar_marcadores, pose_camara,
     )
-    from ..mundo import CuboEnMundo, EstadoMundo, RelojRonda
+    from ..mundo import CuboEnMundo, EstadoMundo, RelojRonda, a_mensaje, con_entregas
     from ..reglas.acopio import ContadorAcopio
     from ..sources.generador_sintetico import generar
     from ..tracking.seguimiento import Seguidor
 except ImportError:  # como script suelto
     from vision.configuracion import (  # type: ignore[no-redef]
-        CuboDemo, Perspectiva, cargar_config, geometrias_deposito,
+        CuboDemo, Perspectiva, cargar_config, geometrias_arbitro, geometrias_deposito,
     )
     from vision.detectors.cubos import cuadrado, detectar_cubos  # type: ignore[no-redef]
     from vision.detectors.rovers import detectar_rovers  # type: ignore[no-redef]
     from vision.geometry.coordenadas import (  # type: ignore[no-redef]
         ErrorGeometria, construir_sistema, detectar_marcadores, pose_camara,
     )
-    from vision.mundo import CuboEnMundo, EstadoMundo, RelojRonda  # type: ignore[no-redef]
+    from vision.mundo import (  # type: ignore[no-redef]
+        CuboEnMundo, EstadoMundo, RelojRonda, a_mensaje, con_entregas,
+    )
     from vision.reglas.acopio import ContadorAcopio  # type: ignore[no-redef]
     from vision.sources.generador_sintetico import generar  # type: ignore[no-redef]
     from vision.tracking.seguimiento import Seguidor  # type: ignore[no-redef]
@@ -199,7 +203,7 @@ def _apenas_afuera(cfg) -> dict:
     cell = cfg.tablero.cell_mm
     epsilon = EPSILON_BORDE_MM / cell
     posiciones = {}
-    for color, geo in geometrias_deposito(cfg).items():
+    for color, geo in geometrias_arbitro(cfg).items():
         if geo.ventana_row <= geo.ventana_col:      # zona apoyada arriba o abajo
             posiciones[color] = (geo.col, geo.row + geo.ventana_row + epsilon)
         else:                                       # zona apoyada a los costados
@@ -241,6 +245,76 @@ def verificar_recorrido(cfg) -> list[str]:
     return problemas
 
 
+def verificar_tolerancia_y_veredicto(cfg) -> list[str]:
+    """La tolerancia del árbitro, y que lo que se publica sea el veredicto SOSTENIDO.
+
+    Dos cosas distintas que van juntas desde el protocolo v3. La **tolerancia**
+    agranda la ventana del árbitro por cada lado y no viaja en el mensaje; el
+    **veredicto** sí viaja, en `in_depot`, y es lo que hace que el rover y el
+    árbitro digan lo mismo aunque el rover no conozca la tolerancia.
+
+    Se prueba sobre el eje del fondo de la zona verde, que es el más angosto:
+    un cubo apenas más acá de la tolerancia cuenta, y uno apenas más allá no.
+    Y se sigue el veredicto publicado cuadro a cuadro: no aparece hasta que el
+    cubo se sostuvo, y desaparece en el mismo cuadro en que sale.
+    """
+    problemas = []
+    cell = cfg.tablero.cell_mm
+    tolerancia = cfg.conteo_acopio.tolerancia_mm
+    permanencia = cfg.conteo_acopio.permanencia_minima_ms
+    estricta = geometrias_deposito(cfg)["green"]
+    arbitro = geometrias_arbitro(cfg)["green"]
+
+    print("\n  BLOQUE 4 — la tolerancia del árbitro y el veredicto que se publica")
+    print("  " + "-" * 74)
+    print("  {:<52} {:>9} {:>9}  {}".format("caso", "esperado", "obtenido", "estado"))
+    print("  " + "-" * 74)
+
+    def fila(nombre, esperado, obtenido):
+        ok = esperado == obtenido
+        print("  {:<52} {:>9} {:>9}  {}".format(nombre, str(esperado), str(obtenido),
+                                             "OK" if ok else "FALLA"))
+        if not ok:
+            problemas.append("{}: se esperaba {} y dio {}".format(nombre, esperado, obtenido))
+
+    crecio = round((arbitro.ventana_row - estricta.ventana_row) * cell, 3)
+    fila("la ventana del árbitro crece por lado (mm)", round(tolerancia, 3), crecio)
+    crecio_largo = round((arbitro.ventana_col - estricta.ventana_col) * cell, 3)
+    fila("…y lo mismo sobre el otro eje (mm)", round(tolerancia, 3), crecio_largo)
+
+    def publicado(contador, pos, ts):
+        """Lo que saldría en `in_depot` para el cubo verde en este cuadro."""
+        cubos = (CuboEnMundo(color="green", col=pos[0], row=pos[1]),)
+        estado = EstadoMundo(ts_ms=ts, fase="RUNNING", cubos=cubos)
+        r = contador.actualizar(estado, ts)
+        entregados = frozenset(z.color for z in r.zonas if z.contado)
+        mensaje = a_mensaje(con_entregas(estado, entregados), cfg, seq=0)
+        return next(c.in_depot for c in mensaje.cubes if c.color == "green")
+
+    def sostenido(desvio_mm):
+        """Un cubo corrido `desvio_mm` más allá de la ventana CONSERVADORA."""
+        c = ContadorAcopio(cfg)
+        pos = (estricta.col, estricta.row + estricta.ventana_row + desvio_mm / cell)
+        publicado(c, pos, 0)
+        return publicado(c, pos, permanencia)
+
+    mitad = tolerancia / 2.0
+    fila("cubo {:.2f} mm fuera de la conservadora: cuenta".format(mitad), True, sostenido(mitad))
+    fila("cubo {:.2f} mm fuera de la conservadora: no cuenta".format(tolerancia + 0.5),
+         False, sostenido(tolerancia + 0.5))
+
+    c = ContadorAcopio(cfg)
+    centro = (arbitro.col, arbitro.row)
+    lejos = (arbitro.col, arbitro.row + arbitro.semi_row * 3)
+    fila("recién entra: todavía no se publica", False, publicado(c, centro, 0))
+    fila("a mitad de la permanencia: todavía no", False, publicado(c, centro, permanencia // 2))
+    fila("cumplida la permanencia: in_depot = true", True, publicado(c, centro, permanencia))
+    fila("sale: in_depot = false en ese mismo cuadro", False,
+         publicado(c, lejos, permanencia + 50))
+    fila("vuelve: tiene que sostenerse de nuevo", False, publicado(c, centro, permanencia + 100))
+    return problemas
+
+
 def verificar_hora_de_entrada(cfg) -> list[str]:
     """Que la hora de entrada se tome al entrar, se borre al salir y se retome.
 
@@ -253,7 +327,7 @@ def verificar_hora_de_entrada(cfg) -> list[str]:
     preparación de otra ronda.
     """
     problemas = []
-    geo = geometrias_deposito(cfg)["green"]
+    geo = geometrias_arbitro(cfg)["green"]
     adentro = (geo.col, geo.row)
     afuera = (geo.col, geo.row + geo.semi_row * 3)     # lejos, sin ambigüedad
     permanencia = cfg.conteo_acopio.permanencia_minima_ms
@@ -300,7 +374,7 @@ def verificar_hora_de_entrada(cfg) -> list[str]:
 
 
 # --------------------------------------------------------------------------
-# Bloque 4 — el sistema entero, sobre imágenes sintéticas
+# Bloque 5 — el sistema entero, sobre imágenes sintéticas
 # --------------------------------------------------------------------------
 
 
@@ -363,7 +437,7 @@ def correr_modo(cfg, con_perspectiva: bool, holgura_mm: float) -> bool:
     cell = cfg.tablero.cell_mm
     lado_celdas = cfg.elementos.cubos.lado_mm / cell
     holgura_celdas = holgura_mm / cell
-    geometrias = geometrias_deposito(cfg)
+    geometrias = geometrias_arbitro(cfg)
     persp = Perspectiva(activa=con_perspectiva,
                         inclinacion_grados=cfg.sintetico.perspectiva.inclinacion_grados)
     permanencia = cfg.conteo_acopio.permanencia_minima_ms
@@ -371,7 +445,7 @@ def correr_modo(cfg, con_perspectiva: bool, holgura_mm: float) -> bool:
     titulo = ("CON perspectiva (cámara inclinada {:.1f}°)".format(persp.inclinacion_grados)
               if con_perspectiva else "SIN perspectiva (cenital perfecta)")
     print("\n" + "=" * 78)
-    print("BLOQUE 4 — el sistema entero · MODO: {}".format(titulo))
+    print("BLOQUE 5 — el sistema entero · MODO: {}".format(titulo))
     print("=" * 78)
     print("  {:<42} {:>9} {:>10} {:>10}  {}".format(
         "escenario", "esperado", "contados", "peor falta", "estado"))
@@ -457,6 +531,7 @@ def main(argv: list[str] | None = None) -> int:
     problemas = verificar_matematica(cfg)
     problemas += verificar_recorrido(cfg)
     problemas += verificar_hora_de_entrada(cfg)
+    problemas += verificar_tolerancia_y_veredicto(cfg)
     modos = {"ambos": (False, True), "cenital": (False,), "perspectiva": (True,)}[args.modo]
     resultados = [correr_modo(cfg, con_persp, args.holgura_mm) for con_persp in modos]
 

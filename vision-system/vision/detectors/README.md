@@ -121,6 +121,51 @@ El método: **segmentar por croma** en Lab y clasificar por **matiz**, no HSV.
 que cualquier cosa con color saturado es, por definición, un objeto de interés.
 Es un filtro que separa el fondo del contenido casi gratis.
 
+**El umbral de croma no es un número fijo: sale del tablero.** En cada cuadro
+se le resta a la imagen el **tinte de la luz** —la mediana del color del tablero,
+que es gris por construcción— y el umbral se pide como `croma_factor_tablero`
+por el percentil 95 del croma que le queda al tablero, acotado entre
+`croma_piso` y `croma_minimo`. Un número fijo sirve para una sola luz: con
+mucha, la tapa de un cubo de acrílico se lava; con poca, el color se apaga.
+Probado en la cancha, con exposiciones de -4 a -8 aparecía un cubo u otro y
+nunca los tres.
+
+Lo acompañan cuatro cosas, que existen porque el umbral es más bajo:
+
+| Qué | Por qué |
+|---|---|
+| Se busca **solo dentro de la cancha**, con `margen_cancha_celdas` | un piso apenas teñido o un objeto vecino se uniría a un cubo del borde |
+| Los **agujeros** de una mancha se rellenan | un brillo quemado en la tapa no tiene croma y le restaría área |
+| El matiz sale de los píxeles **no quemados** | un canal en el tope miente: un azul recortado se lee celeste |
+| Entre dos manchas del mismo color gana la que **encaja con un cubo** | "la más grande" sola dejaría que un objeto ajeno robe la identidad |
+
+Las motas de color del tablero que pasan el umbral no importan: medidas sobre
+capturas reales son de unos cien píxeles, y el filtro de área pide miles.
+
+Medido con ruido de color de cámara real: de **32 a 50** cubos bien ubicados
+sobre 66 casos de luz, sin costo por cuadro. **Lo que el sensor quema no se
+recupera**; eso es exposición.
+
+**Los matices de referencia se pueden aprender de los cubos.** Los del archivo
+son los de los colores puros; un cubo real, con la luz de una sala, queda
+corrido. `medir_matices` da el matiz de cada mancha con tamaño de cubo, y
+`asignar_matices` decide cuál es de qué color buscando la asignación que menos
+se aparta **mirando los tres a la vez** —uno por uno, dos cubos pueden disputarse
+la misma referencia—. Con eso el arranque del sistema calibra los colores para
+la corrida.
+
+La asignación **se niega** en tres casos: si no hay exactamente una mancha por
+cubo, si algún color quedaría corrido más que la tolerancia de matiz, o si la
+segunda mejor asignación está demasiado cerca de la primera. Más allá de unos
+50° de corrimiento la asignación más cercana pasa a ser la equivocada —los tres
+colores girados una posición—, y calibrar así sería enseñarle al sistema que el
+cubo rojo es el verde.
+
+**Lo que se descarta, se puede preguntar.** `detectar_cubos` acepta una lista
+opcional donde anota cada mancha descartada y su motivo —`area_chica`,
+`area_grande`, `matiz`, `duplicado`—. No cambia lo que detecta, y sin la lista
+no calcula nada de más. La lee `tools/diagnostico_cubos.py`.
+
 **Por qué Lab y no HSV:** el matiz de HSV se vuelve inestable justo donde más
 importa —con poca saturación o poca luz— y da saltos entre valores extremos. Lab
 separa la luminosidad del color de forma más pareja, así que un cubo rojo a la
@@ -130,7 +175,10 @@ sombra se sigue pareciendo a un cubo rojo.
 invariante a la iluminación y a lo saturado que sea el plástico. Por eso **no
 hizo falta medir los cubos reales** antes de escribir el detector: los tres
 colores del reto están de **94° a 170°** entre sí, y el único par ajustado es
-verde–amarillo, a 33°.
+verde–amarillo, a 33°. La tolerancia es de **60°**: un acrílico real bajo luz
+fuerte se corre de los primarios puros —el azul hacia el celeste, el rojo hacia
+el rosado—. Gana siempre la referencia más cercana, así que las clases no se
+solapan, y el amarillo sigue siendo exclusión.
 
 #### El límite, declarado en vez de escondido
 

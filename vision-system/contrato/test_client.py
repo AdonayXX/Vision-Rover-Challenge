@@ -100,6 +100,12 @@ def cubo_en_su_zona(cubo, depot, depot_size, grid, cube_side):
     `falta` es cuántas celdas hay que moverlo para que entre, y vale 0 si ya
     está adentro.
 
+    **Esta cuenta es para APUNTAR, no para decidir.** Si el cubo ya está
+    entregado lo dice `cubo["in_depot"]`, que es el veredicto del árbitro. El
+    árbitro usa esta misma geometría con una holgura chica por lado, así que
+    esta cuenta es apenas más estricta que la suya: si acá da adentro, el
+    árbitro también lo va a dar.
+
     El criterio es **conservador por media diagonal**: el centro del cubo tiene
     que estar a `cube_side * raíz(2) / 2` de cada borde del rectángulo. Con eso
     el cubo entero queda adentro **con cualquier rotación**, y por eso alcanza
@@ -201,10 +207,19 @@ def ejemplo_de_consumo(msg: dict[str, Any]) -> list[str]:
     depots_por_color = {d["color"]: d for d in msg["depots"]}
     for cubo in msg["cubes"]:
         destino = depots_por_color[cubo["color"]]
-        adentro, falta = cubo_en_su_zona(
+        # Si el cubo está entregado lo dice el ÁRBITRO, en `in_depot`: es el
+        # veredicto que cuenta los cubos y cierra la ronda, y no hay que
+        # calcularlo. La cuenta de `cubo_en_su_zona` sirve para otra cosa: saber
+        # cuánto le falta a un cubo que todavía no entró, para apuntarlo.
+        _, falta = cubo_en_su_zona(
             cubo, destino, msg["depot_size"], msg["grid"], msg["cube_side"]
         )
-        veredicto = "EN POSICIÓN" if adentro else "le falta {:.2f} celdas".format(falta)
+        if cubo["in_depot"]:
+            veredicto = "ENTREGADO"
+        elif falta == 0.0:
+            veredicto = "adentro, sosteniéndose"
+        else:
+            veredicto = "le falta {:.2f} celdas".format(falta)
         lineas.append(
             "cubo {:<5} en ({:.2f}, {:.2f}) -> zona {} ({:.2f}, {:.2f})  age={} ms  [{}]".format(
                 cubo["color"], cubo["col"], cubo["row"],
