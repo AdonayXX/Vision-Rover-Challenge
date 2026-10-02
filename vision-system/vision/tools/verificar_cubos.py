@@ -31,18 +31,20 @@ import cv2
 import numpy as np
 
 try:  # como paquete
-    from ..configuracion import CuboDemo, Perspectiva, RoverDemo, cargar_config
-    from ..detectors.cubos import cuadrado, detectar_cubos, mascara_de_color
+    from ..configuracion import CuboDemo, Perspectiva, RoverDemo, cargar_config, con_matices
+    from ..detectors.cubos import (
+        asignar_matices, cuadrado, detectar_cubos, mascara_de_color, medir_matices,
+    )
     from ..geometry.coordenadas import (
         ErrorGeometria, construir_sistema, detectar_marcadores, pose_camara,
     )
     from ..sources.generador_sintetico import generar
 except ImportError:  # como script suelto
     from vision.configuracion import (  # type: ignore[no-redef]
-        CuboDemo, Perspectiva, RoverDemo, cargar_config,
+        CuboDemo, Perspectiva, RoverDemo, cargar_config, con_matices,
     )
     from vision.detectors.cubos import (  # type: ignore[no-redef]
-        cuadrado, detectar_cubos, mascara_de_color,
+        asignar_matices, cuadrado, detectar_cubos, mascara_de_color, medir_matices,
     )
     from vision.geometry.coordenadas import (  # type: ignore[no-redef]
         ErrorGeometria, construir_sistema, detectar_marcadores, pose_camara,
@@ -307,6 +309,74 @@ def verificar_luz(cfg, umbral_mm: float) -> bool:
     return todo_bien
 
 
+def _girar_matiz(imagen, grados: float):
+    """Gira el matiz de todo lo coloreado: una luz que corre los tonos de los cubos."""
+    lab = cv2.cvtColor(imagen, cv2.COLOR_BGR2LAB).astype(np.float32)
+    a, b = lab[..., 1] - 128.0, lab[..., 2] - 128.0
+    rad = math.radians(grados)
+    lab[..., 1] = a * math.cos(rad) - b * math.sin(rad) + 128.0
+    lab[..., 2] = a * math.sin(rad) + b * math.cos(rad) + 128.0
+    return cv2.cvtColor(np.clip(lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+
+
+def verificar_calibracion_colores(cfg, umbral_mm: float) -> bool:
+    """La calibración de colores del arranque: acierta, o se niega. Nunca miente.
+
+    Se giran los matices de los tres cubos, que es lo que hace una luz que corre
+    los tonos, y se calibra mirando esa imagen. Dos cosas se le exigen:
+
+    - con un corrimiento moderado, que después de calibrar estén **los tres
+      cubos, cada uno con SU color y en su lugar**;
+    - con un corrimiento tan grande que ya no se puede saber cuál es cuál —o con
+      un cubo de menos—, que **se niegue** y deje los colores del archivo. Una
+      calibración que aprende los colores cambiados es peor que no calibrar.
+    """
+    persp = Perspectiva(activa=True,
+                        inclinacion_grados=cfg.sintetico.perspectiva.inclinacion_grados)
+    base, verdad = generar(cfg, rovers=(), perspectiva=persp)
+    marcadores = detectar_marcadores(
+        base, cfg.marcadores_esquina.nombre_diccionario,
+        cfg.deteccion_marcadores.refinamiento_esquinas)
+    sistema = construir_sistema(base, cfg, marcadores)
+    pose = pose_camara(sistema, verdad.camara.matriz)
+    cell = cfg.tablero.cell_mm
+    dos_cubos, _ = generar(cfg, rovers=(), cubos=cfg.cubos_demo[:2], perspectiva=persp)
+
+    # (nombre, imagen, ¿tiene que calibrar?)
+    casos = [("tonos sin correr", base, True)]
+    casos += [("tonos corridos {:+d}°".format(g), _girar_matiz(base, g), True)
+              for g in (30, 45, -30, -45)]
+    casos += [("tonos corridos {:+d}°: irreconocibles".format(g), _girar_matiz(base, g), False)
+              for g in (75, -75)]
+    casos += [("falta un cubo", dos_cubos, False)]
+
+    print("=" * 78)
+    print("CALIBRACIÓN DE COLORES — aprender los matices mirando los cubos")
+    print("=" * 78)
+    print("  {:<38} {:>12} {:>14}  {}".format("caso", "sin calibrar", "calibrado", "estado"))
+    print("  " + "-" * 74)
+    todo_bien = True
+    for nombre, imagen, debe_calibrar in casos:
+        antes = len(detectar_cubos(imagen, sistema, cfg, pose))
+        asignados = asignar_matices(medir_matices(imagen, sistema, cfg), cfg)
+        if asignados is None:
+            paso, despues = (not debe_calibrar), "se niega"
+        else:
+            cubos = {c.color: c for c in detectar_cubos(
+                imagen, sistema, con_matices(cfg, asignados), pose)}
+            reales = verdad.cubos if debe_calibrar else ()
+            bien = sum(1 for r in reales if r.color in cubos and math.hypot(
+                cubos[r.color].col - r.col, cubos[r.color].row - r.row) * cell <= umbral_mm)
+            paso = debe_calibrar and bien == len(verdad.cubos)
+            despues = "{} de {}".format(bien, len(verdad.cubos))
+        todo_bien = todo_bien and paso
+        print("  {:<38} {:>12} {:>14}  {}".format(
+            nombre, "{} de {}".format(antes, len(verdad.cubos)), despues,
+            "OK" if paso else "FALLA"))
+    print("\n  resultado: {}\n".format("TODO OK" if todo_bien else "HAY CASOS QUE FALLAN"))
+    return todo_bien
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Verifica la detección de cubos contra la verdad del generador sintético."
@@ -330,6 +400,7 @@ def main(argv: list[str] | None = None) -> int:
             salida = "{}{}{}{}".format(base or salida, sufijo, punto, ext) if punto else salida + sufijo
         resultados.append(correr_modo(cfg, con_persp, args.umbral_mm, salida, args.anotar))
     resultados.append(verificar_luz(cfg, args.umbral_mm))
+    resultados.append(verificar_calibracion_colores(cfg, args.umbral_mm))
 
     print("=" * 78)
     print("RESULTADO GENERAL: {}".format("TODO OK" if all(resultados) else "HAY FALLAS"))

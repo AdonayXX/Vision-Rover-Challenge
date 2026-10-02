@@ -59,6 +59,15 @@ Cuatro cosas acompañan a ese umbral:
 Las motas de color del tablero que pasen el umbral no importan: son decenas de
 píxeles y el filtro de área pide miles.
 
+Los matices de referencia se pueden aprender de los cubos
+---------------------------------------------------------
+Los del archivo son los de los colores puros. Un cubo real, con la luz de una
+sala, queda corrido: el azul hacia el celeste, el rojo hacia el rosado. En vez
+de ensanchar tolerancias a mano, el arranque puede **mirar los tres cubos** y
+tomar como referencia el matiz que tienen ahí, con esa luz. `medir_matices` y
+`asignar_matices` son las dos piezas; quién pregunta y cuándo es cosa de
+`sistema.py`.
+
 El problema de verdad: la mancha no es el cubo
 ----------------------------------------------
 Lo que la cámara ve de un cubo **no es una cara**: es la **tapa más una o dos
@@ -106,6 +115,7 @@ objetos de verdad es indistinguible de una cámara que dejó de verlos. La lee
 
 from __future__ import annotations
 
+import itertools
 import math
 from dataclasses import dataclass
 
@@ -318,6 +328,92 @@ def _matiz_de_region(lab: np.ndarray, region: np.ndarray, sano: np.ndarray) -> t
     if int(util.sum()) * 5 < int(region.sum()):
         util = region
     return matiz_y_croma(cv2.mean(lab, mask=util)[:3])
+
+
+# --------------------------------------------------------------------------
+# Calibración de colores: aprender los matices mirando los cubos
+# --------------------------------------------------------------------------
+
+
+#: Cuánto mejor que la segunda tiene que ser la mejor asignación de colores para
+#: creerle, en grados sumados sobre los tres cubos. Sale de girar los tres
+#: matices y mirar dónde la asignación empieza a equivocarse: cuando acierta con
+#: holgura la diferencia pasa de 85, y cuando está por equivocarse cae a 30.
+_MARGEN_ASIGNACION_GRADOS = 60.0
+
+
+def _distancia_angular(a: float, b: float) -> float:
+    return abs((a - b + 180.0) % 360.0 - 180.0)
+
+
+def medir_matices(imagen_bgr: np.ndarray, sistema: SistemaCoordenadas,
+                  cfg: ConfigVision) -> list[float]:
+    """El matiz de cada mancha con TAMAÑO de cubo, de la más grande a la más chica.
+
+    No clasifica: acá justamente no se sabe todavía qué matiz tiene cada color.
+    Usa la misma segmentación y el mismo filtro de área que el detector, así que
+    lo que mide es lo que el detector va a ver.
+    """
+    dc = cfg.deteccion_cubos
+    lado_celdas = cfg.elementos.cubos.lado_mm / cfg.tablero.cell_mm
+    px = sistema.a_pixeles(np.array([[0.0, 0.0], [lado_celdas, 0.0]], dtype=np.float64))
+    area_cara = max(1.0, float(np.hypot(px[1, 0] - px[0, 0], px[1, 1] - px[0, 1])) ** 2)
+
+    mascara, lab, _ = segmentar(imagen_bgr, cfg, sistema)
+    sano = (imagen_bgr.max(axis=2) < dc.nivel_recorte).astype(np.uint8)
+    cantidad, etiquetas, stats, _ = cv2.connectedComponentsWithStats(mascara, 8)
+    medidas = []
+    for etiqueta in range(1, cantidad):
+        area = int(stats[etiqueta, cv2.CC_STAT_AREA])
+        if not (area_cara * dc.area_minima_relativa <= area <= area_cara * dc.area_maxima_relativa):
+            continue
+        region = (etiquetas == etiqueta).astype(np.uint8)
+        matiz, _ = _matiz_de_region(lab, region, sano)
+        medidas.append((area, matiz))
+    return [m for _, m in sorted(medidas, reverse=True)]
+
+
+def asignar_matices(medidos: list[float], cfg: ConfigVision) -> dict[str, float] | None:
+    """Decide qué matiz medido es de qué cubo. `None` si no se puede decidir.
+
+    Tiene que haber **exactamente** una mancha por cubo: con menos falta un cubo,
+    y con más hay algo de color en la cancha que no es un cubo, y calibrar contra
+    eso sería enseñarle al sistema un color equivocado.
+
+    La asignación es la que **menos se aparta en total** de los matices de
+    referencia. No se usa "el más cercano" uno por uno porque con la luz corrida
+    dos cubos pueden disputarse la misma referencia; mirando las tres a la vez,
+    el orden de los colores en el círculo se conserva aunque los tres se corran.
+
+    También devuelve `None` si los tonos están tan corridos que no se puede
+    saber cuál es cuál: ver las dos guardas del final.
+    """
+    colores = list(cfg.elementos.cubos.colores)
+    if len(medidos) != len(colores):
+        return None
+    referencia = cfg.deteccion_cubos.matices_grados
+    opciones = sorted(
+        (sum(_distancia_angular(m, referencia[c]) for m, c in zip(orden, colores)), orden)
+        for orden in itertools.permutations(medidos))
+    costo_mejor, mejor = opciones[0]
+    # Dos guardas, y las dos dicen lo mismo: "no sé cuál es cuál". Con los tonos
+    # muy corridos, la asignación que menos se aparta puede ser la EQUIVOCADA
+    # —los tres colores girados una posición—, y calibrar así sería enseñarle al
+    # sistema que el cubo rojo es el verde. Medido girando los tres matices: la
+    # asignación acierta hasta unos 50° de corrimiento, y más allá se equivoca.
+    # Negarse ahí deja los colores del archivo, que es el mal menor.
+    if len(opciones) > 1 and opciones[1][0] - costo_mejor < _MARGEN_ASIGNACION_GRADOS:
+        return None
+    tolerancia = cfg.deteccion_cubos.matiz_tolerancia_grados
+    if any(_distancia_angular(m, referencia[c]) > tolerancia for m, c in zip(mejor, colores)):
+        return None
+    return dict(zip(colores, mejor))
+
+
+def promedio_circular(angulos: list[float]) -> float:
+    """El promedio de varios ángulos, respetando que 359° y 1° son vecinos."""
+    rad = np.radians(np.array(angulos, dtype=np.float64))
+    return float(math.degrees(math.atan2(np.sin(rad).mean(), np.cos(rad).mean())) % 360.0)
 
 
 # --------------------------------------------------------------------------

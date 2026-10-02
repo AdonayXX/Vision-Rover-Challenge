@@ -47,12 +47,16 @@ import time
 try:  # como paquete
     from .configuracion import (
         CONFIG_POR_DEFECTO, ConfigVision, avisos_config, cargar_config, con_exposicion,
+        con_matices,
     )
-    from .detectors.cubos import detectar_cubos
+    from .detectors.cubos import (
+        asignar_matices, detectar_cubos, medir_matices, promedio_circular,
+    )
     from .detectors.rovers import detectar_rovers
     from .geometry.coordenadas import (
-        AnclajeCancha, ErrorDuplicado, ErrorGeometria, detectar_marcadores_crudo,
-        filtrar_plausibles, pose_camara, resolver_duplicados,
+        AnclajeCancha, ErrorDuplicado, ErrorGeometria, construir_sistema,
+        detectar_marcadores, detectar_marcadores_crudo, filtrar_plausibles, pose_camara,
+        resolver_duplicados,
     )
     from .geometry.distorsion import (
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
@@ -70,12 +74,16 @@ try:  # como paquete
 except ImportError:  # como script suelto
     from vision.configuracion import (  # type: ignore[no-redef]
         CONFIG_POR_DEFECTO, ConfigVision, avisos_config, cargar_config, con_exposicion,
+        con_matices,
     )
-    from vision.detectors.cubos import detectar_cubos  # type: ignore[no-redef]
+    from vision.detectors.cubos import (  # type: ignore[no-redef]
+        asignar_matices, detectar_cubos, medir_matices, promedio_circular,
+    )
     from vision.detectors.rovers import detectar_rovers  # type: ignore[no-redef]
     from vision.geometry.coordenadas import (  # type: ignore[no-redef]
-        AnclajeCancha, ErrorDuplicado, ErrorGeometria, detectar_marcadores_crudo,
-        filtrar_plausibles, pose_camara, resolver_duplicados,
+        AnclajeCancha, ErrorDuplicado, ErrorGeometria, construir_sistema,
+        detectar_marcadores, detectar_marcadores_crudo, filtrar_plausibles, pose_camara,
+        resolver_duplicados,
     )
     from vision.geometry.distorsion import (  # type: ignore[no-redef]
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
@@ -538,6 +546,92 @@ def preguntar_exposicion(cfg: ConfigVision) -> float | None:
             print("  Valor inválido: tiene que ser un número, por ejemplo -7.")
 
 
+def preguntar_calibrar_colores() -> bool:
+    """Pregunta si se calibran los colores de los cubos con la luz de ahora."""
+    print("\n  Colores de los cubos. Si con esta luz algún cubo no se reconoce, el sistema")
+    print("  puede aprender sus colores mirándolos: poné los TRES cubos dentro de la")
+    print("  cancha, separados entre sí y sin el rover encima.")
+    try:
+        respuesta = input("  ¿Calibrar los colores ahora? [s/N]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+    return respuesta in ("s", "si", "sí", "y", "yes")
+
+
+#: Cuántos cuadros buenos hacen falta para dar por medida una calibración. No es
+#: un umbral de detección: es para que un solo cuadro raro no decida los colores
+#: de toda la corrida.
+_CUADROS_CALIBRACION = 10
+
+
+def calibrar_colores(fuente, cfg: ConfigVision, matriz, segundos: float = 3.0):
+    """Mira los cubos unos segundos y devuelve la configuración con SUS matices.
+
+    Devuelve `(cfg, se_calibró)`. Si no se pudo —no se ve la cancha, o no hay
+    exactamente un cubo de cada color a la vista— devuelve la configuración
+    **sin tocar** y lo dice: arrancar con los colores del archivo es mejor que
+    arrancar con unos mal aprendidos.
+
+    Vale para esta corrida y no se guarda. La luz de una sala cambia a lo largo
+    del día, y un color aprendido a la mañana y guardado sería, a la tarde, un
+    número viejo con cara de calibración.
+    """
+    colores = list(cfg.elementos.cubos.colores)
+    muestras: dict[str, list[float]] = {c: [] for c in colores}
+    cuadros = sin_geometria = dudosos = 0
+    conteos: dict[int, int] = {}
+    fin = time.monotonic() + segundos
+    while time.monotonic() < fin:
+        cuadro = fuente.leer()
+        if cuadro is None:
+            time.sleep(0.005)
+            continue
+        cuadros += 1
+        try:
+            marcadores = detectar_marcadores(
+                cuadro.imagen, cfg.marcadores_esquina.nombre_diccionario,
+                cfg.deteccion_marcadores.refinamiento_esquinas)
+            sistema = construir_sistema(cuadro.imagen, cfg, marcadores)
+        except ErrorGeometria:
+            sin_geometria += 1
+            continue
+        medidos = medir_matices(cuadro.imagen, sistema, cfg)
+        conteos[len(medidos)] = conteos.get(len(medidos), 0) + 1
+        asignados = asignar_matices(medidos, cfg)
+        if asignados is not None:
+            for color, matiz in asignados.items():
+                muestras[color].append(matiz)
+        elif len(medidos) == len(colores):
+            dudosos += 1  # estaban los tres, pero no se supo cuál es cuál
+
+    buenos = min(len(v) for v in muestras.values())
+    if buenos < _CUADROS_CALIBRACION:
+        print("  ✗ No se calibraron los colores: se siguen usando los del archivo.")
+        if cuadros == 0 or sin_geometria == cuadros:
+            print("    No se vieron los cuatro marcadores de esquina.")
+        elif dudosos > buenos:
+            print("    Se ven los {} cubos, pero con esta luz sus tonos están tan corridos "
+                  "que no se puede saber cuál es cuál.".format(len(colores)))
+            print("    Bajá la exposición o quitá la luz directa, y volvé a intentar.")
+        else:
+            visto = max(conteos, key=conteos.get) if conteos else 0
+            print("    Hacen falta exactamente {} manchas de color con tamaño de cubo y se "
+                  "vieron {}.".format(len(colores), visto))
+            print("    Revisá que estén los {} cubos dentro de la cancha, separados, y que "
+                  "no haya otra cosa de color.".format(len(colores)))
+        return cfg, False
+
+    nuevos = {c: promedio_circular(muestras[c]) for c in colores}
+    antes = cfg.deteccion_cubos.matices_grados
+    print("  ✓ Colores calibrados con esta luz ({} cuadros):".format(buenos))
+    for c in colores:
+        corrimiento = (nuevos[c] - antes[c] + 180.0) % 360.0 - 180.0
+        print("      {:<6} matiz {:>5.1f}°  (el del archivo era {:>5.1f}°, {:+.0f}°)".format(
+            c, nuevos[c], antes[c], corrimiento))
+    return con_matices(cfg, nuevos), True
+
+
 def abrir_fuente(cfg: ConfigVision, args):
     """Devuelve `(fuente, descripción)`. Cámara por defecto; sintético si se pide.
 
@@ -726,6 +820,9 @@ def main(argv: list[str] | None = None) -> int:
                              "la del archivo de configuración. Más negativo = menos luz: "
                              "con -6 en el archivo, probar -7 o -8 si la sala es muy "
                              "luminosa. No la vuelve automática")
+    parser.add_argument("--calibrar-colores", action="store_true",
+                        help="aprender los colores de los cubos mirándolos, con la luz de "
+                             "ahora, sin preguntar. Tienen que estar los tres en la cancha")
     parser.add_argument("--ventana", action="store_true",
                         help="abrir la vista en vivo: la imagen con lo detectado encima")
     parser.add_argument("--ventana-hz", type=float, default=12.0,
@@ -750,6 +847,15 @@ def main(argv: list[str] | None = None) -> int:
     matriz = getattr(fuente, "matriz_camara", None)
     if matriz is None:  # fuente sintética: la matriz es la de su propia cámara
         matriz = fuente.verdad.camara.matriz
+
+    # Los colores se calibran ACÁ, con la cámara ya abierta y antes de armar
+    # nada más: todo lo que viene después recibe la configuración ya corregida.
+    colores_calibrados = False
+    quiere_calibrar = args.calibrar_colores or (
+        not args.sintetico and sys.stdin and sys.stdin.isatty()
+        and preguntar_calibrar_colores())
+    if quiere_calibrar:
+        cfg, colores_calibrados = calibrar_colores(fuente, cfg, matriz)
 
     # `--fase READY` ya no entra en READY de una: preparar una ronda exige ver la
     # cancha, y al construir el árbitro todavía no hubo un solo cuadro. Queda
@@ -783,6 +889,9 @@ def main(argv: list[str] | None = None) -> int:
             cfg.camara.exposicion.valor,
             "elegida al arrancar" if args.exposicion is not None
             else "la del archivo de configuración"))
+    print("Colores de los cubos: {}".format(
+        "calibrados al arrancar, con esta luz" if colores_calibrados
+        else "los del archivo de configuración"))
     if args.sintetico:
         print("")
         print("  ##################################################################")
@@ -843,12 +952,11 @@ def main(argv: list[str] | None = None) -> int:
                 sistema_actual, estado = procesar(
                     cuadro, cfg, matriz, fase_ahora, reloj_ahora, seguidor, anclaje,
                     descartados, duplicados, rechazos, admision, demorados)
-                publicador.actualizar(estado)
-                ultimo_estado = estado
-                # El conteo va DESPUÉS de publicar y en su propio try: es para
-                # la pantalla, no para el contrato, así que un error suyo no
-                # puede frenar la telemetría ni tumbar la ronda. Si falla, se
-                # conserva la última cuenta buena, igual que todo lo demás.
+                # El conteo va ANTES de publicar desde el protocolo v3: el
+                # veredicto de cada cubo viaja en el mensaje (`in_depot`). Sigue
+                # en su propio try, porque un error suyo no puede frenar la
+                # telemetría ni tumbar la ronda: si falla, se publica igual, con
+                # el veredicto de la última cuenta buena.
                 try:
                     acopio = contador.actualizar(estado, estado.ts_ms)
                     # El contador informa; el árbitro decide. Se le pasa el

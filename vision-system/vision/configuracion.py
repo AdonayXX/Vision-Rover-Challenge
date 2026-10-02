@@ -1169,6 +1169,22 @@ def con_exposicion(cfg: ConfigVision, valor: float) -> ConfigVision:
     return replace(cfg, camara=replace(cfg.camara, exposicion=exposicion))
 
 
+def con_matices(cfg: ConfigVision, matices: dict[str, float]) -> ConfigVision:
+    """Devuelve la configuración con OTROS matices de referencia para los cubos.
+
+    Es lo que usa la calibración de colores del arranque. Los matices del archivo
+    son los de los colores puros; los de un cubo real, con la luz de una sala
+    concreta, quedan corridos. Medirlos sobre los cubos mismos y usarlos para esa
+    corrida es más simple y más seguro que ensanchar tolerancias a mano.
+
+    Solo se pisan los colores que vengan en `matices`. El amarillo —la clase de
+    exclusión— no se toca: nadie pone un cubo amarillo para calibrarlo.
+    """
+    nuevos = dict(cfg.deteccion_cubos.matices_grados)
+    nuevos.update({color: float(m) % 360.0 for color, m in matices.items()})
+    return replace(cfg, deteccion_cubos=replace(cfg.deteccion_cubos, matices_grados=nuevos))
+
+
 def avisos_config(cfg: ConfigVision) -> list[str]:
     """Lo que conviene saber pero **no** impide arrancar.
 
