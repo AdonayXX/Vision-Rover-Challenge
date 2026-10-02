@@ -1,22 +1,27 @@
-# Códigos Ejemplo del CenfoBot Rover
+# Firmware del CenfoBot Rover
 
-Estos códigos proporcionan ejemplos y componentes base para programar los CenfoBots utilizados en el **Vision Rover Challenge**. Incluyen control de motores, sensores, orientación, comunicación y funciones básicas para construir el sistema autónomo de cada rover.
+Código que corre **en la placa** (IdeaBoard, CircuitPython 9) del rover del
+**Vision Rover Challenge**. Se sube con `tools/subir_esp32_gui.py` ("Subir paquete
+completo"); la lista exacta está en `DEFAULT_FILES` de esa herramienta.
+
+Los ejemplos originales de la universidad (motores, IR, ultrasonido, color, IMU,
+PID, ESP-NOW, etc.) siguen en la carpeta `codigos/` de la raíz del repositorio.
 
 | Área | Código | Propósito |
 | --- | --- | --- |
-| **Movimiento básico** | `test_motores.py` | Probar los motores y realizar movimientos básicos como avanzar, retroceder y girar. |
-| **Percepción** | `code_4IR.py` | Leer los cuatro sensores infrarrojos del CenfoBot. |
-| **Percepción** | `code_ultrasonic.py` | Medir distancias y detectar obstáculos mediante el sensor ultrasónico. |
-| **Percepción** | `color_detect.py` | Utilizar el sensor de color para identificar colores de objetos cercanos. |
-| **IMU** | `code_acc.py` | Leer aceleración y velocidad angular utilizando el acelerómetro y giroscopio del rover. |
-| **Control** | `code_PID.py` | Ejemplo de control PID utilizando la IMU para corregir el movimiento del rover. |
-| **Control de trayectoria** | `move_heading.py` | Avanzar intentando mantener una orientación determinada mediante IMU y control PID. |
-| **Control de giro** | `turn_angle.py` | Girar aproximadamente un número determinado de grados utilizando el giroscopio. |
-| **Calibración** | `motor_calibration.py` | Medir y compensar diferencias de comportamiento entre los motores izquierdo y derecho. |
-| **Comunicación Wi-Fi** | `wifi_command_receiver.py` | Recibir comandos automáticamente desde una computadora mediante Wi-Fi y TCP. |
-| **Comunicación ESP-NOW** | `espnow_bidirectional.py` | Establecer comunicación bidireccional directa entre los dos rovers mediante ESP-NOW. |
-| **Comunicación ESP-NOW** | `ESPNOW/` | Ejemplo introductorio de comunicación ESP-NOW entre dos IdeaBoards. |
-| **Protocolo** | `command_protocol.py` | Definir un formato común para órdenes como `STOP`, `MOTOR`, `TURN` y `HEADING`. |
-| **Estado del rover** | `robot_state.py` | Mantener estados operativos como `IDLE`, `MOVING`, `TURNING`, `STOPPED`, `ERROR` y `OFFLINE`. |
-| **Datos** | `code_storage.py` | Registrar mediciones del rover para analizarlas posteriormente. |
-| **Infraestructura** | `ideaboard.py` | Proporcionar las funciones de bajo nivel necesarias para controlar el hardware de la IdeaBoard. |
+| **Arranque** | `code.py`, `safemode.py` | Arranca el servidor; si algo falla, guarda el motivo y reinicia solo. |
+| **Servidor** | `wifi_command_receiver.py`, `wifi_config.py` | Wi-Fi, puerto de comandos 5000, watchdog de placa y bucle principal. |
+| **Protocolo** | `command_protocol.py`, `sesion_comandos.py` | Órdenes de desarrollo (`STOP`, `MOTOR`, `SENSORS`, `IR`, `LLEVAR`, `RUTA`…). |
+| **Motores** | `control_movimiento.py`, `ideaboard.py` | Potencias con rampa y control de bajo nivel de la IdeaBoard. |
+| **Sensores** | `sensores_rover.py`, `hardware_sensores.py`, `config_sensores.json` | Ultrasonido, IR del suelo y sensor de color. |
+| **Visión** | `cliente_vision_rover.py`, `telemetria.py` | Lee la telemetría oficial (TCP 2026) directamente en la placa. |
+| **Modelo** | `modelo_rover.py`, `modelo_movimiento.json` | Cómo se mueve el rover y predicción de su pose (sale de `pc/calibrar_movimiento.py`). |
+| **Autonomía** | `autonomia.py` | Ir a un punto con control continuo, adaptación en marcha y red de seguridad. |
+| **Autonomía** | `llevar_cubo.py` | Llevar un cubo a su zona: planificar, aproximar, alinear, empujar y verificar. |
+| **Rutas** | `rutas.py`, `navegacion.py`, `rutas_placa.py` | Planificador A* que esquiva cubos y la medición de su costo en la placa. |
+| **Diagnóstico** | `registro_fallos.py` | Guarda en memoria no volátil por qué falló o se reinició la placa. |
+| **Configuración** | `config_robot.example.json` | Plantilla de `config_robot.json` (ese no se sube a git: lleva la clave Wi-Fi). |
+
+Pendientes de decidir en el incremento 3 (coordinación de los dos rovers):
+`asignacion.py`, `coordinacion.py`, `robot_state.py`, `espnow_bidirectional.py`,
+`ESPNOW/` y `transporte.py`.

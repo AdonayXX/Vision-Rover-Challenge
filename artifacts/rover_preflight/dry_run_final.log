@@ -1,6 +1,0 @@
-
---- ROVER 10: red -> zona red ---
-Esperando telemetría de visión...
-Esperando vision: esperando_datos
-Prueba: cubo red -> deposito_red (39.25, 21.50)
-ERROR: Aproximacion bloqueada: destino_sin_espacio: borde row=max: centro a -84.3 mm, minimo 95.0 mm
