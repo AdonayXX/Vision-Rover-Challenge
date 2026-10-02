@@ -63,6 +63,15 @@ class Simulador:
         self.trayecto = []
         self.cubos = []
         self.contacto = False             # el cuerpo llego a tocar un cubo
+        # Empuje (incremento 2): distancia centro de giro -> centro del cubo
+        # al tocarlo con el frente; None = los cubos no se mueven.
+        self.frente_mm = None
+        self.deriva = 0.0                 # mm laterales que resbala el cubo por mm empujado
+        self.empujados = set()
+        # Como el 1-oct en la cancha: la camara deja de ver un cubo y el
+        # mensaje trae su ULTIMA posicion con la edad creciendo (contrato §6).
+        self.oculto = None                # callable(cubo, sim) -> True si no se ve
+        self.vistos = {}
 
     def reloj_placa(self):
         return self.t + self.RELOJ_PLACA
@@ -82,6 +91,8 @@ class Simulador:
         self.row -= v * dt / 1000 * math.sin(medio) / CELL
         self.theta = (self.theta + w * dt / 1000) % 360
         self.trayecto.append((self.col, self.row))
+        if self.frente_mm is not None:
+            self._empujar_cubos()
         for cubo in self.cubos:
             if math.hypot(cubo["col"] - self.col, cubo["row"] - self.row) * CELL < 85 + 30:
                 self.contacto = True
@@ -90,7 +101,8 @@ class Simulador:
             d = self.real.desfase_marcador_mm / CELL
             self.seq += 1
             mensaje = {"seq": self.seq, "ts_ms": self.t + self.sello, "grid": {"cols": 43, "rows": 43, "cell_mm": CELL},
-                       "cube_side": 3.0, "obstacles": [], "cubes": [dict(c) for c in self.cubos],
+                       "cube_side": 3.0, "obstacles": [], "cubes": self._cubos_vistos(),
+                       "depots": [dict(d) for d in DEPOSITOS], "depot_size": {"length": 10.0, "depth": 7.5},
                        "rovers": [{"id": 10, "col": self.col + d * math.cos(th),
                                    "row": self.row - d * math.sin(th), "theta": self.theta, "age_ms": 0}]}
             llegada = self.t + self.sello + self.rand.uniform(*self.latencia)
@@ -104,6 +116,34 @@ class Simulador:
             if self.vision.mensaje is None or mensaje["seq"] > self.vision.mensaje["seq"]:
                 self.vision.mensaje = mensaje
         self.t += dt
+
+    def _cubos_vistos(self):
+        salida = []
+        for cubo in self.cubos:
+            if self.oculto is None or not self.oculto(cubo, self) or cubo["color"] not in self.vistos:
+                self.vistos[cubo["color"]] = (dict(cubo), self.t)
+            visto, cuando = self.vistos[cubo["color"]]
+            salida.append(dict(visto, age_ms=self.t - cuando))
+        return salida
+
+    def _empujar_cubos(self):
+        """El frente del rover (ancho ±55 mm) no deja que un cubo quede más cerca que frente_mm."""
+        th = math.radians(self.theta)
+        ux, uy = math.cos(th), -math.sin(th)
+        for cubo in self.cubos:
+            dc, dr = (cubo["col"] - self.col) * CELL, (cubo["row"] - self.row) * CELL
+            adelante = dc * ux + dr * uy
+            lateral = -dc * uy + dr * ux
+            if 0 < adelante < self.frente_mm and abs(lateral) < 55:
+                metido = self.frente_mm - adelante
+                lateral += self.deriva * metido
+                cubo["col"] = self.col + (self.frente_mm * ux - lateral * uy) / CELL
+                cubo["row"] = self.row + (self.frente_mm * uy + lateral * ux) / CELL
+                self.empujados.add(cubo["color"])
+
+
+DEPOSITOS = ({"color": "green", "col": 21.5, "row": 3.75}, {"color": "blue", "col": 21.5, "row": 39.25},
+             {"color": "red", "col": 39.25, "row": 21.5})
 
 
 def correr(mision, sim, hasta_ms=15000):
@@ -293,6 +333,19 @@ class SesionTests(unittest.TestCase):
         self.sesion.process_command("IR|30|20")
         self.sesion.process_command("MOTOR|.2|.2")
         self.assertEqual(self.mision.motivo, "orden_motor")
+
+    def test_route_measurement_command_replies_with_plan(self):
+        import json
+        self.sim.cubos = [{"color": "red", "col": 20.0, "row": 20.0, "age_ms": 0}]
+        for _ in range(60):
+            self.sim.paso()
+        self.sesion.process_command("IR|30|20")
+        self.assertTrue(self.sesion.process_command("RUTA|30|20|2"))
+        self.assertFalse(self.mision.activa)            # medir detiene la mision
+        resultado = json.loads(self.sesion.reply)
+        self.assertEqual(resultado["estado"], "RUTA")
+        self.assertGreater(len(resultado["puntos"]), 2)  # rodea el cubo
+        self.assertFalse(parse_command("RUTA|30|20|7")["valid"])
 
     def test_control_law_turns_in_place_when_target_behind(self):
         llego, izquierda, derecha, _, error = hacia_punto(

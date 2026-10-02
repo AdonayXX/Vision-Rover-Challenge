@@ -35,17 +35,26 @@ def distancia_a_segmento(p, a, b):
     return _norma(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
 
 
-def obstaculo_en_camino(mensaje, desde, hasta, radio_rover_mm=85.0, holgura_mm=10.0):
+def obstaculo_en_camino(mensaje, desde, hasta, radio_rover_mm=85.0, holgura_mm=10.0,
+                        excluir=None, propio=None):
     """Primer cubo u obstaculo que el CUERPO del rover tocaria en el tramo recto.
 
-    El incremento 1 no planifica rutas: si algo estorba, se detiene en vez de
-    empujarlo. Esquivar es el siguiente incremento (rutas.py).
+    Es la red de seguridad: si algo estorba, el rover se detiene en vez de
+    empujarlo. `excluir`: color del cubo que se empuja a proposito. Con
+    `propio` (id de este rover) tambien cuenta el otro rover.
     """
     cell = mensaje["grid"]["cell_mm"]
     a, b = (desde["col"], desde["row"]), (hasta["col"], hasta["row"])
     medio_cubo = mensaje["cube_side"] * cell * 0.7072
-    for grupo, nombre, medio in (("cubes", "cubo", medio_cubo), ("obstacles", "obstaculo", medio_cubo)):
+    grupos = (("cubes", "cubo", medio_cubo), ("obstacles", "obstaculo", medio_cubo))
+    if propio is not None:
+        grupos += (("rovers", "rover", radio_rover_mm),)
+    for grupo, nombre, medio in grupos:
         for item in mensaje.get(grupo, ()):
+            if grupo == "cubes" and item["color"] == excluir:
+                continue
+            if grupo == "rovers" and item["id"] == propio:
+                continue
             libre = radio_rover_mm + holgura_mm + medio
             if distancia_a_segmento((item["col"], item["row"]), a, b) * cell < libre:
                 return nombre + (" " + item["color"] if "color" in item else "")
@@ -267,4 +276,58 @@ class IrAPunto:
         if self.activa or self.estado in (LLEGO, ABORTADO):
             datos.update(self.ultimo)
             datos["t_ms"] = self.reloj() - getattr(self, "inicio_ms", self.reloj())
+        return datos
+
+
+class Misiones:
+    """Una sola mision activa a la vez (IR o LLEVAR); la sesion habla con esto.
+
+    `tick` es el metodo de la mision activa, no un envoltorio: en la placa
+    cada llamada anidada gasta pila (pystack) y planificar ya va muy hondo.
+    """
+
+    def __init__(self, ir, llevar=None, fabrica_llevar=None):
+        # fabrica_llevar: crea LlevarCubo al primer LLEVAR. Asi un modulo grande
+        # que no cabe en RAM da un error a la orden, no un arranque en bucle.
+        self.ir, self.cubo, self.fabrica = ir, llevar, fabrica_llevar
+        self.error_carga = None
+        self.vision, self.robot_id = ir.vision, ir.robot_id
+        self._activar(ir)
+
+    def _activar(self, mision):
+        self.actual = mision
+        self.tick = mision.tick
+
+    @property
+    def activa(self):
+        return self.actual.activa
+
+    def iniciar(self, col, row):
+        self.detener("nueva_mision")
+        self._activar(self.ir)
+        self.ir.iniciar(col, row)
+
+    def llevar(self, color):
+        if self.cubo is None and self.fabrica is not None:
+            try:
+                self.cubo = self.fabrica()
+                self.error_carga = None
+            except Exception as error:      # MemoryError, ImportError...
+                self.error_carga = "{}: {}".format(type(error).__name__, error)
+                raise ValueError(self.error_carga)
+        if self.cubo is None:
+            raise ValueError("Firmware sin mision de cubo")
+        self.detener("nueva_mision")
+        self._activar(self.cubo)
+        self.cubo.iniciar(color)
+
+    def detener(self, motivo="stop"):
+        self.ir.detener(motivo)
+        if self.cubo is not None:
+            self.cubo.detener(motivo)
+
+    def informe(self):
+        datos = self.actual.informe()
+        if self.error_carga is not None:
+            datos["error_carga"] = self.error_carga
         return datos

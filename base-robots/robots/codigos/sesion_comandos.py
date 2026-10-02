@@ -48,12 +48,33 @@ class CommandSession:
             # Una orden manual siempre le quita el control a la mision.
             self.mission.detener("orden_" + command.lower())
         try:
-            if command == "IR":
+            if command == "RUTA":
+                if self.mission is None:
+                    return False
+                # Planificar bloquea el bucle: solo con los motores parados.
+                self.mission.detener("medicion_ruta")
+                self.controller.stop("medicion_ruta")
+                self.last_motion = None
+                try:
+                    from rutas_placa import medir_ruta
+                    resultado = medir_ruta(self.mission.vision.mensaje, self.mission.robot_id,
+                                           parsed["col"], parsed["row"], int(parsed["paso"]))
+                except Exception as error:
+                    # Una medicion que falla se informa; no tumba la sesion.
+                    resultado = {"error": "{}: {}".format(type(error).__name__, error)}
+                self.reply = (json.dumps(resultado) + "\n").encode("ascii")
+            elif command == "IR":
                 if self.mission is None:
                     return False
                 self.controller.stop("mision")
                 self.last_motion = None
                 self.mission.iniciar(parsed["col"], parsed["row"])
+            elif command == "LLEVAR":
+                if self.mission is None or not hasattr(self.mission, "llevar"):
+                    return False
+                self.controller.stop("mision")
+                self.last_motion = None
+                self.mission.llevar(parsed["color"])
             elif command == "STOP":
                 self.controller.stop()
                 self.last_motion = None

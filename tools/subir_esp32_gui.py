@@ -31,7 +31,11 @@ DEFAULT_FILES = [
     os.path.join(CODE_DIR, "telemetria.py"),
     os.path.join(CODE_DIR, "modelo_rover.py"),
     os.path.join(CODE_DIR, "autonomia.py"),
+    os.path.join(CODE_DIR, "llevar_cubo.py"),
     os.path.join(CODE_DIR, "modelo_movimiento.json"),
+    os.path.join(CODE_DIR, "rutas.py"),
+    os.path.join(CODE_DIR, "rutas_placa.py"),
+    os.path.join(CODE_DIR, "navegacion.py"),
 ]
 
 
@@ -471,6 +475,7 @@ class Esp32Uploader(tk.Tk):
             remote = self.remote_name(path)
             commands.append((path, remote))
 
+        self.write_log("Se van a subir: " + ", ".join(remote.lstrip("/") for _, remote in commands) + "\n")
         self.set_busy(True, "Subiendo archivos...")
         thread = threading.Thread(target=self._upload_worker, args=(commands,), daemon=True)
         thread.start()
@@ -484,6 +489,12 @@ class Esp32Uploader(tk.Tk):
             for path, remote in commands:
                 self.log_queue.put(("log", f"Subiendo {path} -> {remote}\n"))
                 self.run_command(self.ampy_command("put", path, remote))
+            self.log_queue.put(("log", "\nComprobando archivos en la placa...\n"))
+            en_placa = {"/" + linea.strip().lstrip("/") for linea in self.run_command(self.ampy_command("ls"))}
+            faltan = [remote for _, remote in commands if remote not in en_placa]
+            if faltan:
+                raise RuntimeError("No quedaron en la placa: " + ", ".join(faltan))
+            self.log_queue.put(("log", f"Los {len(commands)} archivos estan en la placa.\n"))
             self.log_queue.put(("log", "\nReiniciando placa...\n"))
             self.run_command(self.ampy_command("reset", "--hard"))
             self.log_queue.put(("status", "Carga terminada"))
@@ -520,7 +531,9 @@ class Esp32Uploader(tk.Tk):
         )
 
         assert process.stdout is not None
+        lines = []
         for line in process.stdout:
+            lines.append(line)
             self.log_queue.put(("log", line))
 
         exit_code = process.wait()
@@ -528,6 +541,7 @@ class Esp32Uploader(tk.Tk):
             raise RuntimeError(
                 "El comando fallo. Revisa dependencias, puerto seleccionado y que el puerto no este ocupado."
             )
+        return lines
 
     def ampy_command(self, *args):
         return [sys.executable, "-m", "ampy.cli", "--port", self.port(), *args]

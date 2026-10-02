@@ -13,7 +13,7 @@ from sesion_comandos import CommandSession, would_block
 from wifi_config import obtener_credenciales_wifi
 import registro_fallos
 from cliente_vision_rover import ClienteVision
-from autonomia import IrAPunto
+from autonomia import IrAPunto, Misiones
 from modelo_rover import ModeloRover
 
 
@@ -340,8 +340,19 @@ def main(config_path="config_robot.json"):
         informe = [time.monotonic() + 10]
         mision = None
         if vision:
-            mision = IrAPunto(vision[0], cargar_modelo(), controller,
-                              config.get("robot_id", 10))
+            # Un solo modelo: lo que una mision aprende (escalas) lo usa la otra.
+            modelo = cargar_modelo()
+            robot_id = config.get("robot_id", 10)
+
+            def fabrica_llevar():
+                # Al primer LLEVAR, no al arrancar: llevar_cubo.py es grande.
+                import gc
+                gc.collect()
+                from llevar_cubo import LlevarCubo
+                return LlevarCubo(vision[0], modelo, controller, robot_id)
+
+            mision = Misiones(IrAPunto(vision[0], modelo, controller, robot_id),
+                              fabrica_llevar=fabrica_llevar)
 
         def tick():
             alimentar()
