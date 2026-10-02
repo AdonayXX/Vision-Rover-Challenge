@@ -19,16 +19,24 @@ Aplica la regla de entrega del reglamento: un cubo está entregado cuando queda
 | Hace | No hace |
 |---|---|
 | Evaluar cada cubo contra su zona | **Dibujar** — eso es de [`../vista.py`](../vista.py) |
-| Llevar la memoria entre cuadros | **Publicar** — el conteo no viaja en el mensaje |
+| Llevar la memoria entre cuadros | **Publicar** — entrega su veredicto, y es el bucle del sistema quien lo pone en el mensaje |
 | Exponer la cuenta y el detalle por color | **Cerrar la ronda** — eso lo decide el árbitro, que es quien lleva el cronómetro |
 
-## El veredicto no se calcula acá
+## La geometría sale del contrato; el veredicto se publica
 
-Sale de [`contrato/schema.py`](../../contrato/CONTRATO.md), que es el mismo
-código que corre el equipo en su rover. Si esta pieza escribiera su propia
-versión de la cuenta, un cubo podría estar *adentro* en nuestra pantalla y
-*afuera* en el código del equipo, y no habría forma de decidir quién tiene
-razón.
+La cuenta de "cubo dentro de la zona" es la de
+[`contrato/schema.py`](../../contrato/CONTRATO.md). El árbitro la usa con la
+ventana agrandada **2,5 mm por lado** (`conteo_acopio.tolerancia_mm`): el margen
+conservador de media diagonal supone el peor giro del cubo, y un cubo bien
+puesto podía quedar afuera por el error de ubicación.
+
+Esa tolerancia no viaja en el mensaje, así que el rover no podría reproducir la
+cuenta. Por eso desde el protocolo v3 **el veredicto viaja**: cada cubo lleva
+`in_depot`, que es el `contado` de este paquete —adentro y con la permanencia
+cumplida—. El rover lo lee y dice lo mismo que el árbitro sin calcular nada.
+
+El simulador del contrato hace de árbitro para quien desarrolla sin cancha, con
+la misma tolerancia y la misma permanencia.
 
 Lo que vive acá es la **memoria entre cuadros**, que es justamente lo que el
 contrato no puede tener: él ve un cubo y una zona, no una secuencia.
@@ -71,13 +79,34 @@ observación fresca, `EstadoZona` expone la **edad** del cubo y la vista la
 muestra cuando pasa a ser vieja. Quien mira la pantalla tiene que poder saber
 sobre qué se apoya lo que está viendo.
 
+## A qué hora entró cada cubo
+
+Además de cuánto hace que está adentro, el contador recuerda **en qué instante
+del cronómetro oficial entró** cada cubo. Es lo que quien mira la pantalla
+quiere saber —"el verde entró a 1:23"— y lo que un equipo pregunta después.
+
+| Regla | |
+|---|---|
+| Se toma **al entrar** | no cuando se cumple la permanencia, por lo mismo que el cierre de la ronda |
+| Vive **solo mientras el cubo sigue adentro** | si sale, por el motivo que sea —un rover lo saca, titila en el borde, deja de verse—, se borra en ese cuadro |
+| Se **vuelve a tomar** al reingresar | con la hora de esa nueva entrada. No hay "primera entrada" que sobreviva a una salida |
+| Solo existe si entró **durante la ronda** | un cubo que ya estaba puesto al arrancar, o que entra en `IDLE` o `READY`, no tiene hora |
+| Se **vacía al preparar otra ronda** | para que un cubo que quedó puesto no muestre la hora de la vuelta pasada |
+
+Viaja en `EstadoZona.entro_en_ronda_ms`. La vista la muestra en el panel y en la
+etiqueta de la zona, y el acta la guarda. **No se publica**: lo único del conteo
+que viaja en el mensaje es el veredicto de cada cubo, `in_depot`.
+
 ## Verificado
 
-Con `python -m vision.tools.verificar_acopio`, en dos bloques:
+Con `python -m vision.tools.verificar_acopio`, en cinco bloques:
 
 | Bloque | Qué comprueba |
 |---|---|
 | **El criterio, sin imágenes** | que el límite de la ventana esté donde dice, y que con el centro del cubo en ese límite el cubo entre entero **girado como esté** (0° a 90°, cuatro bordes, tres zonas) |
+| **El recorrido** | que una sola llamada evalúe las tres zonas, cuenten o no cuenten |
+| **La hora de entrada** | un cubo seguido por una ronda inventada: entra, sale, vuelve, desaparece, termina la ronda y se prepara otra |
+| **La tolerancia y el veredicto** | que la ventana del árbitro crezca 2,5 mm por lado, y que `in_depot` salga recién con la permanencia cumplida y caiga en el cuadro en que el cubo sale |
 | **El sistema entero** | cubos en el centro, justo adentro, justo afuera y girados 45°, procesando el cuadro completo en los dos modos de cámara |
 
 Cada veredicto positivo se contrasta además **contra la verdad del generador**:

@@ -138,6 +138,19 @@ Dos casos en que la cuenta está completa y la ronda **no** se cierra:
 En `READY`, si algún cubo ya está dentro de su zona, el panel lo grita en rojo:
 **`CUBOS YA EN ZONA`**. Es el único momento en que todavía se puede corregir.
 
+### El rectángulo interior de cada zona
+
+Dentro de cada zona, la ventana dibuja un rectángulo más chico: es **donde tiene
+que caer el centro del cubo** para que el árbitro lo cuente. Sale de restarle a
+la zona la media diagonal del cubo —lo que garantiza que entra entero, esté
+girado como esté— y de devolverle **2,5 mm por lado** de tolerancia, que es la
+holgura del árbitro frente al error de ubicación. La tolerancia está en
+`vision/config_vision.json`, `conteo_acopio.tolerancia_mm`.
+
+Cuando un cubo se sostiene un segundo ahí adentro, la zona se pinta plena y el
+mensaje a los equipos lleva `in_depot: true` para ese cubo. **Los rovers reciben
+el mismo veredicto que se ve en pantalla.**
+
 ### A qué hora entró cada cubo
 
 Debajo de la cuenta de acopio, el panel muestra **una fila por zona** con el
@@ -215,6 +228,39 @@ la luz se le resta al cuadro. Un cubo más oscuro, más claro o con la tapa lava
 por un reflejo se sigue encontrando. Lo que no tiene arreglo por programa es un
 cubo **quemado**: si el sensor llegó al tope, el color no está en la imagen. Para
 eso está la exposición.
+
+### Calibrar los colores al arrancar
+
+Si con la luz de la sala algún cubo no se reconoce, el sistema puede **aprender
+los colores mirando los cubos**. Al arrancar, después de la cámara y el perfil,
+pregunta:
+
+```
+  ¿Calibrar los colores ahora? [s/N]:
+```
+
+Antes de contestar `s`, poné **los tres cubos dentro de la cancha**, separados
+entre sí y sin el rover encima. El sistema los mira tres segundos, mide el tono
+de cada uno con esa luz y lo usa durante toda la corrida. Muestra lo que midió:
+
+```
+  ✓ Colores calibrados con esta luz (89 cuadros):
+      red    matiz  34.6°  (el del archivo era  39.9°, -5°)
+      green  matiz 143.7°  (el del archivo era 136.0°, +8°)
+      blue   matiz 287.9°  (el del archivo era 306.2°, -18°)
+```
+
+| | |
+|---|---|
+| **Enter** | no calibra: se usan los colores del archivo de configuración |
+| **Vale para esa corrida** | no se guarda. La luz cambia a lo largo del día, y un color aprendido a la mañana sería a la tarde un número viejo |
+| **Se niega si no está seguro** | si no hay exactamente un cubo de cada color a la vista, o si los tonos están tan corridos que no se puede saber cuál es cuál. En ese caso deja los colores del archivo y lo dice |
+| **Sin preguntar** | `--calibrar-colores` calibra directo, para arrancar sin nadie delante |
+
+Conviene calibrar **después** de elegir la exposición: primero que la imagen no
+esté quemada, después los colores.
+
+### Elegir la exposición al arrancar
 
 Al arrancar, el sistema **pregunta la exposición**
 junto con la cámara y el perfil. Enter deja la del archivo; un número la cambia
