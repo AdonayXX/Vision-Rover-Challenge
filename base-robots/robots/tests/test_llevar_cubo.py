@@ -242,6 +242,23 @@ class LlevarCuboTests(unittest.TestCase):
         self.assertEqual(mision.replanes, 0)       # ni una replanificación
         self.assertGreater(abs(mision.ultimo["linea_mm"]), 25)   # sí estaba fuera de la línea
 
+    def test_next_to_the_attack_point_but_off_line_corrects_along_the_line(self):
+        # Rover 11, 2-oct: junto al punto de ataque y ~50 mm fuera de la línea,
+        # las rutas cortas llegaban de lado y volvía a quedar fuera, tres
+        # veces. Ahora: marcha atrás al punto previo y recto por la línea.
+        for lado in (-50, 50):
+            sim = simulador((13.0, 21.5 + lado / CELL, 90.0), [{"color": "red", "col": 21.0, "row": 21.5}])
+            sim.inercia_ms = 200
+            mision = llevar(sim, "red")
+            usada = False
+            while sim.t < 150000 and mision.activa:
+                sim.paso()
+                mision.tick()
+                usada = usada or mision.correccion
+            self.assert_entregado(mision, sim, "red")
+            self.assertTrue(usada, lado)
+            self.assertEqual(mision.replanes, 1, lado)
+
     def test_rover_hiding_the_cube_at_the_end_backs_off_to_see_it(self):
         # Como el 1-oct: parado junto al cubo ya en la zona, la cámara no lo ve.
         sim = simulador((10.0, 21.0, 0.0), [{"color": "red", "col": 24.0, "row": 21.5}])

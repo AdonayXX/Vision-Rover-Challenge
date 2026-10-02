@@ -60,7 +60,7 @@ def main():
 
         robot.connect()
         robot.sock.settimeout(10)    # planificar bloquea la placa ~0,4-2 s
-        estado = json.loads(robot._exchange("SENSORS"))
+        estado = robot.confirmar_identidad(args.robot_id)
         print("Placa encendida hace {} s; ultimo reinicio: {}; fallos: {}".format(
             estado.get("uptime_s"), estado.get("reset_reason"), estado.get("fallos")), flush=True)
         respuesta = robot._exchange("LLEVAR|" + args.color)

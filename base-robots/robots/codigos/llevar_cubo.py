@@ -246,6 +246,7 @@ class LlevarCubo:
         self.destapes = 0
         self.us_lejos = 0
         self.us_vio_cubo = False              # en este empuje lo vio pegado
+        self.correccion = False               # [previo, detrás] sin A*: llegar por la línea
         self._parar_y_pasar(PLANIFICAR)
 
     def detener(self, motivo="stop"):
@@ -349,6 +350,23 @@ class LlevarCubo:
         escena = _Escena(mensaje, self.robot_id, centro)
         estorbo = corredor_bloqueado(mensaje, self.color, cubo, meta, detras, self.robot_id,
                                      self.contacto_mm, self.radio_mm, self.holgura_mm)
+        self.correccion = False
+        cerca = _norma(detras["col"] - centro["col"], detras["row"] - centro["row"]) * cell
+        if estorbo is None and cerca < 120:
+            # Ya está junto al punto de ataque pero fuera de la línea: una
+            # ruta A* llegaría de lado y lo que el rover desliza al parar
+            # (rover 11: ~30 mm) lo dejaría otra vez fuera (cancha 2-oct, tres
+            # veces seguidas). Marcha atrás hasta el punto previo y recto,
+            # por la línea, hasta el de ataque.
+            previo = punto_detras(cubo, meta, self.aproximacion_mm + self.previo_mm, cell)
+            libre = self.planner.scene(escena)
+            q = (previo["col"], previo["row"])
+            if self.planner.free_segment(libre, q, q) and salida_sin_acercarse(
+                    mensaje, centro, previo, self.robot_id, self.radio_mm):
+                self.puntos = [previo, detras]
+                self.correccion = True
+                self.estado = APROXIMAR
+                return
         if estorbo is not None:
             motivo = "corredor_bloqueado: " + estorbo
         else:
@@ -398,7 +416,7 @@ class LlevarCubo:
 
     def _seguir(self, ahora, mensaje, pred, cubo, cell):
         """SALIR, APROXIMAR, RETROCEDER y RETIRAR: ir al siguiente punto."""
-        if self.estado == APROXIMAR and len(self.puntos) > 1:
+        if self.estado == APROXIMAR and len(self.puntos) > 1 and not self.correccion:
             # Si ya está más cerca del siguiente punto que el actual, éste ya
             # quedó atrás: no volver a buscarlo (daba vueltas a su alrededor).
             a, b = self.puntos[0], self.puntos[1]
@@ -428,7 +446,12 @@ class LlevarCubo:
             return self._parar_y_pasar(PLANIFICAR)
         control = dict(self.control)
         intermedio = self.estado == APROXIMAR and len(self.puntos) > 1
-        if intermedio:
+        if intermedio and self.correccion:
+            # El previo de una corrección: justo (queda sobre la línea) y, si
+            # está detrás, marcha atrás en vez de dar la vuelta.
+            control["tolerancia_mm"] = 20.0
+            control["cerca_mm"] = 200.0
+        elif intermedio:
             # De paso: margen amplio y, si hay que girar mucho, girar en el
             # sitio en vez de avanzar en curva cerrada alrededor del punto.
             control["tolerancia_mm"] = 40.0
@@ -572,7 +595,7 @@ class LlevarCubo:
                 self.mirar_cubo = True
                 self.estado = ALINEAR
                 return
-            if abs(giro_corto(self._rumbo_empuje(centro, cubo, meta) - centro["theta"])) > 2 * self.alinear_deg:
+            if abs(giro_corto(self._rumbo_empuje(centro, cubo, meta) - centro["theta"])) > 3 * self.alinear_deg:  # empujando se corrige el resto
                 self.alineaciones += 1
                 if self.alineaciones > 6:
                     return self._abortar("no_alinea")

@@ -20,7 +20,7 @@ import time
 from cliente_vision import VisionClient
 from prueba_transporte_cubo import DevelopmentTelemetryState, RobotClient
 
-SALIDA = Path(__file__).resolve().parents[1] / "codigos" / "modelo_movimiento.json"
+CODIGOS = Path(__file__).resolve().parents[1] / "codigos"   # modelo_movimiento_<id>.json, uno por rover
 
 # (nombre, izquierdo, derecho, segundos). Pares que se compensan.
 MANIOBRAS = (
@@ -283,8 +283,10 @@ def main():
     p.add_argument("--robot-id", type=int, default=10)
     p.add_argument("--vision-host", default="127.0.0.1")
     p.add_argument("--vision-port", type=int, default=2026)
-    p.add_argument("--salida", type=Path, default=SALIDA)
+    p.add_argument("--salida", type=Path, help="por defecto codigos/modelo_movimiento_<robot-id>.json")
     args = p.parse_args()
+    if args.salida is None:
+        args.salida = CODIGOS / "modelo_movimiento_{}.json".format(args.robot_id)
 
     state = DevelopmentTelemetryState(robot_id=args.robot_id, peer_id=args.robot_id + 1, max_age_ms=900)
     vision = VisionClient(state, args.vision_host, args.vision_port)
@@ -300,6 +302,7 @@ def main():
         if state.reason() is not None:
             raise RuntimeError("Vision no lista: " + state.reason())
         robot.connect()
+        robot.confirmar_identidad(args.robot_id)
         print("Rover conectado. {} maniobras; Ctrl+C detiene.".format(len(MANIOBRAS)), flush=True)
         for nombre, izq, der, segundos in MANIOBRAS:
             r = ejecutar(robot, registro, state, args, nombre, izq, der, segundos)

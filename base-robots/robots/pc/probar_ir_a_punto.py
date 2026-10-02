@@ -19,7 +19,7 @@ from prueba_transporte_cubo import DevelopmentTelemetryState, RobotClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "codigos"))
 from modelo_rover import ModeloRover
 
-MODELO = Path(__file__).resolve().parents[1] / "codigos" / "modelo_movimiento.json"
+CODIGOS = Path(__file__).resolve().parents[1] / "codigos"   # modelo_movimiento_<id>.json
 MARGEN_BORDE_MM = 120
 
 
@@ -45,7 +45,8 @@ def main():
     p.add_argument("--segundos", type=float, default=20)
     args = p.parse_args()
 
-    modelo = ModeloRover.desde_resumen(json.loads(MODELO.read_text(encoding="utf-8"))["resumen"])
+    archivo = CODIGOS / "modelo_movimiento_{}.json".format(args.robot_id)
+    modelo = ModeloRover.desde_resumen(json.loads(archivo.read_text(encoding="utf-8"))["resumen"])
     state = DevelopmentTelemetryState(robot_id=args.robot_id, peer_id=args.robot_id + 1, max_age_ms=900)
     vision = VisionClient(state, args.vision_host)
     robot = RobotClient(args.robot_ip, wait_seconds=30)
@@ -68,6 +69,7 @@ def main():
             centro["col"], centro["row"], centro["theta"], objetivo["col"], objetivo["row"]), flush=True)
 
         robot.connect()
+        robot.confirmar_identidad(args.robot_id)
         robot.send("IR|{:.3f}|{:.3f}".format(objetivo["col"], objetivo["row"]), force=True)
         print("Mision enviada; el rover decide solo. Ctrl+C lo detiene.", flush=True)
         inicio = time.monotonic()

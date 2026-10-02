@@ -1,0 +1,10 @@
+{
+  "robot_id": 11,
+  "control": {
+    "left_sign": -1,
+    "right_sign": -1,
+    "left_gain": 1.0,
+    "right_gain": 1.0,
+    "ramp_seconds": 0.05
+  }
+}

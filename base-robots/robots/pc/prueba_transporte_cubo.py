@@ -129,6 +129,21 @@ class RobotClient:
             raise ConnectionError("Respuesta del robot: {!r}".format(response))
         self.last = command
 
+    def confirmar_identidad(self, robot_id):
+        """Con dos rovers, que la IP sea de verdad la del rover `robot_id`.
+
+        Mover o calibrar el rover equivocado mezcla sus modelos sin avisar.
+        Un firmware viejo no informa su ID: entonces sólo se avisa.
+        """
+        status = json.loads(self._exchange("SENSORS"))
+        propio = status.get("robot_id")
+        if propio is None:
+            print("AVISO: el firmware no informa su ID; sube el paquete actualizado", flush=True)
+        elif propio != robot_id:
+            raise ConnectionError("En {} responde el rover {}, no el {}. Revisa la IP o el "
+                                  "'ID del rover' con que se subio el paquete.".format(self.host, propio, robot_id))
+        return status
+
     def sensors(self):
         response = self._exchange("SENSORS")
         try:

@@ -72,6 +72,11 @@ class Simulador:
         # mensaje trae su ULTIMA posicion con la edad creciendo (contrato §6).
         self.oculto = None                # callable(cubo, sim) -> True si no se ve
         self.vistos = {}
+        # Inercia: la velocidad real sigue a la ordenada con esta constante de
+        # tiempo; al parar el rover sigue deslizando ~v·inercia (rover 11:
+        # ~30 mm a 150 mm/s, calibración 2-oct). None = sin inercia.
+        self.inercia_ms = None
+        self.v_real = self.w_real = 0.0
 
     def reloj_placa(self):
         return self.t + self.RELOJ_PLACA
@@ -86,6 +91,10 @@ class Simulador:
 
     def paso(self, dt=10):
         v, w = self.real.velocidades(*self._orden_fisica())
+        if self.inercia_ms:
+            self.v_real += (v - self.v_real) * min(1.0, dt / self.inercia_ms)
+            self.w_real += (w - self.w_real) * min(1.0, dt / self.inercia_ms)
+            v, w = self.v_real, self.w_real
         medio = math.radians(self.theta + w * dt / 2000)
         self.col += v * dt / 1000 * math.cos(medio) / CELL
         self.row -= v * dt / 1000 * math.sin(medio) / CELL

@@ -15,7 +15,8 @@ PID, ESP-NOW, etc.) siguen en la carpeta `codigos/` de la raíz del repositorio.
 | **Motores** | `control_movimiento.py`, `ideaboard.py` | Potencias con rampa y control de bajo nivel de la IdeaBoard. |
 | **Sensores** | `sensores_rover.py`, `hardware_sensores.py`, `config_sensores.json` | Ultrasonido, IR del suelo y sensor de color. |
 | **Visión** | `cliente_vision_rover.py`, `telemetria.py` | Lee la telemetría oficial (TCP 2026) directamente en la placa. |
-| **Modelo** | `modelo_rover.py`, `modelo_movimiento.json` | Cómo se mueve el rover y predicción de su pose (sale de `pc/calibrar_movimiento.py`). |
+| **Modelo** | `modelo_rover.py`, `modelo_movimiento_<id>.json` | Cómo se mueve cada rover y predicción de su pose (sale de `pc/calibrar_movimiento.py`). En la placa se llama `modelo_movimiento.json`. |
+| **Cada rover** | `rover_<id>.json` | Su ID de marcador, ganancias y signos de motores. En la placa se llama `rover.json`; lo común (Wi-Fi, visión) queda en `config_robot.json`. |
 | **Autonomía** | `autonomia.py` | Ir a un punto con control continuo, adaptación en marcha y red de seguridad. |
 | **Autonomía** | `llevar_cubo.py` | Llevar un cubo a su zona: planificar, aproximar, alinear, empujar y verificar. |
 | **Rutas** | `rutas.py`, `navegacion.py`, `rutas_placa.py` | Planificador A* que esquiva cubos y la medición de su costo en la placa. |

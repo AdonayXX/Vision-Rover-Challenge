@@ -84,6 +84,27 @@ def activar_watchdog(segundos):
         return _nada
 
 
+def aplicar_rover(config, ruta="rover.json"):
+    """Mezcla lo propio de ESTE rover (ID, ganancias, signos) sobre la config comun.
+
+    config_robot.json lleva lo comun a los dos rovers (Wi-Fi, vision);
+    rover.json, lo que cambia de uno a otro. La herramienta de subida copia
+    rover_<id>.json como rover.json. Sin el archivo, todo queda como estaba.
+    """
+    try:
+        with open(ruta) as fuente:
+            propio = json.load(fuente)
+    except OSError:
+        print("AVISO: sin rover.json; ID", config.get("robot_id", 10), "por defecto")
+        return config
+    control = dict(config.get("control", {}))
+    control.update(propio.get("control", {}))
+    config.update(propio)
+    config["control"] = control
+    print("Rover", config.get("robot_id"), "(rover.json)")
+    return config
+
+
 def cargar_modelo(ruta="modelo_movimiento.json"):
     try:
         with open(ruta) as fuente:
@@ -216,9 +237,10 @@ def main(config_path="config_robot.json"):
     registro_fallos.borrar()
 
     vision = []  # se rellena al tener red; info() lo lee por referencia
+    identidad = {}  # robot_id, al leer la config; la PC comprueba que es el rover que cree
 
     def info():
-        datos = {"reset_reason": reinicio,
+        datos = {"reset_reason": reinicio, "robot_id": identidad.get("robot_id"),
                  "uptime_s": round(time.monotonic() - arranque, 1),
                  "fallos": dict(fallos_previos, **registro_fallos.leer())}
         if vision:
@@ -236,7 +258,8 @@ def main(config_path="config_robot.json"):
         # ---------------------------------
 
         with open(config_path) as source:
-            config = json.load(source)
+            config = aplicar_rover(json.load(source))
+        identidad["robot_id"] = config.get("robot_id", 10)
 
         # Configuración separada: no sobrescribe Wi-Fi ni calibración de motores.
         from sensores_rover import SensoresRover, validar_config
