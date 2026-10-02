@@ -175,8 +175,9 @@ class LlevarCubo:
                  espera_max_ms=3000, max_ms=150000, max_replanes=10, max_empujes=8,
                  aproximacion_mm=160.0, contacto_mm=110.0, radio_mm=85.0, holgura_mm=10.0,
                  holgura_ruta_mm=25.0, paso_ruta=2, retroceso_mm=80.0, v_empuje=120.0, w_empuje=35.0, kp_empuje=2.0,
-                 lateral_max_mm=30.0, linea_max_mm=25.0, desvio_max_deg=30.0,
-                 alinear_deg=4.0, tolerancia_empuje_mm=6.0, sesgo_mm=15.0, cubo_ciego_ms=2500,
+                 lateral_max_mm=40.0, linea_ok_mm=25.0, linea_max_mm=40.0, desvio_max_deg=30.0,
+                 alinear_deg=4.0, tolerancia_empuje_mm=6.0, sesgo_mm=5.0, cubo_ciego_ms=3500,
+                 previo_mm=70.0, sensores=None, us_contacto_mm=45.0, us_libre_mm=None,
                  **control):
         self.vision, self.modelo, self.motores = vision, modelo, motores
         self.robot_id, self.reloj = robot_id, reloj
@@ -188,6 +189,11 @@ class LlevarCubo:
         self.retroceso_mm = retroceso_mm
         self.v_empuje, self.w_empuje, self.kp_empuje = v_empuje, w_empuje, kp_empuje
         self.lateral_max_mm, self.linea_max_mm = lateral_max_mm, linea_max_mm
+        # Fuera de la línea de empuje: hasta linea_ok se alinea con la línea;
+        # hasta linea_max se mira al centro del cubo y se empuja igual (el
+        # rumbo se corrige empujando); más, se replanifica.
+        self.linea_ok_mm = linea_ok_mm
+        self.mirar_cubo = False
         self.desvio_max_deg, self.alinear_deg = desvio_max_deg, alinear_deg
         self.tolerancia_empuje_mm = tolerancia_empuje_mm
         # Pasarse de la zona no tiene arreglo (no se puede tirar del cubo) y
@@ -196,6 +202,16 @@ class LlevarCubo:
         # Empujando, la cámara a veces pierde el cubo pegado al rover: se
         # sigue con el cubo estimado en el frente hasta este tiempo.
         self.cubo_ciego_ms = cubo_ciego_ms
+        # Punto de paso `previo_mm` antes del de ataque, en la misma línea:
+        # el último tramo llega ya alineado y sin rodear el punto final.
+        self.previo_mm = previo_mm
+        # Ultrasonido frontal (opcional, nunca bloquea): <= us_contacto_mm
+        # confirma que toca el cubo. La alarma "el cubo se escapó" (lejos de
+        # golpe, us_libre_mm) está APAGADA por defecto: en la cancha (1-oct)
+        # el sensor en marcha saltaba de 32-44 mm a 1,7-1,9 m con el cubo
+        # todavía delante y provocaba retrocesos en falso.
+        self.sensores = sensores
+        self.us_contacto_mm, self.us_libre_mm = us_contacto_mm, us_libre_mm
         self.control = control
         self.predictor = Predictor(modelo)
         self.adaptador = Adaptador(modelo)
@@ -226,6 +242,10 @@ class LlevarCubo:
         self.en_contacto, self.lateral_contacto = False, 0.0
         self.cubo_viejo_ms = 0
         self.esperas = 0
+        self.historial = []                   # (t_obs, centro) de los últimos ~2,5 s
+        self.destapes = 0
+        self.us_lejos = 0
+        self.us_vio_cubo = False              # en este empuje lo vio pegado
         self._parar_y_pasar(PLANIFICAR)
 
     def detener(self, motivo="stop"):
@@ -261,6 +281,12 @@ class LlevarCubo:
         t_obs = mensaje["ts_ms"] + desfase - self.modelo.latencia_minima_ms - rover["age_ms"]
         if ahora - t_obs > self.max_edad_ms:
             return self._esperar(ahora, "vision_vieja")
+        cell = mensaje["grid"]["cell_mm"]
+        centro = self.modelo.centro_desde_marcador(rover, cell)
+        if not self.historial or self.historial[-1][0] != t_obs:
+            self.historial.append((t_obs, centro))
+            while self.historial[0][0] < t_obs - 2500:
+                self.historial.pop(0)
         cubo = buscar(mensaje["cubes"], "color", self.color)
         if cubo is None:
             return self._esperar(ahora, "cubo_no_visible")
@@ -268,17 +294,28 @@ class LlevarCubo:
         # edad creciendo (contrato, sección 6): >0 = posición más vieja que
         # la del rover en la misma imagen.
         self.cubo_viejo_ms = cubo["age_ms"] - rover["age_ms"]
-        if cubo["age_ms"] > self.max_edad_ms and not (
-                self.estado == EMPUJAR and self.en_contacto and cubo["age_ms"] <= self.cubo_ciego_ms):
-            return self._esperar(ahora, "cubo_no_visible")
+        if cubo["age_ms"] > self.max_edad_ms and self.estado in (PLANIFICAR, APROXIMAR, ALINEAR,
+                                                                 VERIFICAR, EMPUJAR):
+            if self.estado == EMPUJAR and self.en_contacto and cubo["age_ms"] <= self.cubo_ciego_ms:
+                pass                          # se sigue con el cubo estimado en el frente
+            elif self.estado == EMPUJAR and self.en_contacto:
+                # Demasiado a ciegas: parar y mirar (VERIFICAR destapa si hace falta).
+                self.tras = EMPUJAR
+                return self._parar_y_pasar(VERIFICAR)
+            elif self.estado == VERIFICAR and cubo["age_ms"] > 1200 and self.destapes < 4:
+                # Parado pegado al cubo, el propio rover puede taparlo ante la
+                # cámara: retroceder un poco para que vuelva a verse.
+                self.destapes += 1
+                self.espera_desde = None
+                return self._retroceder(centro, cell, "cubo_tapado")
+            else:
+                return self._esperar(ahora, "cubo_no_visible")
         deposito = buscar(mensaje.get("depots", ()), "color", self.color)
         if deposito is None:
             return self._abortar("sin_zona_" + self.color)
         meta = self.submeta or deposito       # submeta: reubicar un cubo pegado a la pared
         self.espera_desde = None
         self.ultimo.pop("espera", None)
-        cell = mensaje["grid"]["cell_mm"]
-        centro = self.modelo.centro_desde_marcador(rover, cell)
         self.adaptador.observar(self.predictor, t_obs, centro, cell)
         self.ultimo["edad_ms"] = round(ahora - t_obs)
         if self.estado == PLANIFICAR:
@@ -287,15 +324,15 @@ class LlevarCubo:
             return self._verificar(mensaje, centro, t_obs, cubo, deposito, cell)
         pred = self.predictor.predecir(centro, t_obs - self.modelo.retraso_ms, ahora, cell)
         if self.estado == EMPUJAR:
-            return self._empujar(ahora, mensaje, centro, pred, cubo, meta, cell)
+            return self._empujar(ahora, mensaje, centro, t_obs, pred, cubo, meta, cell)
         if self.estado == ALINEAR:
             return self._alinear(ahora, pred, cubo, meta)
         self._seguir(ahora, mensaje, pred, cubo, cell)
 
     # ------------------------------------------------------------ fases
     def _planificar(self, mensaje, centro, t_obs, cubo, deposito, cell):
-        if not self._tras_parada(t_obs):
-            return                            # la ruta sale de una imagen ya parado
+        if not self._tras_parada(t_obs - max(0, self.cubo_viejo_ms)):
+            return                            # rover Y cubo vistos ya parado
         if cubo_en_su_zona(cubo, deposito, mensaje["depot_size"], mensaje["grid"], mensaje["cube_side"])[0]:
             return self._retirar(centro, cubo, cell)
         meta = self.submeta or deposito
@@ -318,6 +355,14 @@ class LlevarCubo:
             # Primero con margen holgado: el rover real se aparta unos cm de la
             # línea y recorta las esquinas, y la red de seguridad lo pararía.
             # Si así no cabe (cubos juntos), con el margen justo.
+            previo = punto_detras(cubo, meta, self.aproximacion_mm + self.previo_mm, cell)
+            self.planner.clearance = self.holgura_ruta_mm
+            ruta = self.planner.plan(escena, previo)
+            if ruta["estado"] == "RUTA":
+                # Último tramo por la línea de empuje: llega alineado.
+                self.puntos = ruta["puntos"][1:] + [detras]
+                self.estado = APROXIMAR
+                return
             for holgura in (self.holgura_ruta_mm, self.holgura_mm):
                 self.planner.clearance = holgura
                 ruta = self.planner.plan(escena, detras)
@@ -353,6 +398,13 @@ class LlevarCubo:
 
     def _seguir(self, ahora, mensaje, pred, cubo, cell):
         """SALIR, APROXIMAR, RETROCEDER y RETIRAR: ir al siguiente punto."""
+        if self.estado == APROXIMAR and len(self.puntos) > 1:
+            # Si ya está más cerca del siguiente punto que el actual, éste ya
+            # quedó atrás: no volver a buscarlo (daba vueltas a su alrededor).
+            a, b = self.puntos[0], self.puntos[1]
+            if (_norma(b["col"] - pred["col"], b["row"] - pred["row"])
+                    <= _norma(b["col"] - a["col"], b["row"] - a["row"])):
+                self.puntos.pop(0)
         destino = self.puntos[0]
         if self.estado == APROXIMAR:
             estorbo = obstaculo_en_camino(mensaje, pred, destino, self.radio_mm, 0.0,
@@ -377,7 +429,10 @@ class LlevarCubo:
         control = dict(self.control)
         intermedio = self.estado == APROXIMAR and len(self.puntos) > 1
         if intermedio:
-            control["tolerancia_mm"] = 30.0
+            # De paso: margen amplio y, si hay que girar mucho, girar en el
+            # sitio en vez de avanzar en curva cerrada alrededor del punto.
+            control["tolerancia_mm"] = 40.0
+            control["cerca_mm"] = 0.0
         elif self.estado == APROXIMAR:
             control["k_distancia"] = 1.0      # llegada suave: el cubo está 16 cm más allá
         if self.estado in (SALIR, RETROCEDER, RETIRAR):
@@ -396,8 +451,12 @@ class LlevarCubo:
         else:
             self._parar_y_pasar(siguiente)
 
+    def _rumbo_empuje(self, pose, cubo, meta):
+        """Hacia dónde mirar para empujar: la línea cubo->zona, o el centro del cubo."""
+        return rumbo(pose, cubo) if self.mirar_cubo else rumbo(cubo, meta)
+
     def _alinear(self, ahora, pred, cubo, meta):
-        error = giro_corto(rumbo(cubo, meta) - pred["theta"])
+        error = giro_corto(self._rumbo_empuje(pred, cubo, meta) - pred["theta"])
         self._informar(None, error, 0.0, 0.0)
         if abs(error) <= self.alinear_deg:
             self.tras = ALINEAR
@@ -407,12 +466,21 @@ class LlevarCubo:
         izquierda, derecha = self.modelo.potencias(0.0, w, self.control.get("limite", 0.35))
         self._mover(ahora, izquierda, derecha)
 
-    def _empujar(self, ahora, mensaje, centro, pred, cubo, meta, cell):
-        adelante, lateral = relativo(centro, cubo, cell)        # visto: cubo frente al rover
-        # Sólo un cubo visto en la MISMA imagen que el rover dice dónde toca;
-        # uno viejo parece más cerca (el rover ya avanzó con él).
-        fresco = self.cubo_viejo_ms <= 100
-        en_contacto = adelante < self.contacto_mm + 15.0
+    def _empujar(self, ahora, mensaje, centro, t_obs, pred, cubo, meta, cell):
+        # El cubo se compara con la pose del rover del MISMO instante en que
+        # la cámara lo vio: con una posición vieja contra la pose actual
+        # parecería más cerca y centrado (el rover ya avanzó con él).
+        visto = self._pose_en(t_obs - self.cubo_viejo_ms)
+        fresco = visto is not None
+        base = visto if fresco else centro    # pose del rover cuando se vio el cubo
+        adelante, lateral = relativo(base, cubo, cell)
+        # Lo que el rover avanzó desde que se vio el cubo hasta la última
+        # imagen (recorrido) y hasta ahora, predicho (avance).
+        recorrido = relativo(base, centro, cell)[0]
+        avance = relativo(base, pred, cell)[0]
+        en_contacto = adelante - recorrido < self.contacto_mm + 15.0
+        if not fresco:
+            en_contacto = en_contacto or self.en_contacto
         if fresco:
             if 60.0 < adelante < self.contacto_mm and abs(lateral) < 40.0:
                 self.contacto_mm = adelante   # toca más cerca de lo supuesto
@@ -422,19 +490,35 @@ class LlevarCubo:
                 if abs(lateral) > self.lateral_max_mm:
                     return self._retroceder(pred, cell, "cubo_desviado")
                 self.lateral_contacto = lateral
+        distancia_us = self._ultrasonido()
+        if distancia_us is not None and distancia_us <= self.us_contacto_mm:
+            en_contacto = True                # el sensor lo ve pegado a las paletas
+            self.us_vio_cubo = True
+        # Sólo cuenta "no hay nada" si en ESTE empuje el sensor ya lo vio pegado:
+        # en marcha el eco puede pasar por encima del cubo (cancha 1-oct: tres
+        # retrocesos en falso con el cubo avanzando delante).
+        if (self.us_libre_mm is not None and en_contacto and self.us_vio_cubo
+                and distancia_us is not None and distancia_us > self.us_libre_mm):
+            # Creía empujarlo pero delante no hay nada: el cubo se escapó.
+            self.us_lejos += 1
+            if self.us_lejos >= 4:            # 200 ms seguidos: no es un eco suelto
+                self.us_lejos = 0
+                self.en_contacto = False
+                return self._retroceder(pred, cell, "ultrasonido_sin_cubo")
+        else:
+            self.us_lejos = 0
         self.en_contacto = en_contacto
         self.ultimo["cubo_estimado"] = not fresco
         # Lo que el rover avanzó y la visión aún no muestra empuja al cubo.
-        avance = relativo(centro, pred, cell)[0]
         if en_contacto:
             # Pegado al frente: el cubo está donde está el frente del rover,
             # aunque la cámara lo haya visto hace rato o lo esté perdiendo.
-            cubo_pred = punto_relativo(centro, self.contacto_mm + max(0.0, avance),
+            cubo_pred = punto_relativo(centro, self.contacto_mm + max(0.0, relativo(centro, pred, cell)[0]),
                                        self.lateral_contacto, cell)
         else:
-            # Aún no lo toca: primero se come el hueco que queda hasta él.
+            # Aún no lo toca: primero se come el hueco que quedaba hasta él.
             empujado = max(0.0, avance - (adelante - self.contacto_mm))
-            cubo_pred = desplazar({"col": cubo["col"], "row": cubo["row"], "theta": centro["theta"]},
+            cubo_pred = desplazar({"col": cubo["col"], "row": cubo["row"], "theta": base["theta"]},
                                   empujado, cell)
         resto = relativo(pred, meta, cell)[0] - relativo(pred, cubo_pred, cell)[0]
         lejos = _norma(meta["col"] - cubo_pred["col"], meta["row"] - cubo_pred["row"]) * cell
@@ -462,7 +546,9 @@ class LlevarCubo:
         self._mover(ahora, izquierda, derecha)
 
     def _verificar(self, mensaje, centro, t_obs, cubo, deposito, cell):
-        if not self._tras_parada(t_obs):
+        # El cubo también tiene que verse DESPUÉS de parar: una posición
+        # vieja del cubo es de antes de que el rover terminara de empujarlo.
+        if not self._tras_parada(t_obs - max(0, self.cubo_viejo_ms)):
             return
         adentro, falta = cubo_en_su_zona(cubo, deposito, mensaje["depot_size"], mensaje["grid"],
                                          mensaje["cube_side"])
@@ -477,8 +563,16 @@ class LlevarCubo:
             atras, desvio = relativo(linea, centro, cell)
             self.ultimo["linea_mm"] = round(desvio)
             if abs(desvio) > self.linea_max_mm or atras > -self.contacto_mm:
+                self.mirar_cubo = False
                 return self._parar_y_pasar(PLANIFICAR)
-            if abs(error) > 2 * self.alinear_deg:
+            if abs(desvio) > self.linea_ok_mm and not self.mirar_cubo:
+                # Unos cm fuera de la línea (cancha 1-oct: 39-44 mm, y cada
+                # replanificación costaba ~3 s): mirar al centro del cubo,
+                # empujarlo centrado y corregir el rumbo empujando.
+                self.mirar_cubo = True
+                self.estado = ALINEAR
+                return
+            if abs(giro_corto(self._rumbo_empuje(centro, cubo, meta) - centro["theta"])) > 2 * self.alinear_deg:
                 self.alineaciones += 1
                 if self.alineaciones > 6:
                     return self._abortar("no_alinea")
@@ -489,6 +583,9 @@ class LlevarCubo:
             if estorbo is not None:
                 self.ultimo["estorbo"] = estorbo  # algo se movió: buscar otro empuje
                 return self._parar_y_pasar(PLANIFICAR)
+            self.en_contacto, self.lateral_contacto = False, 0.0   # empieza a 16 cm
+            self.us_vio_cubo, self.us_lejos = False, 0
+            self.mirar_cubo = False
             self.estado = EMPUJAR
             return
         # Tras un empuje que no dejó el cubo dentro: seguir si sigue en línea.
@@ -571,6 +668,8 @@ class LlevarCubo:
 
     def _retroceder(self, pose, cell, motivo):
         self.ultimo["retroceso"] = motivo
+        self.en_contacto, self.lateral_contacto = False, 0.0   # ya no lo toca
+        self.us_vio_cubo, self.us_lejos = False, 0
         self.puntos = [desplazar(pose, -self.retroceso_mm, cell)]
         self.estado = RETROCEDER
 
@@ -580,6 +679,27 @@ class LlevarCubo:
             return self._parar_y_pasar(ENTREGADO)
         self.puntos = [desplazar(centro, -self.retroceso_mm, cell)]
         self.estado = RETIRAR
+
+    def _ultrasonido(self):
+        """Distancia frontal reciente en mm, o None (sin sensor, vieja o sin eco)."""
+        s = self.sensores
+        if s is None:
+            return None
+        try:
+            if s.distance is None or s.age(s.distance_at) > 300:
+                return None
+            self.ultimo["us_mm"] = round(s.distance)
+            return s.distance
+        except Exception:                     # el sensor nunca detiene la misión
+            return None
+
+    def _pose_en(self, t):
+        """Centro del rover observado en el instante t (±120 ms), o None."""
+        mejor, error = None, 120
+        for momento, pose in self.historial:
+            if abs(momento - t) <= error:
+                mejor, error = pose, abs(momento - t)
+        return mejor
 
     def _tras_parada(self, t_obs):
         """¿La imagen refleja al rover ya detenido?"""

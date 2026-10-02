@@ -18,7 +18,7 @@ from prueba_transporte_cubo import DevelopmentTelemetryState, RobotClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "codigos"))
 from llevar_cubo import cubo_en_su_zona
 
-CAMPOS = ("d_mm", "err_deg", "resto_mm", "falta_mm", "linea_mm", "edad_ms")
+CAMPOS = ("d_mm", "err_deg", "resto_mm", "falta_mm", "linea_mm", "us_mm", "edad_ms")
 AVISOS = ("retroceso", "estorbo", "reubicar", "submeta", "espera", "cubo_estimado", "error_carga")
 
 

@@ -73,8 +73,11 @@ def hacia_punto(pose, objetivo, cell_mm, modelo, v_max=170.0, v_min=90.0, w_max=
     v_min: por debajo de ~0,15 de potencia el roce no deja avanzar (medido
     1-oct); acercarse "muy despacio" en realidad es no moverse.
     Cerca del objetivo (`cerca_mm`) un desvio lateral pequeño se vuelve un
-    error de angulo grande: ahi no se gira en el sitio y, si el punto quedo
-    detras, se llega marcha atras en vez de dar la vuelta.
+    error de angulo grande: si el punto quedo detras, se llega marcha atras en
+    vez de dar la vuelta. Pero con mas de `giro_en_sitio` de error se gira
+    primero en el sitio: avanzar en curva lenta (v·cos del error, casi en la
+    zona muerta) con el giro al maximo hacia orbitar el punto sin alcanzarlo
+    (cancha 1-oct: 6 s girando a 3-6 cm del punto).
     """
     dc = (objetivo["col"] - pose["col"]) * cell_mm
     dr = (objetivo["row"] - pose["row"]) * cell_mm
@@ -87,8 +90,10 @@ def hacia_punto(pose, objetivo, cell_mm, modelo, v_max=170.0, v_min=90.0, w_max=
     if distancia < cerca_mm and abs(error) > 90:
         sentido, error = -1, giro_corto(error - 180)   # marcha atras
     w = max(-w_max, min(w_max, kp_giro * error))
-    if distancia < cerca_mm:
-        v = sentido * rapidez * max(0.0, math.cos(math.radians(error)))
+    if abs(error) > giro_en_sitio:
+        v = 0.0                               # primero orientarse, sin avanzar
+    elif distancia < cerca_mm:
+        v = sentido * rapidez * math.cos(math.radians(error))
     elif abs(error) > giro_en_sitio:
         v = 0.0                               # primero orientarse, sin avanzar
     else:

@@ -31,7 +31,12 @@ class CommandSession:
             self.controller.stop("watchdog")
             self.last_motion = None
         if self.sensors is not None:
-            self.sensors.update(moving=self.controller.mode is not None)
+            # Con una mision activa el LED del sensor de color no barre: sus
+            # destellos rojo/verde/azul sobre el cubo pueden confundir a la
+            # camara, y la mision no usa ese sensor (reglamento 12.4).
+            ocupado = self.controller.mode is not None or (
+                self.mission is not None and self.mission.activa)
+            self.sensors.update(moving=ocupado)
         self.controller.update()
 
     def process_command(self, text):

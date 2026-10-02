@@ -35,6 +35,29 @@ def simulador(pose, cubos, real=None, frente_mm=105.0, **extra):
     return sim
 
 
+class Ultrasonido:
+    """Lo que SensoresRover expone: distancia al cubo que está DELANTE (±25 mm de lado).
+
+    Pegado a las paletas mide ~25 mm, como en la cancha (25,4 mm el 1-oct).
+    """
+    def __init__(self, sim):
+        self.sim, self.distance_at = sim, 0.0
+
+    @property
+    def distance(self):
+        sim, mejor = self.sim, 400.0
+        th = math.radians(sim.theta)
+        for cubo in sim.cubos:
+            dc, dr = (cubo["col"] - sim.col) * CELL, (cubo["row"] - sim.row) * CELL
+            adelante, lateral = dc * math.cos(th) - dr * math.sin(th), -dc * math.sin(th) - dr * math.cos(th)
+            if adelante > 0 and abs(lateral) < 25:
+                mejor = min(mejor, adelante - (sim.frente_mm or 105) + 25)
+        return mejor if mejor >= 20 else None     # el HC-SR04 no mide por debajo de 20 mm
+
+    def age(self, momento):
+        return 0
+
+
 def correr(mision, sim, hasta_ms=150000):
     while sim.t < hasta_ms and mision.activa:
         sim.paso()
@@ -131,6 +154,103 @@ class LlevarCuboTests(unittest.TestCase):
             pasado_mm = (sim.cubos[0]["col"] - 39.25) * CELL
             self.assertLess(pasado_mm, 20, nombre)          # nunca más allá del centro
             self.assertEqual(mision.esperas, 0, nombre)      # sin paradas a medio empuje
+
+    def test_cube_behind_the_rover_is_circled_and_delivered(self):
+        # Prueba del 1-oct: rover entre el cubo y su zona, mirando a la zona.
+        for real in (ModeloRover(), ModeloRover(k_lineal=630 * .8, k_giro=715 * .6)):
+            sim = simulador((28.0, 21.5, 0.0), [{"color": "red", "col": 20.0, "row": 21.5}], real=real)
+            mision = llevar(sim, "red")
+            correr(mision, sim)
+            self.assert_entregado(mision, sim, "red")
+            self.assertLess(sim.t, 40000)
+
+    def test_cube_slipping_while_camera_flickers_is_noticed(self):
+        # Con la imagen del cubo vieja, el desvío se mide contra la pose del
+        # rover de ESE instante: si resbala, retrocede y vuelve a alinear en
+        # vez de seguir empujando un cubo que ya no está delante.
+        # Y nunca da por entregado un cubo con una imagen anterior a la parada.
+        for oculto_ms in (600, 800, 900):
+            sim = simulador((10.0, 21.0, 0.0), [{"color": "red", "col": 21.0, "row": 21.5}])
+            sim.deriva = 0.3
+            sim.oculto = lambda cubo, sim, ms=oculto_ms: sim.t % 1000 < ms
+            mision = llevar(sim, "red")
+            correr(mision, sim)
+            self.assert_entregado(mision, sim, "red")
+
+    def test_ultrasound_notices_a_hidden_cube_slipping_away(self):
+        # Peor caso de la cancha: pegado al rover la cámara NO ve el cubo y el
+        # cubo resbala. Sin sensor se empuja a ciegas y se pierde; con el
+        # ultrasonido se nota que delante ya no hay nada y se vuelve a empezar.
+        resultados = {}
+        for con_sensor in (False, True):
+            sim = simulador((10.0, 21.0, 0.0), [{"color": "red", "col": 21.0, "row": 21.5}])
+            sim.deriva = 0.5
+            sim.oculto = lambda cubo, sim: math.hypot(cubo["col"] - sim.col, cubo["row"] - sim.row) * CELL < 140
+            retrocesos = set()
+            mision = llevar(sim, "red", sensores=Ultrasonido(sim) if con_sensor else None,
+                            us_libre_mm=80.0)       # la alarma viene apagada
+            while sim.t < 150000 and mision.activa:
+                sim.paso()
+                mision.tick()
+                retrocesos.add(mision.ultimo.get("retroceso"))
+            resultados[con_sensor] = mision.estado == ENTREGADO and entregado(sim, "red")[0]
+            if con_sensor:
+                self.assertIn("ultrasonido_sin_cubo", retrocesos)
+        self.assertEqual(resultados, {False: False, True: True})
+
+    def test_ultrasound_that_never_sees_the_cube_is_ignored(self):
+        # Cancha 1-oct: en marcha el eco pasaba por encima del cubo y daba
+        # retrocesos en falso. Si nunca lo vio pegado, no se le hace caso.
+        class Ciego:
+            distance, distance_at = 300.0, 0.0
+
+            def age(self, momento):
+                return 0
+        sim = simulador((10.0, 21.0, 0.0), [{"color": "red", "col": 24.0, "row": 21.5}])
+        mision = llevar(sim, "red", sensores=Ciego(), us_libre_mm=80.0)
+        retrocesos = set()
+        while sim.t < 150000 and mision.activa:
+            sim.paso()
+            mision.tick()
+            retrocesos.add(mision.ultimo.get("retroceso"))
+        self.assert_entregado(mision, sim, "red")
+        self.assertNotIn("ultrasonido_sin_cubo", retrocesos)
+
+    def test_ultrasound_failures_never_stop_the_mission(self):
+        class Roto:
+            distance_at = 0.0
+
+            @property
+            def distance(self):
+                raise OSError("sin eco")
+
+            def age(self, momento):
+                return 0
+        sim = simulador((10.0, 21.0, 0.0), [{"color": "red", "col": 24.0, "row": 21.5}])
+        mision = llevar(sim, "red", sensores=Roto())
+        correr(mision, sim)
+        self.assert_entregado(mision, sim, "red")
+
+    def test_a_few_cm_off_the_push_line_pushes_without_replanning(self):
+        # Cancha 1-oct: llegaba 39-44 mm fuera de la línea y replanificaba
+        # todo (~3 s cada vez). Ahora mira al centro del cubo y empuja.
+        sim = simulador((14.0, 21.5 - 35 / CELL, 0.0), [{"color": "red", "col": 22.0, "row": 21.5}])
+        mision = llevar(sim, "red")
+        mision.estado = "ALINEAR"                  # como si acabara de llegar
+        correr(mision, sim)
+        self.assert_entregado(mision, sim, "red")
+        self.assertEqual(mision.replanes, 0)       # ni una replanificación
+        self.assertGreater(abs(mision.ultimo["linea_mm"]), 25)   # sí estaba fuera de la línea
+
+    def test_rover_hiding_the_cube_at_the_end_backs_off_to_see_it(self):
+        # Como el 1-oct: parado junto al cubo ya en la zona, la cámara no lo ve.
+        sim = simulador((10.0, 21.0, 0.0), [{"color": "red", "col": 24.0, "row": 21.5}])
+        sim.oculto = lambda cubo, sim: (cubo["col"] > 35.0 and
+                                        math.hypot(cubo["col"] - sim.col, cubo["row"] - sim.row) * CELL < 130)
+        mision = llevar(sim, "red")
+        correr(mision, sim)
+        self.assert_entregado(mision, sim, "red")
+        self.assertEqual(mision.ultimo.get("retroceso"), "cubo_tapado")
 
     def test_starting_against_the_border_first_moves_out(self):
         # La salida del contrato está a 75 mm del borde: menos que el radio + margen.

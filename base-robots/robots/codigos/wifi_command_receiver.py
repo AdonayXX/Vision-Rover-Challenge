@@ -349,7 +349,7 @@ def main(config_path="config_robot.json"):
                 import gc
                 gc.collect()
                 from llevar_cubo import LlevarCubo
-                return LlevarCubo(vision[0], modelo, controller, robot_id)
+                return LlevarCubo(vision[0], modelo, controller, robot_id, sensores=sensors)
 
             mision = Misiones(IrAPunto(vision[0], modelo, controller, robot_id),
                               fabrica_llevar=fabrica_llevar)
