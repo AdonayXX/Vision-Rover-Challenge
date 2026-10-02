@@ -40,7 +40,7 @@ import cv2
 import numpy as np
 
 try:  # como paquete
-    from .configuracion import ConfigVision, geometrias_deposito
+    from .configuracion import ConfigVision, geometrias_arbitro
     from .mundo import VERSION_PROTOCOLO
     # El formateador de tiempo se trae de donde ya vive, en vez de escribir otro
     # acá: si la pantalla dijera 0:03 y el acta 00:03, alguien tendría que
@@ -51,7 +51,7 @@ try:  # como paquete
     )
 except ImportError:  # como script suelto
     from vision.configuracion import (  # type: ignore[no-redef]
-        ConfigVision, geometrias_deposito,
+        ConfigVision, geometrias_arbitro,
     )
     from vision.mundo import VERSION_PROTOCOLO  # type: ignore[no-redef]
     from vision.record.acta import mmss  # type: ignore[no-redef]
@@ -119,7 +119,7 @@ class Vista:
         # Las zonas son lugares DECLARADOS: no cambian entre cuadros, así que se
         # arman una vez. El sistema de coordenadas sí cambia, y por eso lo que se
         # recalcula en cada cuadro es solo el paso de celdas a píxeles.
-        self._zonas = geometrias_deposito(cfg)
+        self._zonas = geometrias_arbitro(cfg)
         self._salida = (cfg.lugares.start_col, cfg.lugares.start_row)
         self._sistema_actual = None
 

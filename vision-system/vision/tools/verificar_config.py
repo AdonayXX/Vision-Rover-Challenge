@@ -37,10 +37,10 @@ import argparse
 import sys
 
 try:  # como paquete
-    from ..configuracion import avisos_config, cargar_config, geometrias_deposito
+    from ..configuracion import avisos_config, cargar_config, geometrias_arbitro
 except ImportError:  # como script suelto
     from vision.configuracion import (  # type: ignore[no-redef]
-        avisos_config, cargar_config, geometrias_deposito,
+        avisos_config, cargar_config, geometrias_arbitro,
     )
 
 
@@ -66,13 +66,16 @@ def mostrar_lugares(cfg) -> None:
     print("  {:<7} {:<11} {:>16} {:>22} {:>16}".format(
         "color", "lado", "centro (celdas)", "ventana de aceptación", "tolerancia"))
     print("  " + "-" * 76)
-    for color, geo in sorted(geometrias_deposito(cfg).items()):
+    for color, geo in sorted(geometrias_arbitro(cfg).items()):
         print("  {:<7} {:<11} {:>16} {:>22} {:>16}".format(
             color, geo.lado,
             "({:.2f}, {:.2f})".format(geo.col, geo.row),
             "{:.1f} x {:.1f} mm".format(geo.ventana_col * 2 * cell, geo.ventana_row * 2 * cell),
             "+/- {:.1f} mm".format(min(geo.ventana_col, geo.ventana_row) * cell)))
     print()
+    print("  Es la ventana que usa el ÁRBITRO: la conservadora de media diagonal,")
+    print("  agrandada {:.1f} mm por lado (conteo_acopio.tolerancia_mm).".format(
+        cfg.conteo_acopio.tolerancia_mm))
     print("  La VENTANA es dónde puede caer el CENTRO del cubo para que el cubo")
     print("  entero quede adentro, con cualquier rotación. La TOLERANCIA es la mitad")
     print("  de su lado más angosto: cuánto se puede correr el cubo del eje de la")

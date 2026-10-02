@@ -275,6 +275,12 @@ como entregado. Ver la sección 6.
   ajuste que se mueve solo cambia los colores a mitad de ronda y rompe la
   detección de los cubos.
 - **Enfoque manual**, ajustado y luego dejado quieto.
+- **Luz pareja y difusa, sin brillo directo sobre la cancha.** Los cubos son de
+  acrílico y reflejan: un foco o una ventana encima les lava la tapa, que es
+  casi todo lo que la cámara ve de ellos. El detector se adapta a la luz de cada
+  cuadro, pero un cubo **quemado** por el reflejo no tiene color que encontrar.
+  Si la sala es muy luminosa, la exposición se baja al arrancar el sistema: ver
+  [`OPERACION.md`](OPERACION.md), "Si la sala tiene mucha luz".
 - Si se mueve la cámara después de calibrar, no pasa nada grave: el sistema se
   reancla solo a los marcadores en el cuadro siguiente.
 

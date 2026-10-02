@@ -128,6 +128,31 @@ contra 17,01 con un rover empujándolo.
 > método se degrada. Ahí no se le exige **acertar** sino **no mentir**, y lo que
 > se comprueba es que la detección se marque como no confiable.
 
+**Después de los dos modos corre el bloque de LA LUZ.** Los tres cubos, con la
+iluminación cambiada, sobre un tablero al que se le agrega el ruido de color de
+una cámara real —el generador lo dibuja perfectamente gris, y contra eso
+cualquier umbral funciona—. Siete casos, y en los siete tienen que estar los
+tres cubos, confiables y dentro del umbral:
+
+| Caso | Qué le hace la luz al cubo |
+|---|---|
+| luz normal, tablero con ruido de cámara | nada: es la referencia |
+| poca luz, brillo al 40 % | le apaga el color |
+| mucha luz, brillo al doble | lo acerca al tope del sensor |
+| tapas lavadas al 50 % y al 70 % | un reflejo parejo sobre el acrílico |
+| tablero amarillento y azulado | la luz tiñe todo el cuadro |
+
+Es la prueba que faltaba mientras el umbral de croma fue un número fijo. **No se
+le exige recuperar un cubo quemado del todo:** lo que el sensor recortó no está
+en la imagen, y eso se arregla con la exposición.
+
+**Y al final, la CALIBRACIÓN DE COLORES** del arranque. Se giran los matices de
+los tres cubos —lo que hace una luz que corre los tonos— y se calibra mirando
+esa imagen. Con un corrimiento de hasta 45° tienen que quedar los tres cubos,
+cada uno **con su color** y en su lugar. Con 75°, o con un cubo de menos, la
+calibración tiene que **negarse**: una que aprende los colores cambiados es peor
+que no calibrar.
+
 ### `verificar_seguimiento.py`
 
 Verifica que el seguimiento cumpla **la promesa del contrato sobre oclusión**:
@@ -163,7 +188,7 @@ python -m vision.tools.verificar_acopio --holgura-mm 5
 python -m vision.tools.verificar_acopio --modo cenital
 ```
 
-Corre en **dos bloques**, y el primero es el que sostiene todo lo demás.
+Corre en **cinco bloques**, y el primero es el que sostiene todo lo demás.
 
 **Bloque 1 — el criterio, sin imágenes.** Que el límite de la ventana esté donde
 dice, y sobre todo que el criterio sea **conservador para cualquier rotación**:
@@ -178,7 +203,25 @@ cumpliera, el sistema daría por entregado un cubo que sobresale.
 > zona y el eje. Probar ese punto mediría la coma flotante. Lo que se prueba es
 > **un pelo adentro** y **un micrón afuera**, que es la frontera que existe.
 
-**Bloque 2 — el sistema entero**, sobre imágenes sintéticas y en los dos modos
+**Bloque 2 — el recorrido.** Que una sola llamada evalúe **las tres zonas**,
+cuenten o no cuenten. Un recorrido que se cortara en la primera zona en posición
+se vería en pantalla como un conteo bajo sin explicación.
+
+**Bloque 3 — a qué hora entró cada cubo.** Se sigue un cubo por una ronda
+inventada, con el cronómetro puesto a mano: la marca es la del cronómetro **al
+entrar** y no al cumplirse la permanencia; se borra apenas el cubo sale o deja
+de verse; se toma de nuevo al reingresar, con la hora nueva; no existe para un
+cubo que ya estaba puesto al arrancar ni fuera de `RUNNING`; y se vacía al
+preparar otra ronda. Trece pasos.
+
+**Bloque 4 — la tolerancia del árbitro y el veredicto que se publica.** Que la
+ventana del árbitro sea la conservadora agrandada 2,5 mm por lado: un cubo
+1,25 mm afuera de la conservadora cuenta, y uno 3 mm afuera no. Y que el campo
+`in_depot` del mensaje sea el veredicto **sostenido**: no aparece al entrar ni a
+mitad de la permanencia, aparece al cumplirla, cae en el mismo cuadro en que el
+cubo sale, y al volver hay que sostenerse de nuevo.
+
+**Bloque 5 — el sistema entero**, sobre imágenes sintéticas y en los dos modos
 de cámara: los cubos en el centro de su zona, justo adentro del criterio, justo
 afuera, y girados 45°. Acá no se prueba una fórmula sino la cadena completa
 —detección de color y ajuste de la base incluidos—, que es donde entra el error
@@ -392,6 +435,55 @@ sobre el sistema real.
 El indicador que más importa apuntando al tablero físico es
 **"MARCADORES DE ESQUINA: 4 de 4"**: significa que el mundo real se comporta como
 lo sintético y las coordenadas se pueden anclar.
+
+### `diagnostico_cubos.py`
+
+Dice **qué cubos ve el detector, cuáles descarta y por qué**, sobre la cámara
+real o sobre un cuadro guardado.
+
+```bash
+python -m vision.tools.diagnostico_cubos                  # cámara, 3 segundos
+python -m vision.tools.diagnostico_cubos --indice 1
+python -m vision.tools.diagnostico_cubos --exposicion -8  # probar con menos luz
+python -m vision.tools.diagnostico_cubos --imagen diagnostico_cubos_123.png
+python -m vision.tools.diagnostico_cubos --sintetico      # para probar la herramienta
+```
+
+Existe porque un cubo que no aparece —o que queda ámbar, con la edad creciendo
+lejos de donde está— tiene **una sola cara para cuatro causas**: el color no
+supera el umbral, la mancha queda chica, el matiz no es de ningún cubo, o el
+contorno no encaja con el modelo. Cada una se arregla en un lugar distinto, y
+elegir sin saber cuál es termina moviendo el umbral equivocado.
+
+**No corrige nada.** Mira un cuadro y contesta con números:
+
+| Bloque | Qué dice |
+|---|---|
+| **1. La imagen** | brillo medio y qué fracción de la cancha tiene algún canal en el tope del sensor. Lo recortado no lo recupera ningún programa |
+| **2. El tablero** | el tinte que le pone la luz, el croma que le queda y **el umbral que se usó en ese cuadro** |
+| **3. Cubos detectados** | celda, área, residuo, si es confiable, margen de croma y cuánto está recortado |
+| **4. Manchas descartadas** | en qué compuerta cayó cada una: chica, grande, matiz o duplicado |
+| **5. Alrededor de las chicas** | si al lado queda color débil —una tapa lavada, recuperable— o el sensor ya lo quemó |
+
+Guarda dos archivos en la carpeta desde donde se corre: el **cuadro crudo**,
+`diagnostico_cubos_<número>.png`, tal cual lo recibe el detector, y el mismo
+cuadro **anotado**. El crudo es lo que hay que mandar para analizar un problema
+a distancia: **una foto de la pantalla no sirve**, porque trae el color de la
+pantalla y el del celular, no el de la cámara. Con `--imagen` se vuelve a
+analizar un crudo guardado, sin cámara.
+
+**Reusa el detector, no lo copia.** Llama a `detectar_cubos` y le pide que anote
+sus descartes. Dos implementaciones pueden divergir, y entonces el diagnóstico
+dejaría de decir nada sobre el sistema real.
+
+| Opción | Para qué |
+|---|---|
+| `--indice N` | qué cámara abrir |
+| `--camara NOMBRE` | qué perfil de calibración usar |
+| `--exposicion V` | exposición fija a probar, en lugar de la del archivo. Más negativo es menos luz |
+| `--imagen RUTA` | analizar un cuadro crudo guardado |
+| `--segundos S` | cuánto mirar antes de tomar el cuadro (3 por defecto) |
+| `--sin-guardar` | no escribir las imágenes |
 
 ### `diagnostico_falsos_positivos.py`
 

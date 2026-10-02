@@ -88,7 +88,7 @@ su propio README con el detalle:
 | `reglas/` | — | Lo que el sistema decide | 🟢 **conteo de cubos en posición**, con permanencia mínima |
 | `publish/` | Consumidor | Publicación TCP/NDJSON | 🟢 **reloj propio y último-valor-gana** (el transporte lo comparte con el contrato) |
 | `record/` | Consumidor | Acta de la ronda y grabación a disco | 🟢 **acta funcionando** |
-| `tools/` | Herramientas | Puesta a punto y verificación | 🟢 **trece herramientas** · ⚪ guía de alineamiento |
+| `tools/` | Herramientas | Puesta a punto y verificación | 🟢 **quince herramientas** · ⚪ guía de alineamiento |
 
 🟢 hay código funcionando · ⚪ planificado, sin código aún
 
@@ -138,7 +138,8 @@ cambia— así que **no le cuesta nada al procesamiento**: medido, 179 cuadros e
 # devuelven código distinto de cero si algo se sale de umbral.
 .venv/bin/python -m vision.tools.verificar_geometria      # píxeles → celdas
 .venv/bin/python -m vision.tools.verificar_rovers         # posición y ángulo
-.venv/bin/python -m vision.tools.verificar_cubos          # color, base y oclusión
+.venv/bin/python -m vision.tools.verificar_cubos          # color, base, oclusión, luz y calibración
+.venv/bin/python -m vision.tools.diagnostico_cubos        # qué cubos ve la cámara real, y por qué no
 .venv/bin/python -m vision.tools.verificar_seguimiento    # memoria, oclusión y edad
 
 # Los desfases marcador ↔ robot, medidos con el propio sistema.
