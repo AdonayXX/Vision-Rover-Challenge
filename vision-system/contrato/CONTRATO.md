@@ -1,6 +1,6 @@
 # Contrato de telemetría — Vision-Rover-Challenge
 
-**Protocolo v2**
+**Protocolo v3**
 
 Este documento es el acuerdo entre el **sistema de visión** y **los equipos**.
 La visión mira la cancha desde arriba y publica, varias veces por segundo, dónde
@@ -10,7 +10,18 @@ Lo que está acá **no cambia por sorpresa**. Si algo tiene que cambiar, sube el
 número de versión (`v`) y se les avisa. Pueden escribir código contra este
 formato con confianza.
 
-> ### 🔁 Qué cambió en la v2
+> ### 🔁 Qué cambió en la v3
+>
+> - Cada cubo trae un campo nuevo, **`in_depot`**: `true` cuando **el árbitro lo
+>   da por entregado**. Es el veredicto oficial, el mismo que cuenta los cubos y
+>   cierra la ronda. **Ya no hace falta calcularlo**: se lee.
+> - El chequeo de versión pasa de `!= 2` a **`!= 3`**. Es lo único que hay que
+>   tocar sí o sí.
+> - Todo lo demás —nombres, tipos, unidades, zonas, salida— queda igual.
+>
+> La nota de migración está en la [sección 9](#9-cambios-de-contrato).
+
+> ### Qué había cambiado en la v2
 >
 > - Las **zonas de acopio** dejan de ser un punto en una esquina: ahora son
 >   **rectángulos de 20 × 15 cm**, uno al **centro de cada uno de los tres lados**
@@ -133,7 +144,7 @@ línea**):
 
 ```json
 {
-  "v": 2,
+  "v": 3,
   "seq": 4137,
   "ts_ms": 1785012345678,
   "phase": "RUNNING",
@@ -144,9 +155,9 @@ línea**):
     { "id": 11, "col": 15.265, "row": 28.661, "theta": 40.22, "age_ms": 0 }
   ],
   "cubes": [
-    { "color": "green", "col": 21.480, "row": 3.762, "age_ms": 0   },
-    { "color": "blue",  "col": 15.000, "row": 29.000, "age_ms": 425 },
-    { "color": "red",   "col": 33.071, "row": 25.983, "age_ms": 0   }
+    { "color": "green", "col": 21.480, "row": 3.762,  "age_ms": 0,   "in_depot": true  },
+    { "color": "blue",  "col": 15.000, "row": 29.000, "age_ms": 425, "in_depot": false },
+    { "color": "red",   "col": 33.071, "row": 25.983, "age_ms": 0,   "in_depot": false }
   ],
   "obstacles": [],
   "start":  { "col": 3.75, "row": 21.5 },
@@ -165,10 +176,9 @@ línea**):
 > ahí, con su última posición conocida y la edad creciendo. Esto es lo normal,
 > no un error. Ver la sección 6.
 >
-> Y mirá el **verde**: está en `(21.480, 3.762)` y su zona está centrada en
-> `(21.5, 3.75)`. Ese cubo **ya está entregado**, y se comprueba con la cuenta de
-> [más abajo](#cuándo-un-cubo-está-en-su-zona) — no alcanza con que las
-> coordenadas se parezcan.
+> Y mirá el **verde**: `in_depot: true`. Está en `(21.480, 3.762)`, dentro de su
+> zona, centrada en `(21.5, 3.75)`, y el árbitro **ya lo da por entregado**. No
+> hay que comparar coordenadas ni hacer ninguna cuenta: el campo lo dice.
 
 ---
 
@@ -255,9 +265,29 @@ por posición en la lista.
 | `col` | float | Posición en celdas. |
 | `row` | float | Posición en celdas. |
 | `age_ms` | entero | Milisegundos desde la última observación real. |
+| `in_depot` | booleano | `true` si el árbitro lo da por **entregado** en la zona de su color. |
 
 Cubos de **6 cm**. **No hay dos del mismo color**, por eso no llevan `id`: el
 color alcanza para identificarlos. Puede haber 2 o 3 cubos en juego.
+
+**`in_depot` es el veredicto del árbitro**, el mismo con el que se cuentan los
+cubos y se cierra la ronda. Tres cosas para saber de él:
+
+- **Es sostenido, no instantáneo.** Pasa a `true` cuando el cubo lleva **un
+  segundo** entero dentro de su zona. Un cubo parado justo en el límite entra y
+  sale con el temblor de la detección, y publicar eso les haría soltar y volver
+  a buscar el mismo cubo.
+- **Al salir, cae en el acto.** Si un rover saca el cubo, `in_depot` pasa a
+  `false` en ese mismo mensaje. La demora es solo para entrar.
+- **Un cubo tapado lo conserva.** El rover que acaba de entregar queda encima del
+  cubo y lo tapa: `age_ms` crece y `in_depot` sigue en `true`, porque el cubo
+  sigue donde estaba.
+
+```python
+pendientes = [c for c in msg["cubes"] if not c["in_depot"]]
+if not pendientes:
+    ...  # los tres entregados: el reto está cumplido
+```
 
 ### `obstacles[]`
 
@@ -365,8 +395,15 @@ verificar contra lo que la cancha está publicando.
 ### Cuándo un cubo está en su zona
 
 El reglamento pide que el cubo quede **completamente dentro** del área de su zona
-de acopio. Esta es la cuenta exacta con la que se decide, y es la misma que usa
-el sistema de visión para mostrarlo en pantalla.
+de acopio. **Si ya está entregado lo dice `in_depot`**, y ese es el veredicto que
+vale. Esta sección explica la geometría que hay detrás, que sirve para otra
+cosa: saber **adónde apuntar** el cubo antes de soltarlo, y cuánto le falta.
+
+> **Si su cuenta y `in_depot` no coinciden, manda `in_depot`.** El árbitro usa
+> esta misma geometría con una holgura chica por lado, que no viaja en el
+> mensaje. Entonces: si esta cuenta da *adentro*, `in_depot` va a dar `true` en
+> cuanto el cubo se sostenga un segundo. Si da *afuera por un pelo*, `in_depot`
+> puede dar `true` igual. Apunten con esta cuenta y decidan con el campo.
 
 **Primero: sobre qué lado apoya la zona.** No viene en el mensaje, se deduce. La
 zona apoya su lado largo sobre el **borde de la cancha más cercano a su centro**.
@@ -398,8 +435,7 @@ Lo que queda es la **ventana de aceptación**: dónde puede caer el centro del c
 > Los 32,6 mm de tolerancia son cómodos, y no siempre lo fueron: con el fondo de
 > 100 mm que tuvo la primera versión de la v2 eran **7,6 mm**, y en la cancha
 > real un cubo bien puesto oscilaba a través de ese límite entre cuadro y
-> cuadro. Por eso la zona se agrandó. **El criterio no se aflojó**: lo que se
-> agranda es la zona, nunca el margen.
+> cuadro. Por eso la zona se agrandó.
 
 Este fragmento corre tal cual, con Python puro y nada importado:
 
@@ -436,7 +472,7 @@ def cubo_en_su_zona(cubo, depot, depot_size, grid, cube_side):
 ```
 
 Con el cubo verde del mensaje de la [sección 2](#2-el-mensaje) —`(21.480, 3.762)`
-contra una zona centrada en `(21.5, 3.75)`— da `(True, 0.0)`: está entregado. Si
+contra una zona centrada en `(21.5, 3.75)`— da `(True, 0.0)`: está adentro. Si
 ese cubo estuviera en `row = 5.5`, o sea 35 mm más adentro de la cancha, daría
 `(False, 0.1213)`: le faltarían 0,12 celdas, 2,4 mm, para entrar.
 
@@ -671,7 +707,7 @@ equipo.
 ### 6.5. Validen la versión
 
 ```python
-if msg["v"] != 2:
+if msg["v"] != 3:
     continue      # formato desconocido: descartar, no adivinar
 ```
 
@@ -767,7 +803,7 @@ python3 mock_publisher.py
 
 ```
 ==================================================================
-Simulador del Vision-Rover-Challenge — protocolo v2
+Simulador del Vision-Rover-Challenge — protocolo v3
 Publicando NDJSON en 0.0.0.0:2026 a 20 Hz
 Cancha: 43x43 celdas de 20 mm
 Preparación: 60 s   ·   Ronda: 600 s   (de READY a RUNNING pasa solo)
@@ -1042,7 +1078,7 @@ while True:
         linea, buffer = buffer.split(b"\n", 1)
         mensaje = json.loads(linea)
 
-        if mensaje["v"] != 2:                   # versión desconocida: descartar
+        if mensaje["v"] != 3:                   # versión desconocida: descartar
             continue
         if mensaje["phase"] != "RUNNING":       # la ronda no está en juego
             continue
@@ -1065,6 +1101,8 @@ while True:
             mensaje["phase"], mi_rover["col"], mi_rover["row"], mi_rover["theta"]))
 
         for cubo in mensaje["cubes"]:
+            if cubo["in_depot"]:
+                continue                        # ya entregado: el árbitro lo cuenta
             if cubo["age_ms"] > 1500:
                 continue                        # dato viejo: seguramente tapado
             destino = depots[cubo["color"]]
@@ -1189,7 +1227,9 @@ python3 test_client.py
 
 **Garantiza:**
 
-- El formato de este documento, mientras `v` valga `2`.
+- El formato de este documento, mientras `v` valga `3`.
+- Que `in_depot` es **el mismo veredicto** con el que el árbitro cuenta los cubos
+  y cierra la ronda. No hay otro: lo que dice el campo es lo que vale.
 - Que va a **seguir publicando** aunque algo falle adentro: ante un error se
   conserva el último estado bueno y se sigue emitiendo. El sistema no se cae a
   mitad de ronda.
@@ -1230,6 +1270,37 @@ escribir un número distinto sin que nadie ganara nada.
 **Esto no vuelve a pasar.** Con clientes en la calle, un campo nuevo es un cambio
 de contrato como cualquier otro y va con cambio de versión y aviso.
 
+### Migración de la v2 a la v3
+
+**Qué cambió.** Cada elemento de `cubes[]` suma un campo booleano, `in_depot`:
+el veredicto del árbitro sobre si ese cubo está entregado. Nada más.
+
+**Por qué.** Hasta la v2, cada equipo calculaba por su cuenta si un cubo estaba
+en su zona, con la misma fórmula que la visión, y la regla era que las dos
+cuentas fueran idénticas. Desde la v3 el árbitro se toma una **holgura chica**
+por lado —el margen conservador supone el peor giro del cubo, y un cubo bien
+puesto podía quedar afuera por un pelo—. Esa holgura no viaja en el mensaje, así
+que dos cuentas ya no podían coincidir. La salida es que haya **un solo
+veredicto y se publique**.
+
+**Qué NO se rompe.** Ningún campo cambió de nombre, de tipo ni de unidad. Las
+zonas, la salida, `depot_size` y `cube_side` son los mismos. El código que
+calcula `cubo_en_su_zona` sigue dando resultados válidos: es apenas más estricto
+que el árbitro, nunca más flojo. Si su cuenta dice que el cubo está adentro, el
+árbitro también lo va a decir.
+
+**Qué se rompe, y cómo darse cuenta.**
+
+| Qué | Qué hacer |
+|---|---|
+| El chequeo `msg["v"] != 2` descarta **todos** los mensajes | Cambiarlo por `!= 3`. El síntoma es el de siempre: el cliente conecta, no procesa nada y parece que la visión no publica. |
+| Un validador estricto que rechace campos desconocidos | Ahora cada cubo trae `in_depot`. Aceptarlo. |
+
+**Qué conviene aprovechar.** Decidir con `in_depot` en lugar de con la cuenta
+propia. Es menos código en el rover y es exactamente lo que va a contar el
+árbitro. La cuenta de la [sección 3](#cuándo-un-cubo-está-en-su-zona) queda para
+apuntar el cubo, no para decidir si ya está.
+
 ### Migración de la v1 a la v2
 
 **Qué NO se rompe.** Nada de la forma del mensaje que ya consumían: `grid`,
@@ -1249,7 +1320,8 @@ tampoco cambian. El código que itera listas y busca por identidad sigue andando
 | Llegar a la zona y soltar el cubo "cerca" del punto | En la v1 la zona era un punto y "cerca" era una decisión de cada equipo. Ahora hay un **criterio exacto** y el cubo tiene que quedar **entero adentro**: ver [la cuenta](#cuándo-un-cubo-está-en-su-zona). |
 
 **Qué conviene aprovechar.** `depot_size` y `cube_side` les permiten calcular
-**durante la ronda** si un cubo ya está entregado, con la misma cuenta que usa la
+**durante la ronda** si un cubo ya está entregado (desde la v3 ya no hace falta:
+se lee de `in_depot`), con la misma cuenta que usaba la
 visión. No hace falta estimarlo ni pedirlo por radio.
 
 Si algo de este documento les resulta ambiguo, **pregunten antes de asumir**.

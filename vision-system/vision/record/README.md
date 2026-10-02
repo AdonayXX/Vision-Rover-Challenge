@@ -16,8 +16,9 @@ segundos seguidos sin ver la cancha—, `detenida_por_operador` y
 `abortada_en_preparacion`.
 
 Además: el tiempo final, cuántos cubos quedaron en posición y cuáles —con su
-veredicto, cuánto le faltaba a cada uno y la **edad** del dato sobre el que se
-decidió—, las posiciones finales, **con qué perfil de cámara se juzgó**, cuántas
+veredicto, cuánto le faltaba a cada uno, **a qué hora del cronómetro entró**
+(`entro_en_ronda`, vacío si ya estaba puesto al arrancar) y la **edad** del dato
+sobre el que se decidió—, las posiciones finales, **con qué perfil de cámara se juzgó**, cuántas
 veces se perdió la cancha de vista y **cuánto duró la peor**, y en qué estado
 estaban los cubos al empezar a jugar.
 

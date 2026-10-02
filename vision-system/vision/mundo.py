@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 try:  # como paquete
     from .configuracion import ConfigVision
@@ -91,12 +91,20 @@ class RoverEnMundo:
 
 @dataclass(frozen=True, slots=True)
 class CuboEnMundo:
-    """Un cubo en el estado del mundo. El color es su identidad."""
+    """Un cubo en el estado del mundo. El color es su identidad.
+
+    `en_zona` es el veredicto del árbitro: el cubo está completamente dentro de
+    la zona de su color y ya se sostuvo ahí la permanencia mínima. Lo pone el
+    contador de acopio, no el seguimiento, que no sabe nada de zonas: el
+    seguimiento produce el cubo con `False` y `con_entregas` devuelve un estado
+    nuevo con el veredicto puesto.
+    """
 
     color: str
     col: float
     row: float
     age_ms: int = 0
+    en_zona: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +157,18 @@ class EstadoMundo:
             )
 
 
+def con_entregas(estado: EstadoMundo, entregados: frozenset[str] | set[str]) -> EstadoMundo:
+    """Devuelve el estado con el veredicto del árbitro puesto en cada cubo.
+
+    `entregados` son los colores que el contador da por contados. El estado es
+    inmutable, así que no se toca: se arma uno nuevo. Va como paso aparte y no
+    dentro del seguimiento porque son dos oficios —dónde está cada cosa, y qué
+    se decide sobre eso— y el segundo no puede frenar al primero.
+    """
+    return replace(estado, cubos=tuple(
+        replace(c, en_zona=c.color in entregados) for c in estado.cubos))
+
+
 def a_mensaje(estado: EstadoMundo, cfg: ConfigVision, seq: int) -> schema.Mensaje:
     """Convierte el estado del mundo al mensaje del contrato.
 
@@ -194,7 +214,7 @@ def a_mensaje(estado: EstadoMundo, cfg: ConfigVision, seq: int) -> schema.Mensaj
         ),
         cubes=tuple(
             schema.Cube(color=c.color, col=round(c.col, 3), row=round(c.row, 3),
-                        age_ms=c.age_ms)
+                        age_ms=c.age_ms, in_depot=c.en_zona)
             for c in estado.cubos
         ),
         obstacles=(),

@@ -57,7 +57,14 @@ from typing import Any
 #: v2 (sep-2026): las zonas de acopio pasan a ser rectángulos al centro de los
 #: lados, la salida pasa al centro del lado 0–3, y el mensaje suma `depot_size`
 #: y `cube_side`. El detalle y la nota de migración están en CONTRATO.md.
-PROTOCOL_VERSION = 2
+#:
+#: v3 (oct-2026): cada cubo suma `in_depot`, el VEREDICTO DEL ÁRBITRO sobre si
+#: está entregado. Hasta la v2 el rover lo calculaba por su cuenta con la misma
+#: fórmula que la visión, y la regla era mantener las dos cuentas iguales. Desde
+#: que el árbitro acepta una tolerancia que no viaja en el mensaje, la única
+#: forma de que rover y árbitro digan lo mismo es que haya UN veredicto y se
+#: publique.
+PROTOCOL_VERSION = 3
 
 #: Puerto oficial del sistema de visión. El simulador y la cancha real publican
 #: en el MISMO puerto, para que un equipo pase de uno a otra sin tocar su código.
@@ -134,7 +141,7 @@ _CAMPOS_GRID = frozenset(("cols", "rows", "cell_mm"))
 _CAMPOS_DEPOT_SIZE = frozenset(("length", "depth"))
 _CAMPOS_CLOCK = frozenset(("elapsed_ms", "remaining_ms", "total_ms"))
 _CAMPOS_ROVER = frozenset(("id", "col", "row", "theta", "age_ms"))
-_CAMPOS_CUBE = frozenset(("color", "col", "row", "age_ms"))
+_CAMPOS_CUBE = frozenset(("color", "col", "row", "age_ms", "in_depot"))
 _CAMPOS_OBSTACLE = frozenset(("col", "row", "age_ms"))
 _CAMPOS_START = frozenset(("col", "row"))
 _CAMPOS_DEPOT = frozenset(("color", "col", "row"))
@@ -220,19 +227,32 @@ class Rover:
 
 @dataclass(frozen=True)
 class Cube:
-    """Un cubo de 6 cm. El color es la identidad: no hay dos del mismo color."""
+    """Un cubo de 6 cm. El color es la identidad: no hay dos del mismo color.
+
+    `in_depot` es el **veredicto del árbitro**: el cubo está completamente dentro
+    de la zona de acopio de su color, y lleva ahí lo suficiente como para darlo
+    por entregado. Es el veredicto SOSTENIDO y no el instantáneo: un cubo parado
+    justo en el límite entra y sale con el temblor de la detección, y publicar
+    eso le haría al rover soltar y volver a buscar el mismo cubo. Pasa a `false`
+    en el mismo mensaje en que el cubo sale: la demora es solo para entrar.
+
+    El rover no tiene que calcular nada: este campo ES lo que decide la ronda.
+    """
 
     color: str
     col: float
     row: float
     age_ms: int
+    in_depot: bool = False
 
     def a_dict(self) -> dict[str, Any]:
-        return {"color": self.color, "col": self.col, "row": self.row, "age_ms": self.age_ms}
+        return {"color": self.color, "col": self.col, "row": self.row,
+                "age_ms": self.age_ms, "in_depot": self.in_depot}
 
     @staticmethod
     def desde_dict(d: dict[str, Any]) -> Cube:
-        return Cube(color=d["color"], col=d["col"], row=d["row"], age_ms=d["age_ms"])
+        return Cube(color=d["color"], col=d["col"], row=d["row"], age_ms=d["age_ms"],
+                    in_depot=d["in_depot"])
 
 
 @dataclass(frozen=True)
@@ -659,6 +679,11 @@ def validate_message(msg: Any) -> str | None:
         error = _revisar_posicion(cubo, donde) or _revisar_edad(cubo, donde)
         if error:
             return error
+        # `bool` exacto y no "algo verdadero": un 1 o un "true" pasarían un `if`
+        # en Python y fallarían en el firmware de un equipo.
+        if not isinstance(cubo["in_depot"], bool):
+            return "{}: in_depot debe ser true o false, llegó {!r}".format(
+                donde, cubo["in_depot"])
 
     # Invariante de juego: todo cubo tiene a dónde ir. Un cubo sin depot de su
     # color dejaría a los equipos con una tarea imposible.
@@ -750,9 +775,13 @@ class GeometriaDepot:
     Esa holgura es la razón por la que el fondo pasó de 100 a 150 mm. Con 100,
     la ventana del fondo medía 15,2 mm —7,6 mm a cada lado— y en la cancha real
     se vio que un cubo bien puesto oscilaba a través de ese límite entre cuadro
-    y cuadro. La media diagonal se lleva 42,4 mm de cada lado y no se negocia:
-    es lo que hace que el veredicto valga para cualquier rotación. Lo que se
-    agranda es la zona.
+    y cuadro. La media diagonal se lleva 42,4 mm de cada lado: es lo que hace
+    que el veredicto valga para cualquier rotación.
+
+    Desde la v3 el ÁRBITRO le resta a ese margen una tolerancia chica, que no
+    viaja en el mensaje, y la ventana que él usa es esa tanto más grande por
+    lado. Por eso el veredicto dejó de calcularse en dos lugares: se publica en
+    `cubes[i].in_depot`.
     """
 
     col: float
@@ -795,8 +824,17 @@ def geometria_depot(
     cols: float,
     rows: float,
     cube_side: float,
+    tolerance: float = 0.0,
 ) -> GeometriaDepot:
     """Arma la geometría de una zona a partir de lo que viaja en el mensaje.
+
+    `tolerance`, en celdas, es cuánto se agranda la ventana de aceptación por
+    cada lado. **No viaja en el mensaje**: es la holgura que se toma el árbitro
+    —el sistema de visión y el simulador, que hace de árbitro para quien
+    desarrolla sin cancha— para que un cubo bien puesto no quede afuera por el
+    error de ubicación. Con cero, que es el valor por defecto, la geometría es
+    la conservadora de siempre. El veredicto que resulta de aplicarla sí viaja:
+    es `cubes[i].in_depot`.
 
     `col`/`row` son el centro de la zona (`depots[i]`), `length`/`depth` su
     tamaño (`depot_size`), `cols`/`rows` la cancha (`grid`) y `cube_side` el
@@ -814,7 +852,7 @@ def geometria_depot(
     # el margen conservador que hace que el veredicto valga para CUALQUIER
     # rotación del cubo, y que el equipo pueda calcularlo con el puro centro,
     # que es lo único que el contrato publica.
-    margen = cube_side * math.sqrt(2.0) / 2.0
+    margen = max(0.0, cube_side * math.sqrt(2.0) / 2.0 - tolerance)
     return GeometriaDepot(col=col, row=row, lado=lado, semi_col=semi_col,
                           semi_row=semi_row, margen=margen)
 

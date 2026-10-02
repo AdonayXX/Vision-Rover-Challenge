@@ -47,6 +47,14 @@ Eso es lo que responde la pregunta que importa: si se puede fijar la exposición
 Con exposición automática, la cámara sube la ganancia para "compensar" el robot
 negro y quema los marcadores blancos.
 
+**El valor de la exposición se puede elegir al arrancar**, sin tocar el archivo.
+El del archivo se midió con una luz, y en una sala más luminosa quema la imagen.
+`configuracion.con_exposicion()` devuelve una configuración nueva con otro
+valor —la original es inmutable—, y la usan la pregunta del arranque del sistema
+y la opción `--exposicion`. Sigue siendo exposición **fija**: se elige cuál, no
+pasa a automática. `FuenteCamara.informes` dice si la cámara lo aceptó, y el
+arranque lo muestra, porque pedir un valor no es lo mismo que tenerlo.
+
 > **En macOS es esperable que diga "no soportado".** OpenCV sobre AVFoundation
 > casi no expone controles de cámara. No significa que la cámara no sirva: la
 > prueba que vale se hace en Windows con DSHOW, que es el destino de despliegue.

@@ -39,7 +39,6 @@ marcado como viejo, le sirve mucho más a un equipo que un silencio repentino.
 from __future__ import annotations
 
 import argparse
-from collections import deque
 import os
 import sys
 import threading
@@ -48,17 +47,21 @@ import time
 try:  # como paquete
     from .configuracion import (
         CONFIG_POR_DEFECTO, ConfigVision, avisos_config, cargar_config, con_exposicion,
+        con_matices,
     )
-    from .detectors.cubos import detectar_cubos
+    from .detectors.cubos import (
+        asignar_matices, detectar_cubos, medir_matices, promedio_circular,
+    )
     from .detectors.rovers import detectar_rovers
     from .geometry.coordenadas import (
-        AnclajeCancha, ErrorDuplicado, ErrorGeometria, detectar_marcadores_crudo,
-        filtrar_plausibles, pose_camara, resolver_duplicados,
+        AnclajeCancha, ErrorDuplicado, ErrorGeometria, construir_sistema,
+        detectar_marcadores, detectar_marcadores_crudo, filtrar_plausibles, pose_camara,
+        resolver_duplicados,
     )
     from .geometry.distorsion import (
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
     )
-    from .mundo import VERSION_PROTOCOLO, RelojRonda
+    from .mundo import VERSION_PROTOCOLO, RelojRonda, con_entregas
     from .publish.puerto import ErrorPuerto
     from .publish.telemetria import PublicadorTelemetria
     from .record.acta import escribir_acta, mmss
@@ -71,18 +74,22 @@ try:  # como paquete
 except ImportError:  # como script suelto
     from vision.configuracion import (  # type: ignore[no-redef]
         CONFIG_POR_DEFECTO, ConfigVision, avisos_config, cargar_config, con_exposicion,
+        con_matices,
     )
-    from vision.detectors.cubos import detectar_cubos  # type: ignore[no-redef]
+    from vision.detectors.cubos import (  # type: ignore[no-redef]
+        asignar_matices, detectar_cubos, medir_matices, promedio_circular,
+    )
     from vision.detectors.rovers import detectar_rovers  # type: ignore[no-redef]
     from vision.geometry.coordenadas import (  # type: ignore[no-redef]
-        AnclajeCancha, ErrorDuplicado, ErrorGeometria, detectar_marcadores_crudo,
-        filtrar_plausibles, pose_camara, resolver_duplicados,
+        AnclajeCancha, ErrorDuplicado, ErrorGeometria, construir_sistema,
+        detectar_marcadores, detectar_marcadores_crudo, filtrar_plausibles, pose_camara,
+        resolver_duplicados,
     )
     from vision.geometry.distorsion import (  # type: ignore[no-redef]
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
     )
     from vision.mundo import (  # type: ignore[no-redef]
-        VERSION_PROTOCOLO, RelojRonda,
+        VERSION_PROTOCOLO, RelojRonda, con_entregas,
     )
     from vision.publish.puerto import ErrorPuerto  # type: ignore[no-redef]
     from vision.publish.telemetria import PublicadorTelemetria  # type: ignore[no-redef]
@@ -539,6 +546,92 @@ def preguntar_exposicion(cfg: ConfigVision) -> float | None:
             print("  Valor inválido: tiene que ser un número, por ejemplo -7.")
 
 
+def preguntar_calibrar_colores() -> bool:
+    """Pregunta si se calibran los colores de los cubos con la luz de ahora."""
+    print("\n  Colores de los cubos. Si con esta luz algún cubo no se reconoce, el sistema")
+    print("  puede aprender sus colores mirándolos: poné los TRES cubos dentro de la")
+    print("  cancha, separados entre sí y sin el rover encima.")
+    try:
+        respuesta = input("  ¿Calibrar los colores ahora? [s/N]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+    return respuesta in ("s", "si", "sí", "y", "yes")
+
+
+#: Cuántos cuadros buenos hacen falta para dar por medida una calibración. No es
+#: un umbral de detección: es para que un solo cuadro raro no decida los colores
+#: de toda la corrida.
+_CUADROS_CALIBRACION = 10
+
+
+def calibrar_colores(fuente, cfg: ConfigVision, matriz, segundos: float = 3.0):
+    """Mira los cubos unos segundos y devuelve la configuración con SUS matices.
+
+    Devuelve `(cfg, se_calibró)`. Si no se pudo —no se ve la cancha, o no hay
+    exactamente un cubo de cada color a la vista— devuelve la configuración
+    **sin tocar** y lo dice: arrancar con los colores del archivo es mejor que
+    arrancar con unos mal aprendidos.
+
+    Vale para esta corrida y no se guarda. La luz de una sala cambia a lo largo
+    del día, y un color aprendido a la mañana y guardado sería, a la tarde, un
+    número viejo con cara de calibración.
+    """
+    colores = list(cfg.elementos.cubos.colores)
+    muestras: dict[str, list[float]] = {c: [] for c in colores}
+    cuadros = sin_geometria = dudosos = 0
+    conteos: dict[int, int] = {}
+    fin = time.monotonic() + segundos
+    while time.monotonic() < fin:
+        cuadro = fuente.leer()
+        if cuadro is None:
+            time.sleep(0.005)
+            continue
+        cuadros += 1
+        try:
+            marcadores = detectar_marcadores(
+                cuadro.imagen, cfg.marcadores_esquina.nombre_diccionario,
+                cfg.deteccion_marcadores.refinamiento_esquinas)
+            sistema = construir_sistema(cuadro.imagen, cfg, marcadores)
+        except ErrorGeometria:
+            sin_geometria += 1
+            continue
+        medidos = medir_matices(cuadro.imagen, sistema, cfg)
+        conteos[len(medidos)] = conteos.get(len(medidos), 0) + 1
+        asignados = asignar_matices(medidos, cfg)
+        if asignados is not None:
+            for color, matiz in asignados.items():
+                muestras[color].append(matiz)
+        elif len(medidos) == len(colores):
+            dudosos += 1  # estaban los tres, pero no se supo cuál es cuál
+
+    buenos = min(len(v) for v in muestras.values())
+    if buenos < _CUADROS_CALIBRACION:
+        print("  ✗ No se calibraron los colores: se siguen usando los del archivo.")
+        if cuadros == 0 or sin_geometria == cuadros:
+            print("    No se vieron los cuatro marcadores de esquina.")
+        elif dudosos > buenos:
+            print("    Se ven los {} cubos, pero con esta luz sus tonos están tan corridos "
+                  "que no se puede saber cuál es cuál.".format(len(colores)))
+            print("    Bajá la exposición o quitá la luz directa, y volvé a intentar.")
+        else:
+            visto = max(conteos, key=conteos.get) if conteos else 0
+            print("    Hacen falta exactamente {} manchas de color con tamaño de cubo y se "
+                  "vieron {}.".format(len(colores), visto))
+            print("    Revisá que estén los {} cubos dentro de la cancha, separados, y que "
+                  "no haya otra cosa de color.".format(len(colores)))
+        return cfg, False
+
+    nuevos = {c: promedio_circular(muestras[c]) for c in colores}
+    antes = cfg.deteccion_cubos.matices_grados
+    print("  ✓ Colores calibrados con esta luz ({} cuadros):".format(buenos))
+    for c in colores:
+        corrimiento = (nuevos[c] - antes[c] + 180.0) % 360.0 - 180.0
+        print("      {:<6} matiz {:>5.1f}°  (el del archivo era {:>5.1f}°, {:+.0f}°)".format(
+            c, nuevos[c], antes[c], corrimiento))
+    return con_matices(cfg, nuevos), True
+
+
 def abrir_fuente(cfg: ConfigVision, args):
     """Devuelve `(fuente, descripción)`. Cámara por defecto; sintético si se pide.
 
@@ -595,7 +688,7 @@ def abrir_fuente(cfg: ConfigVision, args):
 
 
 def procesar(cuadro, cfg, matriz_camara, fase, reloj, seguidor, anclaje, descartados, duplicados,
-             rechazos, admision, demorados, tiempos=None):
+             rechazos, admision, demorados):
     """De un cuadro al estado del mundo. Lanza si la geometría no se puede armar.
 
     Una sola pasada del detector de ArUco por cuadro: el mismo resultado sirve
@@ -638,15 +731,9 @@ def procesar(cuadro, cfg, matriz_camara, fase, reloj, seguidor, anclaje, descart
     hubo un cuadro. Es lo correcto: un cuadro que no se pudo procesar no es una
     observación, y la edad de todos los objetos tiene que seguir creciendo.
     """
-    inicio = time.perf_counter()
     crudos = detectar_marcadores_crudo(
         cuadro.imagen, cfg.marcadores_esquina.nombre_diccionario,
-        cfg.deteccion_marcadores.refinamiento_esquinas,
-        usar_aruco3=cfg.deteccion_marcadores.usar_aruco3,
-        lado_minimo_aruco3_px=cfg.deteccion_marcadores.lado_minimo_aruco3_px,
-        ids_requeridos=cfg.marcadores_esquina.ids_esperados | set(seguidor.ultimas_poses_rover()))
-    if tiempos is not None:
-        tiempos["marcadores"] = (time.perf_counter() - inicio) * 1000
+        cfg.deteccion_marcadores.refinamiento_esquinas)
     # Lo que se espera del marcador de un rover no es una constante: está a 80 mm
     # del tablero, así que se ve más grande Y corrido hacia afuera. Las dos cosas
     # salen de la pose deducida de la geometría GUARDADA —la de este cuadro
@@ -664,7 +751,7 @@ def procesar(cuadro, cfg, matriz_camara, fase, reloj, seguidor, anclaje, descart
     # en vez de tener que resolverse. Medido en la cancha: trece disputas por
     # minuto que dejan de existir.
     crudos, descartes = filtrar_plausibles(
-        crudos, cfg, anclaje.sistema, pose_rover=pose_guardada, imagen=cuadro.imagen)
+        crudos, cfg, anclaje.sistema, pose_rover=pose_guardada)
     rechazos.extend(descartes)
 
     detectados, repetidos = resolver_duplicados(
@@ -687,17 +774,12 @@ def procesar(cuadro, cfg, matriz_camara, fase, reloj, seguidor, anclaje, descart
     # o si los tres la desmienten, lanza y el falla-abierto se hace cargo.
     sistema = anclaje.actualizar(cuadro.imagen, detectados)
     pose = pose_camara(sistema, matriz_camara)
-    inicio_cubos = time.perf_counter()
-    cubos = detectar_cubos(cuadro.imagen, sistema, cfg, pose)
-    if tiempos is not None:
-        tiempos["cubos"] = (time.perf_counter() - inicio_cubos) * 1000
-        tiempos["proceso"] = (time.perf_counter() - inicio) * 1000
     return sistema, seguidor.actualizar(
         ts_ms=cuadro.ts_ms,
         fase=fase,
         reloj=reloj,
         rovers=detectar_rovers(detectados, sistema, cfg, pose),
-        cubos=cubos,
+        cubos=detectar_cubos(cuadro.imagen, sistema, cfg, pose),
     )
 
 
@@ -738,6 +820,9 @@ def main(argv: list[str] | None = None) -> int:
                              "la del archivo de configuración. Más negativo = menos luz: "
                              "con -6 en el archivo, probar -7 o -8 si la sala es muy "
                              "luminosa. No la vuelve automática")
+    parser.add_argument("--calibrar-colores", action="store_true",
+                        help="aprender los colores de los cubos mirándolos, con la luz de "
+                             "ahora, sin preguntar. Tienen que estar los tres en la cancha")
     parser.add_argument("--ventana", action="store_true",
                         help="abrir la vista en vivo: la imagen con lo detectado encima")
     parser.add_argument("--ventana-hz", type=float, default=12.0,
@@ -762,6 +847,15 @@ def main(argv: list[str] | None = None) -> int:
     matriz = getattr(fuente, "matriz_camara", None)
     if matriz is None:  # fuente sintética: la matriz es la de su propia cámara
         matriz = fuente.verdad.camara.matriz
+
+    # Los colores se calibran ACÁ, con la cámara ya abierta y antes de armar
+    # nada más: todo lo que viene después recibe la configuración ya corregida.
+    colores_calibrados = False
+    quiere_calibrar = args.calibrar_colores or (
+        not args.sintetico and sys.stdin and sys.stdin.isatty()
+        and preguntar_calibrar_colores())
+    if quiere_calibrar:
+        cfg, colores_calibrados = calibrar_colores(fuente, cfg, matriz)
 
     # `--fase READY` ya no entra en READY de una: preparar una ronda exige ver la
     # cancha, y al construir el árbitro todavía no hubo un solo cuadro. Queda
@@ -790,16 +884,14 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 70)
     print("SISTEMA DE VISIÓN — Vision-Rover-Challenge · protocolo v{}".format(VERSION_PROTOCOLO))
     print("Entrada: {}".format(descripcion))
-<<<<<<< HEAD
-    print("[vision] detector={} (subpixel en resolucion original)".format(
-        "ArUco3 con respaldo clasico" if cfg.deteccion_marcadores.usar_aruco3 else "clasico"))
-=======
     if not args.sintetico:
         print("Exposición: {:g} ({})".format(
             cfg.camara.exposicion.valor,
             "elegida al arrancar" if args.exposicion is not None
             else "la del archivo de configuración"))
->>>>>>> upstream/main
+    print("Colores de los cubos: {}".format(
+        "calibrados al arrancar, con esta luz" if colores_calibrados
+        else "los del archivo de configuración"))
     if args.sintetico:
         print("")
         print("  ##################################################################")
@@ -842,19 +934,14 @@ def main(argv: list[str] | None = None) -> int:
     arranque: tuple[str, ...] = ()
     proximo_informe = time.monotonic() + 5.0
     fin = time.monotonic() + args.duracion if args.duracion > 0 else float("inf")
-    latencias = deque(maxlen=300)
 
     try:
         while not salir.is_set() and time.monotonic() < fin:
-            inicio_lectura = time.perf_counter()
             cuadro = fuente.leer()
             if cuadro is None:
                 time.sleep(0.005)
                 continue
             cuadros += 1
-            tiempos = {"lectura": (time.perf_counter() - inicio_lectura) * 1000,
-                       "entrada": cuadro.edad_ms()}
-            latencias.append(tiempos)
             sistema_actual = None
             # ---- falla abierto -------------------------------------------
             # Si un cuadro no se puede procesar, NO se toca la casilla y se
@@ -864,14 +951,12 @@ def main(argv: list[str] | None = None) -> int:
                 fase_ahora, reloj_ahora = arbitro.instantanea()
                 sistema_actual, estado = procesar(
                     cuadro, cfg, matriz, fase_ahora, reloj_ahora, seguidor, anclaje,
-                    descartados, duplicados, rechazos, admision, demorados, tiempos)
-                publicador.actualizar(estado)
-                tiempos["al_publicar"] = cuadro.edad_ms()
-                ultimo_estado = estado
-                # El conteo va DESPUÉS de publicar y en su propio try: es para
-                # la pantalla, no para el contrato, así que un error suyo no
-                # puede frenar la telemetría ni tumbar la ronda. Si falla, se
-                # conserva la última cuenta buena, igual que todo lo demás.
+                    descartados, duplicados, rechazos, admision, demorados)
+                # El conteo va ANTES de publicar desde el protocolo v3: el
+                # veredicto de cada cubo viaja en el mensaje (`in_depot`). Sigue
+                # en su propio try, porque un error suyo no puede frenar la
+                # telemetría ni tumbar la ronda: si falla, se publica igual, con
+                # el veredicto de la última cuenta buena.
                 try:
                     acopio = contador.actualizar(estado, estado.ts_ms)
                     # El contador informa; el árbitro decide. Se le pasa el
@@ -884,6 +969,14 @@ def main(argv: list[str] | None = None) -> int:
                         print("[fase] " + aviso_reto, flush=True)
                 except Exception as exc:  # noqa: BLE001 — a propósito
                     ultimo_error = "acopio: {}: {}".format(type(exc).__name__, exc)
+                # Lo que se publica es el veredicto SOSTENIDO —`contado`— y no el
+                # instantáneo: un cubo en el límite entra y sale con el temblor
+                # de la detección, y eso le haría al rover soltar y volver a
+                # buscar el mismo cubo.
+                estado = con_entregas(estado, frozenset(
+                    z.color for z in acopio.zonas if z.contado) if acopio else frozenset())
+                publicador.actualizar(estado)
+                ultimo_estado = estado
             except ErrorDuplicado as exc:
                 # Un duplicado que NO se pudo resolver. Se descarta el cuadro y
                 # el falla-abierto conserva el último estado bueno: entre dos
@@ -969,7 +1062,6 @@ def main(argv: list[str] | None = None) -> int:
                     arranque = ()
 
             # ---- la vista ------------------------------------------------
-            inicio_vista = time.perf_counter()
             if vista is not None and vista.toca_dibujar(time.monotonic()):
                 # La fase y el reloj, del MISMO instante: en dos llamadas
                 # sueltas podrían caer a los lados de una transición y el panel
@@ -993,17 +1085,9 @@ def main(argv: list[str] | None = None) -> int:
                     salir.set()
                 elif comando:
                     print("[fase] " + arbitro.intentar(comando), flush=True)
-            tiempos["vista"] = (time.perf_counter() - inicio_vista) * 1000
 
             if time.monotonic() >= proximo_informe:
                 proximo_informe += 5.0
-                resumen = []
-                for etapa in ("lectura", "entrada", "marcadores", "cubos", "proceso", "vista", "al_publicar"):
-                    valores = [m[etapa] for m in latencias if etapa in m]
-                    if valores:
-                        resumen.append("{}={:.0f}/{:.0f}".format(etapa, sum(valores) / len(valores), max(valores)))
-                print("[latencia ms promedio/max] " + " ".join(resumen), flush=True)
-                latencias.clear()
                 edad = publicador.edad_del_estado_ms()
                 print("[estado] fase={} cuadros={} fallos={} emitidos={} clientes={} "
                       "pisados={} fps={:.1f} edad={} conservados={}/{} acopio={} "

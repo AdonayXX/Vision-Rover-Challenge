@@ -70,6 +70,7 @@ try:  # como paquete: python -m contrato.mock_publisher
         Start,
         ahora_ms,
         codificar_ndjson,
+        cubo_en_depot,
         geometria_depot,
         lado_mas_cercano,
     )
@@ -97,6 +98,7 @@ except ImportError:  # como script suelto: python contrato/mock_publisher.py
         Start,
         ahora_ms,
         codificar_ndjson,
+        cubo_en_depot,
         geometria_depot,
         lado_mas_cercano,
     )
@@ -164,6 +166,8 @@ class Config:
     semilla: int | None
     preparacion_ms: int
     duracion_ms: int
+    tolerancia_acopio: float      # en celdas
+    permanencia_acopio_ms: int
 
 
 def cargar_config(ruta: str) -> Config:
@@ -212,6 +216,8 @@ def cargar_config(ruta: str) -> Config:
         semilla=d.get("semilla_aleatoria"),
         preparacion_ms=int(d["ronda"]["preparacion_ms"]),
         duracion_ms=int(d["ronda"]["duracion_ms"]),
+        tolerancia_acopio=float(d["arbitro"]["tolerancia_mm"]) / float(grid["cell_mm"]),
+        permanencia_acopio_ms=int(d["arbitro"]["permanencia_minima_ms"]),
     )
 
 
@@ -369,6 +375,20 @@ class Simulador:
         ]
         # Los obstáculos son fijos: no tienen estado que evolucione.
         self.obstacles = [(float(o["col"]), float(o["row"])) for o in cfg.obstacles_iniciales]
+        # El simulador hace de ÁRBITRO para quien desarrolla sin cancha: decide
+        # `in_depot` con la misma geometría, la misma tolerancia y la misma
+        # permanencia que el sistema de visión. Las zonas se arman una vez.
+        self._zonas = {
+            dep.color: geometria_depot(
+                col=dep.col, row=dep.row,
+                length=cfg.depot_size.length, depth=cfg.depot_size.depth,
+                cols=cfg.grid.cols, rows=cfg.grid.rows, cube_side=cfg.cube_side,
+                tolerance=cfg.tolerancia_acopio,
+            )
+            for dep in cfg.depots
+        }
+        #: Desde cuándo cada cubo está adentro sin interrupción. Se borra al salir.
+        self._adentro_desde: dict[str, int] = {}
 
     # -- helpers ----------------------------------------------------------
 
@@ -499,9 +519,23 @@ class Simulador:
                     col=round(cb.rep_col, 3),
                     row=round(cb.rep_row, 3),
                     age_ms=t - cb.visto_ms,
+                    in_depot=self._entregado(cb.color, cb.rep_col, cb.rep_row, t),
                 )
             )
         return tuple(salida)
+
+    def _entregado(self, color: str, col: float, row: float, t: int) -> bool:
+        """El veredicto del árbitro para un cubo: adentro, y sostenido.
+
+        Se juzga la posición **reportada**, que es la que el árbitro de verdad
+        tiene: no hay otra. Demora solo la entrada; al salir, cae en el acto.
+        """
+        zona = self._zonas.get(color)
+        if zona is None or not cubo_en_depot(col=col, row=row, geometria=zona).adentro:
+            self._adentro_desde.pop(color, None)
+            return False
+        desde = self._adentro_desde.setdefault(color, t)
+        return t - desde >= self.cfg.permanencia_acopio_ms
 
     def _observar_obstacles(self) -> tuple[Obstacle, ...]:
         """Los obstáculos son grandes, fijos y muy amarillos: siempre se ven.

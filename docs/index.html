@@ -29,6 +29,11 @@
     .mini{color:var(--sub);font-size:12px;margin-top:12px}
     .metric{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
     .metric:last-of-type{border:0}.metric span{color:var(--sub);font-size:13px}.metric strong{font-size:20px;letter-spacing:-.025em;font-variant-numeric:tabular-nums}
+    .coords{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+    .coords-title{font-size:13px;font-weight:750;margin-bottom:9px}
+    .coord-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0}
+    .coord-label{display:flex;align-items:center;gap:8px;color:var(--sub);font-size:13px}
+    .coord-value{font:750 16px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;font-variant-numeric:tabular-nums}
     .legend{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:12px 0}
     .legend-item{display:flex;align-items:center;gap:8px;font-size:13px}.swatch{display:inline-block;width:12px;height:12px;flex:none;border:1px solid white;border-radius:2px}
     .red{background:var(--red)}.blue{background:var(--blue)}.green{background:var(--green)}
@@ -67,6 +72,13 @@
       <div class="metric"><span>Distancia media al acopio</span><strong id="distance">—</strong></div>
       <div class="metric"><span>Pares de rutas que se cruzan*</span><strong id="crossings">—</strong></div>
       <div class="metric"><span>Superficie de cada cubo</span><strong>3 × 3</strong></div>
+      <div class="coords" aria-label="Coordenadas de los cubos">
+        <div class="coords-title">Coordenadas de cubos</div>
+        <div class="coord-row"><span class="coord-label"><i class="swatch red"></i>Rojo</span><strong class="coord-value" id="coord-red">—</strong></div>
+        <div class="coord-row"><span class="coord-label"><i class="swatch green"></i>Verde</span><strong class="coord-value" id="coord-green">—</strong></div>
+        <div class="coord-row"><span class="coord-label"><i class="swatch blue"></i>Azul</span><strong class="coord-value" id="coord-blue">—</strong></div>
+        <p class="mini">La coordenada (x, y) corresponde a la esquina inferior izquierda del cubo 3 × 3. El origen (0,0) está en la esquina inferior izquierda del tablero.</p>
+      </div>
       <p class="mini">* Cruce geométrico o acercamiento de menos de 4 casillas entre rutas rectas, no una predicción de colisión ni una planificación real de los robots.</p>
     </section>
     <section class="panel" aria-labelledby="legendHeading">
@@ -96,7 +108,8 @@
   const number = document.getElementById('difficultyNumber');
   const showRoutes = document.getElementById('routes');
   const notice = document.getElementById('notice');
-  // Todas las coordenadas se expresan en casillas, con origen (0,0) arriba a la izquierda.
+  // Internamente el canvas usa origen arriba a la izquierda. Las coordenadas mostradas al usuario
+  // se convierten a un sistema con origen (0,0) en la esquina inferior izquierda.
   // Las zonas de acopio están centradas en tres lados, como en la referencia visual.
   const goals = {
     red:   {x:21, y:1,  w:8, h:6, color:'#f43f51', name:'rojo'},
@@ -116,6 +129,8 @@
   const target = key => center(goals[key]);
   const cubeCenter = cube => ({x:cube.x+1.5, y:cube.y+1.5});
   const rect = cube => ({x:cube.x,y:cube.y,w:CUBE,h:CUBE});
+  // Coordenada pública del cubo: esquina inferior izquierda, origen (0,0) abajo a la izquierda.
+  const displayCoord = cube => ({x:cube.x, y:SIZE-(cube.y+CUBE)});
   // Requiere 2 casillas vacías entre las huellas 3×3 de los cubos.
   // Se aplica también a las esquinas: no se permiten aproximaciones diagonales
   // con menos de 2 casillas libres en ambas direcciones.
@@ -254,8 +269,8 @@
     }
     cubes.forEach(drawCube);
     if(cubes.length===3){
-      const positions=cubes.map(c=>`${goals[c.key].name} en columna ${c.x+1}, fila ${c.y+1}`).join('; ');
-      canvas.setAttribute('aria-label',`Tablero de 50 por 50, zona útil de 40 por 40. Cubos: ${positions}. Dos robots en el borde inferior.`);
+      const positions=cubes.map(c=>{const p=displayCoord(c);return `${goals[c.key].name} en (${p.x}, ${p.y})`;}).join('; ');
+      canvas.setAttribute('aria-label',`Tablero de 50 por 50, zona útil de 40 por 40. Coordenadas con origen abajo a la izquierda. Cubos: ${positions}. Dos robots en el borde inferior.`);
     }
   }
   function refresh() {
@@ -263,6 +278,10 @@
     const s=stats(cubes);
     document.getElementById('distance').textContent=`${s.distance.toFixed(1)} casillas`;
     document.getElementById('crossings').textContent=`${s.crossings} / 3`;
+    for(const c of cubes){
+      const p=displayCoord(c);
+      document.getElementById(`coord-${c.key}`).textContent=`(${p.x}, ${p.y})`;
+    }
     render();
   }
   function announce(msg){notice.textContent=msg;lastNotice=msg;}
@@ -309,7 +328,7 @@
   canvas.addEventListener('lostpointercapture',endDrag);
 
   document.getElementById('download').addEventListener('click',()=>{
-    const output={format:'vision-rover-scenario-v1',board:{width:50,height:50,cellCoordinates:'zero-based',effectiveArea:{x:5,y:5,width:40,height:40}},difficultyTarget:Number(slider.value),cubeSize:{width:3,height:3},minimumFreeCellsBetweenCubes:MIN_GAP,goals,robots,cubes:cubes.map(c=>({...c,width:3,height:3})),metrics:stats(cubes)};
+    const output={format:'vision-rover-scenario-v1',board:{width:50,height:50,cellCoordinates:'zero-based',effectiveArea:{x:5,y:5,width:40,height:40}},difficultyTarget:Number(slider.value),cubeSize:{width:3,height:3},minimumFreeCellsBetweenCubes:MIN_GAP,goals,robots,cubes:cubes.map(c=>({...c,width:3,height:3})),displayCoordinates:{origin:'bottom-left',reference:'lower-left corner of 3x3 cube',cubes:Object.fromEntries(cubes.map(c=>[c.key,displayCoord(c)]))},metrics:stats(cubes)};
     const blob=new Blob([JSON.stringify(output,null,2)],{type:'application/json'});
     const url=URL.createObjectURL(blob),a=document.createElement('a');
     a.href=url;a.download=`vision-rover-escenario-${String(slider.value).replace('.','-')}.json`;
