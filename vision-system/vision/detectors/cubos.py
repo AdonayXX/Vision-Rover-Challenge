@@ -117,7 +117,6 @@ from __future__ import annotations
 import itertools
 import math
 from dataclasses import dataclass
-from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -226,56 +225,17 @@ def clasificar(matiz: float, cfg: ConfigVision) -> str | None:
     return mejor
 
 
-@lru_cache(maxsize=8)
-def _tabla_color(croma_minimo, minimos_por_color, matices, tolerancia):
-    """Precalcula las 256x256 combinaciones posibles de a/b de OpenCV.
-
-    El filtro solo depende de estos dos bytes y de la configuración. Repetir
-    trigonometría por cada píxel de cada cuadro costaba cientos de milisegundos.
-    La tabla aplica exactamente las mismas comparaciones y cambia de clave si
-    cambian los umbrales (incluidas las pruebas temporales del diagnóstico).
-    """
-    valores = np.arange(256, dtype=np.float32) - 128
-    a32, b32 = np.meshgrid(valores, valores, indexing="ij")
-    croma = np.hypot(a32, b32)
-    mascara = croma >= croma_minimo
-
-    # Recuperación por color: el umbral global sigue protegiendo al tablero y a
-    # los otros objetos, pero un plástico concreto puede tener una cara menos
-    # saturada. Solo se recuperan píxeles cuyo matiz corresponde inequívocamente
-    # a ese color y cae dentro de una banda más estrecha que la tolerancia normal
-    # del clasificador. Así el verde puede bajar su croma sin abrir la compuerta
-    # a todo el fondo de la escena.
-    if minimos_por_color:
-        referencias = dict(matices)
-        matiz = np.degrees(np.arctan2(b32, a32)) % 360.0
-        for color, minimo in minimos_por_color:
-            referencia = referencias[color]
-            distancia = np.abs((matiz - referencia + 180.0) % 360.0 - 180.0)
-            es_mas_cercano = np.ones(matiz.shape, dtype=bool)
-            for otro, ref_otro in matices:
-                if otro == color:
-                    continue
-                distancia_otro = np.abs((matiz - ref_otro + 180.0) % 360.0 - 180.0)
-                es_mas_cercano &= distancia <= distancia_otro
-            mascara |= (
-                (croma >= minimo)
-                & (distancia <= tolerancia)
-                & es_mas_cercano
-            )
-
-    tabla = mascara.astype(np.uint8)
-    tabla.flags.writeable = False
-    return tabla
-
-
 def mascara_de_color(imagen_bgr: np.ndarray, cfg: ConfigVision) -> tuple[np.ndarray, np.ndarray]:
-    """Separa lo coloreado del tablero. Devuelve `(máscara, imagen Lab)`."""
+    """Separa lo coloreado del tablero. Devuelve `(máscara, imagen Lab)`.
+
+    Una sola conversión a Lab sirve para las dos cosas —umbral y clasificación—,
+    que es la razón de usar Lab también para el umbral en vez de pasar por HSV.
+    """
     lab = cv2.cvtColor(imagen_bgr, cv2.COLOR_BGR2LAB)
-    dc = cfg.deteccion_cubos
-    tabla = _tabla_color(dc.croma_minimo, tuple(sorted(dc.croma_minimo_por_color.items())),
-                         tuple(sorted(dc.matices_grados.items())), dc.matiz_tolerancia_recuperacion_grados)
-    mascara = tabla[lab[:, :, 1], lab[:, :, 2]]
+    a = lab[:, :, 1].astype(np.int16) - 128
+    b = lab[:, :, 2].astype(np.int16) - 128
+    croma = np.hypot(a.astype(np.float32), b.astype(np.float32))
+    mascara = (croma >= cfg.deteccion_cubos.croma_minimo).astype(np.uint8)
     # Cierra agujeros de un píxel sin mover los bordes, que es de donde sale
     # toda la información de posición.
     nucleo = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
@@ -597,10 +557,6 @@ def detectar_cubos(
     nadir = np.array(pose_de_camara.nadir_celdas, dtype=np.float64)
     factor = pose_de_camara.factor_paralaje(cfg.elementos.cubos.lado_mm)
 
-<<<<<<< HEAD
-    mascara, lab = mascara_de_color(imagen_bgr, cfg)
-    cantidad, etiquetas, stats, centroides = cv2.connectedComponentsWithStats(mascara, 8)
-=======
     mascara, lab, _ = segmentar(imagen_bgr, cfg, sistema)
     sano = (imagen_bgr.max(axis=2) < dc.nivel_recorte).astype(np.uint8)
     cantidad, etiquetas, stats, centros = cv2.connectedComponentsWithStats(mascara, 8)
@@ -609,7 +565,6 @@ def detectar_cubos(
     esquina = np.array([[0.0, 0.0], [lado_celdas, 0.0]], dtype=np.float64)
     px = sistema.a_pixeles(esquina)
     area_cara = max(1.0, float(np.hypot(px[1, 0] - px[0, 0], px[1, 1] - px[0, 1])) ** 2)
->>>>>>> upstream/main
 
     def anotar(motivo: str, etiqueta: int, area: int, matiz: float, croma: float,
                color: str | None) -> None:
@@ -622,7 +577,7 @@ def detectar_cubos(
     etiqueta_de: dict[str, int] = {}
     for etiqueta in range(1, cantidad):
         area = int(stats[etiqueta, cv2.CC_STAT_AREA])
-        area_cara = area_cara_local_px(sistema, centroides[etiqueta], lado_celdas)
+        area_cara = area_cara_local_px(sistema, centros[etiqueta], lado_celdas)
         if not (area_cara * dc.area_minima_relativa <= area <= area_cara * dc.area_maxima_relativa):
             if rechazos is not None and area >= area_cara * _RECHAZO_MINIMO_RELATIVO:
                 region = (etiquetas == etiqueta).astype(np.uint8)

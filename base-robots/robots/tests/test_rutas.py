@@ -51,6 +51,28 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(result["puntos"][-1], self.goal)
         self.assertGreater(result["distancia_mm"], 580)
 
+    def test_search_stays_shallow_for_board_pystack(self):
+        # En la placa (pystack ~1,5 KB) el A* daba "pystack exhausted" con
+        # _search -> free_segment -> point_segment_distance -> hypot.
+        import rutas
+        profundidad, maxima = [0], [0]
+
+        def perfil(frame, evento, arg):
+            if evento == "call" and frame.f_code.co_filename == rutas.__file__:
+                profundidad[0] += 1
+                maxima[0] = max(maxima[0], profundidad[0])
+            elif evento == "return" and frame.f_code.co_filename == rutas.__file__:
+                profundidad[0] -= 1
+
+        sys.setprofile(perfil)
+        try:
+            result = self.plan()
+        finally:
+            sys.setprofile(None)
+        self.assertGreater(len(result["puntos"]), 2)   # hubo búsqueda A*
+        # plan -> _search -> free_segment (o hypot/heappush en la placa) y nada más.
+        self.assertLessEqual(maxima[0], 3)
+
     def test_free_straight_path_is_direct(self):
         self.msg["cubes"] = []
         self.planner = RoutePlanner(85, 85, 15, required_colors=())

@@ -27,6 +27,14 @@ DEFAULT_FILES = [
     os.path.join(CODE_DIR, "ideaboard.py"),
     os.path.join(CODE_DIR, "registro_fallos.py"),
     os.path.join(CODE_DIR, "safemode.py"),
+    os.path.join(CODE_DIR, "cliente_vision_rover.py"),
+    os.path.join(CODE_DIR, "telemetria.py"),
+    os.path.join(CODE_DIR, "modelo_rover.py"),
+    os.path.join(CODE_DIR, "autonomia.py"),
+    os.path.join(CODE_DIR, "llevar_cubo.py"),
+    os.path.join(CODE_DIR, "rutas.py"),
+    os.path.join(CODE_DIR, "rutas_placa.py"),
+    os.path.join(CODE_DIR, "navegacion.py"),
 ]
 
 
@@ -42,6 +50,9 @@ class Esp32Uploader(tk.Tk):
         self.selected_files = []
 
         self.port_var = tk.StringVar(value="COM3")
+        # Cada rover tiene su ID de marcador, ganancias y calibracion:
+        # rover_<id>.json -> /rover.json, modelo_movimiento_<id>.json -> /modelo_movimiento.json
+        self.rover_var = tk.StringVar(value="10")
         self.status_var = tk.StringVar(value="Listo")
         self.ssid_var = tk.StringVar()
         self.password_var = tk.StringVar()
@@ -58,6 +69,8 @@ class Esp32Uploader(tk.Tk):
         top = ttk.Frame(root)
         top.pack(fill="x")
 
+        ttk.Label(top, text="ID del rover").pack(side="left")
+        ttk.Entry(top, textvariable=self.rover_var, width=5).pack(side="left", padx=(8, 12))
         ttk.Label(top, text="Puerto").pack(side="left")
         self.port_entry = ttk.Entry(top, textvariable=self.port_var, width=10)
         self.port_entry.pack(side="left", padx=(8, 12))
@@ -250,8 +263,35 @@ class Esp32Uploader(tk.Tk):
         self.selected_files = []
         self.refresh_selected_files()
 
+    def rover_files(self):
+        """Archivos propios del rover elegido, con el nombre que llevan en la placa.
+
+        Devuelve (lista de (origen, destino), aviso o None). Sin calibracion
+        para ese rover no se sube modelo y se borra el que hubiera en la placa:
+        mejor el modelo por defecto que el de OTRO rover.
+        """
+        rover = self.rover_var.get().strip()
+        if not rover.isdigit():
+            raise ValueError("El ID del rover debe ser un numero (el de su marcador)")
+        propio = os.path.join(CODE_DIR, f"rover_{rover}.json")
+        if not os.path.isfile(propio):
+            raise ValueError(f"No existe rover_{rover}.json en codigos/")
+        archivos = [(propio, "/rover.json")]
+        modelo = os.path.join(CODE_DIR, f"modelo_movimiento_{rover}.json")
+        if os.path.isfile(modelo):
+            return archivos + [(modelo, "/modelo_movimiento.json")], None
+        return archivos, f"El rover {rover} no tiene calibracion (modelo_movimiento_{rover}.json): usara el modelo por defecto."
+
     def upload_default_package(self):
-        self.upload_files(DEFAULT_FILES)
+        try:
+            propios, aviso = self.rover_files()
+        except ValueError as error:
+            messagebox.showerror("Rover", str(error))
+            return
+        if aviso:
+            self.write_log("AVISO: " + aviso + "\n")
+        borrar = [] if any(r == "/modelo_movimiento.json" for _, r in propios) else ["/modelo_movimiento.json"]
+        self.upload_files(DEFAULT_FILES + propios, borrar)
 
     def upload_selected_files(self):
         if not self.selected_files:
@@ -457,28 +497,44 @@ class Esp32Uploader(tk.Tk):
         ip, port = matches[-1]
         return ip, int(port)
 
-    def upload_files(self, files):
+    def upload_files(self, files, borrar=()):
+        """files: rutas (se suben con su nombre) o pares (origen, destino en la placa)."""
         commands = []
-        for path in files:
+        for item in files:
+            path, remote = item if isinstance(item, tuple) else (item, self.remote_name(item))
             if not os.path.isfile(path):
                 self.write_log(f"No existe: {path}\n")
                 return
-            remote = self.remote_name(path)
             commands.append((path, remote))
 
+        self.write_log("Se van a subir: " + ", ".join(
+            os.path.basename(path) + ("" if os.path.basename(path) == remote.lstrip("/") else " -> " + remote.lstrip("/"))
+            for path, remote in commands) + "\n")
         self.set_busy(True, "Subiendo archivos...")
-        thread = threading.Thread(target=self._upload_worker, args=(commands,), daemon=True)
+        thread = threading.Thread(target=self._upload_worker, args=(commands, list(borrar)), daemon=True)
         thread.start()
 
     def reset_board(self):
         self.run_worker("Reiniciando placa...", self.ampy_command("reset", "--hard"))
 
-    def _upload_worker(self, commands):
+    def _upload_worker(self, commands, borrar=()):
         try:
             self.log_queue.put(("log", f"Usando puerto {self.port()}\n"))
             for path, remote in commands:
                 self.log_queue.put(("log", f"Subiendo {path} -> {remote}\n"))
                 self.run_command(self.ampy_command("put", path, remote))
+            for remote in borrar:
+                self.log_queue.put(("log", f"Borrando {remote} de la placa (era de otro rover o viejo)\n"))
+                try:
+                    self.run_command(self.ampy_command("rm", remote))
+                except RuntimeError:
+                    pass                          # no estaba: nada que borrar
+            self.log_queue.put(("log", "\nComprobando archivos en la placa...\n"))
+            en_placa = {"/" + linea.strip().lstrip("/") for linea in self.run_command(self.ampy_command("ls"))}
+            faltan = [remote for _, remote in commands if remote not in en_placa]
+            if faltan:
+                raise RuntimeError("No quedaron en la placa: " + ", ".join(faltan))
+            self.log_queue.put(("log", f"Los {len(commands)} archivos estan en la placa.\n"))
             self.log_queue.put(("log", "\nReiniciando placa...\n"))
             self.run_command(self.ampy_command("reset", "--hard"))
             self.log_queue.put(("status", "Carga terminada"))
@@ -515,7 +571,9 @@ class Esp32Uploader(tk.Tk):
         )
 
         assert process.stdout is not None
+        lines = []
         for line in process.stdout:
+            lines.append(line)
             self.log_queue.put(("log", line))
 
         exit_code = process.wait()
@@ -523,6 +581,7 @@ class Esp32Uploader(tk.Tk):
             raise RuntimeError(
                 "El comando fallo. Revisa dependencias, puerto seleccionado y que el puerto no este ocupado."
             )
+        return lines
 
     def ampy_command(self, *args):
         return [sys.executable, "-m", "ampy.cli", "--port", self.port(), *args]

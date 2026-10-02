@@ -21,5 +21,7 @@
     "tolerance": 2.0,
     "slow_angle": 30.0,
     "slow_speed": 0.15
-  }
+  },
+  "vision_host": "",
+  "vision_port": 2026
 }

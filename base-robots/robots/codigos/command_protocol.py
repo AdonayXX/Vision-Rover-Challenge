@@ -13,6 +13,10 @@ TURN = "TURN"
 HEADING = "HEADING"
 KEEPALIVE = "KEEPALIVE"
 SENSORS = "SENSORS"
+IR = "IR"  # mision autonoma en la placa: ir a (col, row); solo desarrollo
+RUTA = "RUTA"  # medicion: planificar en la placa hasta (col, row) con paso de grilla
+LLEVAR = "LLEVAR"  # mision autonoma en la placa: cubo de un color a su zona; solo desarrollo
+COLORES = ("red", "green", "blue")
 MAX_LINE = 128
 
 
@@ -41,16 +45,21 @@ def parse_command(message):
             raise ValueError("Mensaje vacio")
         command = parts[0].strip().upper()
         fields = {PING: (), STOP: (), KEEPALIVE: (), SENSORS: (), MOTOR: ("left", "right"),
-                  TURN: ("angle", "speed"), HEADING: ("heading", "speed", "duration")}
+                  TURN: ("angle", "speed"), HEADING: ("heading", "speed", "duration"),
+                  IR: ("col", "row"), RUTA: ("col", "row", "paso"), LLEVAR: ("color",)}
         if command not in fields or len(parts) != len(fields[command]) + 1:
             raise ValueError("Comando o cantidad de parametros invalida")
         result = {"valid": True, "command": command}
         for key, value in zip(fields[command], parts[1:]):
-            result[key] = finite(value)
+            result[key] = value.strip().lower() if key == "color" else finite(value)
+        if command == LLEVAR and result["color"] not in COLORES:
+            raise ValueError("Color fuera de red/green/blue")
         if command == MOTOR and not all(valid_motor_speed(result[k]) for k in ("left", "right")):
             raise ValueError("Motores fuera de [-1, 1]")
         if command == TURN and not 0 < result["speed"] <= 1:
             raise ValueError("Velocidad de giro fuera de (0, 1]")
+        if command == RUTA and result["paso"] not in (1, 2, 3, 4):
+            raise ValueError("Paso de grilla fuera de 1..4")
         if command == HEADING:
             if not valid_motor_speed(result["speed"]) or result["duration"] <= 0:
                 raise ValueError("Velocidad o duracion invalida")

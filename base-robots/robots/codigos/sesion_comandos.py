@@ -10,13 +10,15 @@ def would_block(error):
 
 
 class CommandSession:
-    def __init__(self, controller, watchdog=0.5, clock=time.monotonic, sensors=None, info=None):
+    def __init__(self, controller, watchdog=0.5, clock=time.monotonic, sensors=None, info=None,
+                 mission=None):
         from command_protocol import finite
         if finite(watchdog) <= 0:
             raise ValueError("Watchdog debe ser positivo")
         self.controller, self.watchdog, self.clock = controller, watchdog, clock
         self.sensors = sensors
         self.info = info  # callable -> dict: motivo del ultimo reinicio, uptime
+        self.mission = mission  # mision autonoma en la placa (autonomia.IrAPunto)
         self.reply = b"OK\n"
         self.last_motion = None
         self.buffer = b""
@@ -29,7 +31,12 @@ class CommandSession:
             self.controller.stop("watchdog")
             self.last_motion = None
         if self.sensors is not None:
-            self.sensors.update(moving=self.controller.mode is not None)
+            # Con una mision activa el LED del sensor de color no barre: sus
+            # destellos rojo/verde/azul sobre el cubo pueden confundir a la
+            # camara, y la mision no usa ese sensor (reglamento 12.4).
+            ocupado = self.controller.mode is not None or (
+                self.mission is not None and self.mission.activa)
+            self.sensors.update(moving=ocupado)
         self.controller.update()
 
     def process_command(self, text):
@@ -42,8 +49,38 @@ class CommandSession:
             self.last_motion = None
             return False
         command = parsed["command"]
+        if self.mission is not None and command in ("STOP", "MOTOR", "TURN", "HEADING"):
+            # Una orden manual siempre le quita el control a la mision.
+            self.mission.detener("orden_" + command.lower())
         try:
-            if command == "STOP":
+            if command == "RUTA":
+                if self.mission is None:
+                    return False
+                # Planificar bloquea el bucle: solo con los motores parados.
+                self.mission.detener("medicion_ruta")
+                self.controller.stop("medicion_ruta")
+                self.last_motion = None
+                try:
+                    from rutas_placa import medir_ruta
+                    resultado = medir_ruta(self.mission.vision.mensaje, self.mission.robot_id,
+                                           parsed["col"], parsed["row"], int(parsed["paso"]))
+                except Exception as error:
+                    # Una medicion que falla se informa; no tumba la sesion.
+                    resultado = {"error": "{}: {}".format(type(error).__name__, error)}
+                self.reply = (json.dumps(resultado) + "\n").encode("ascii")
+            elif command == "IR":
+                if self.mission is None:
+                    return False
+                self.controller.stop("mision")
+                self.last_motion = None
+                self.mission.iniciar(parsed["col"], parsed["row"])
+            elif command == "LLEVAR":
+                if self.mission is None or not hasattr(self.mission, "llevar"):
+                    return False
+                self.controller.stop("mision")
+                self.last_motion = None
+                self.mission.llevar(parsed["color"])
+            elif command == "STOP":
                 self.controller.stop()
                 self.last_motion = None
             elif command == "PING":
@@ -53,6 +90,8 @@ class CommandSession:
                 status["motion_reason"] = self.controller.reason
                 if self.info is not None:
                     status.update(self.info())
+                if self.mission is not None:
+                    status["mision"] = self.mission.informe()
                 self.reply = (json.dumps(status) + "\n").encode("ascii")
             elif command == "KEEPALIVE":
                 if self.controller.mode is None:

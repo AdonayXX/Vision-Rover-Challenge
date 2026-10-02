@@ -429,15 +429,10 @@ class DeteccionCubos:
     """
 
     croma_minimo: float
-<<<<<<< HEAD
-    croma_minimo_por_color: dict[str, float]
-    matiz_tolerancia_recuperacion_grados: float
-=======
     croma_piso: float
     croma_factor_tablero: float
     margen_cancha_celdas: float
     nivel_recorte: int
->>>>>>> upstream/main
     matices_grados: dict[str, float]
     matiz_tolerancia_grados: float
     area_minima_relativa: float
@@ -894,19 +889,10 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
     dc = d["deteccion_cubos"]
     deteccion_cubos = DeteccionCubos(
         croma_minimo=float(dc["croma_minimo"]),
-<<<<<<< HEAD
-        croma_minimo_por_color={
-            k: float(v) for k, v in dc.get("croma_minimo_por_color", {}).items()
-        },
-        matiz_tolerancia_recuperacion_grados=float(
-            dc.get("matiz_tolerancia_recuperacion_grados", dc["matiz_tolerancia_grados"])
-        ),
-=======
         croma_piso=float(dc["croma_piso"]),
         croma_factor_tablero=float(dc["croma_factor_tablero"]),
         margen_cancha_celdas=float(dc["margen_cancha_celdas"]),
         nivel_recorte=int(dc["nivel_recorte"]),
->>>>>>> upstream/main
         matices_grados={k: float(v) for k, v in dc["matices_lab_grados"].items()},
         matiz_tolerancia_grados=float(dc["matiz_tolerancia_grados"]),
         area_minima_relativa=float(dc["area_minima_relativa"]),
@@ -1484,28 +1470,6 @@ def revisar_config(cfg: ConfigVision) -> str | None:
         return "deteccion_cubos.recorte_robusto debe estar en (0, 1]"
     if dc_cfg.croma_minimo <= 0:
         return "deteccion_cubos.croma_minimo debe ser > 0"
-<<<<<<< HEAD
-    if not (0.0 < dc_cfg.matiz_tolerancia_recuperacion_grados <= dc_cfg.matiz_tolerancia_grados):
-        return (
-            "deteccion_cubos.matiz_tolerancia_recuperacion_grados debe estar en "
-            "(0, matiz_tolerancia_grados]"
-        )
-    for color, minimo in dc_cfg.croma_minimo_por_color.items():
-        if color not in dc_cfg.matices_grados:
-            return (
-                "deteccion_cubos.croma_minimo_por_color contiene {!r}, pero no hay "
-                "matiz de referencia para ese color".format(color)
-            )
-        if minimo <= 0:
-            return (
-                "deteccion_cubos.croma_minimo_por_color.{0} debe ser > 0".format(color)
-            )
-        if minimo > dc_cfg.croma_minimo:
-            return (
-                "deteccion_cubos.croma_minimo_por_color.{0} ({1}) no puede superar "
-                "croma_minimo ({2})".format(color, minimo, dc_cfg.croma_minimo)
-            )
-=======
     if not (0.0 < dc_cfg.croma_piso <= dc_cfg.croma_minimo):
         return ("deteccion_cubos.croma_piso debe estar en (0, croma_minimo]: es el piso "
                 "del umbral adaptativo y croma_minimo es su techo")
@@ -1515,7 +1479,6 @@ def revisar_config(cfg: ConfigVision) -> str | None:
         return "deteccion_cubos.margen_cancha_celdas no puede ser negativo"
     if not (1 <= dc_cfg.nivel_recorte <= 255):
         return "deteccion_cubos.nivel_recorte debe estar entre 1 y 255"
->>>>>>> upstream/main
     colores_dibujo = set(cfg.sintetico.colores_cubo_bgr)
     faltan_colores = sorted(set(cfg.elementos.cubos.colores) - colores_dibujo)
     if faltan_colores:

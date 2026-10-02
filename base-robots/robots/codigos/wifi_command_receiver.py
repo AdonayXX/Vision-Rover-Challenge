@@ -12,6 +12,9 @@ from control_movimiento import MotionController, calibrate_drift
 from sesion_comandos import CommandSession, would_block
 from wifi_config import obtener_credenciales_wifi
 import registro_fallos
+from cliente_vision_rover import ClienteVision
+from autonomia import IrAPunto, Misiones
+from modelo_rover import ModeloRover
 
 
 def _nada():
@@ -81,6 +84,47 @@ def activar_watchdog(segundos):
         return _nada
 
 
+def aplicar_rover(config, ruta="rover.json"):
+    """Mezcla lo propio de ESTE rover (ID, ganancias, signos) sobre la config comun.
+
+    config_robot.json lleva lo comun a los dos rovers (Wi-Fi, vision);
+    rover.json, lo que cambia de uno a otro. La herramienta de subida copia
+    rover_<id>.json como rover.json. Sin el archivo, todo queda como estaba.
+    """
+    try:
+        with open(ruta) as fuente:
+            propio = json.load(fuente)
+    except OSError:
+        print("AVISO: sin rover.json; ID", config.get("robot_id", 10), "por defecto")
+        return config
+    control = dict(config.get("control", {}))
+    control.update(propio.get("control", {}))
+    config.update(propio)
+    config["control"] = control
+    print("Rover", config.get("robot_id"), "(rover.json)")
+    return config
+
+
+def cargar_modelo(ruta="modelo_movimiento.json"):
+    try:
+        with open(ruta) as fuente:
+            modelo = ModeloRover.desde_resumen(json.load(fuente)["resumen"])
+        print("Modelo de movimiento cargado:", ruta)
+        return modelo
+    except (OSError, ValueError, KeyError) as error:
+        print("AVISO: sin modelo calibrado ({}); valores por defecto".format(error))
+        return ModeloRover()
+
+
+def memoria_libre():
+    try:
+        import gc
+        gc.collect()
+        return gc.mem_free()
+    except (ImportError, AttributeError):
+        return None
+
+
 def motivo_reinicio():
     try:
         import microcontroller
@@ -109,7 +153,8 @@ def serve_client(
     server=None,
     red_ok=None,
     alimentar=_nada,
-    info=None
+    info=None,
+    mission=None
 ):
     """Atiende un cliente. Devuelve el cliente que lo reemplaza, o None.
 
@@ -126,7 +171,8 @@ def serve_client(
             watchdog,
             clock,
             sensors=sensors,
-            info=info
+            info=info,
+            mission=mission
         )
 
         revisado = clock()
@@ -145,6 +191,9 @@ def serve_client(
 
     finally:
         try:
+            if mission is not None:
+                # Una mision lanzada desde la PC no sobrevive a esa conexion.
+                mission.detener("conexion_cerrada")
             controller.stop("conexion_cerrada")
         finally:
             client.close()
@@ -187,10 +236,16 @@ def main(config_path="config_robot.json"):
     fallos_previos = registro_fallos.leer()
     registro_fallos.borrar()
 
+    vision = []  # se rellena al tener red; info() lo lee por referencia
+    identidad = {}  # robot_id, al leer la config; la PC comprueba que es el rover que cree
+
     def info():
-        return {"reset_reason": reinicio,
-                "uptime_s": round(time.monotonic() - arranque, 1),
-                "fallos": dict(fallos_previos, **registro_fallos.leer())}
+        datos = {"reset_reason": reinicio, "robot_id": identidad.get("robot_id"),
+                 "uptime_s": round(time.monotonic() - arranque, 1),
+                 "fallos": dict(fallos_previos, **registro_fallos.leer())}
+        if vision:
+            datos["vision"] = vision[0].estadisticas(memoria_libre())
+        return datos
 
     controller = MotionController(robot)
 
@@ -203,7 +258,8 @@ def main(config_path="config_robot.json"):
         # ---------------------------------
 
         with open(config_path) as source:
-            config = json.load(source)
+            config = aplicar_rover(json.load(source))
+        identidad["robot_id"] = config.get("robot_id", 10)
 
         # Configuración separada: no sobrescribe Wi-Fi ni calibración de motores.
         from sensores_rover import SensoresRover, validar_config
@@ -298,12 +354,53 @@ def main(config_path="config_robot.json"):
         revisado = -1e9
         alimentar = activar_watchdog(15)
 
+        # Paso 1 del rover autonomo: leer la vision oficial desde la placa.
+        # Solo mide; todavia no decide movimiento con lo que lee.
+        if config.get("vision_host"):
+            vision.append(ClienteVision(pool, config["vision_host"],
+                                        config.get("vision_port", 2026)))
+            print("Vision:", config["vision_host"], config.get("vision_port", 2026))
+        informe = [time.monotonic() + 10]
+        mision = None
+        if vision:
+            # Un solo modelo: lo que una mision aprende (escalas) lo usa la otra.
+            modelo = cargar_modelo()
+            robot_id = config.get("robot_id", 10)
+
+            def fabrica_llevar():
+                # Al primer LLEVAR, no al arrancar: llevar_cubo.py es grande.
+                import gc
+                gc.collect()
+                from llevar_cubo import LlevarCubo
+                return LlevarCubo(vision[0], modelo, controller, robot_id, sensores=sensors)
+
+            mision = Misiones(IrAPunto(vision[0], modelo, controller, robot_id),
+                              fabrica_llevar=fabrica_llevar)
+
+        def tick():
+            alimentar()
+            if not vision:
+                return
+            try:
+                vision[0].poll(puede_bloquear=controller.mode is None)
+            except Exception as error:
+                print("Error vision:", error)
+            try:
+                mision.tick()
+            except Exception as error:
+                mision.detener("error: {}".format(error))
+                print("Error mision:", error)
+            if time.monotonic() >= informe[0]:
+                informe[0] = time.monotonic() + 10
+                print("Vision:", vision[0].estadisticas(memoria_libre()))
+                vision[0].reiniciar_estadisticas()
+
         # ---------------------------------
         # Esperar clientes
         # ---------------------------------
 
         while True:
-            alimentar()
+            tick()
             if pending is None:
                 controller.stop(
                     "esperando_cliente"
@@ -348,8 +445,9 @@ def main(config_path="config_robot.json"):
                     sensors=sensors,
                     server=server,
                     red_ok=red_ok,
-                    alimentar=alimentar,
-                    info=info
+                    alimentar=tick,
+                    info=info,
+                    mission=mision
                 )
 
             except Exception as error:

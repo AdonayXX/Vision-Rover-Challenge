@@ -1,12 +1,0 @@
->
-]0;🐍Wi-Fi: No IP | REPL | 9.2.4\
-Adafruit CircuitPython 9.2.4 on 2025-01-29; CRCibernetica IdeaBoard with ESP32
->>> 
-]0;🐍Wi-Fi: No IP | Done | 9.2.4\soft reboot
-
-[2K[0GAuto-reload is on. Simply save files over USB to run them or enter REPL to disable.
-[2K[0Gcode.py output:
-]0;🐍Wi-Fi: No IP | code.py | 9.2.4\Sensores locales activos; errores de cableado/configuracion: {}
-Intentando conectar Wi-Fi... 1
-Conectado: 10.50.40.229
-Comandos de prueba: 10.50.40.229 5000

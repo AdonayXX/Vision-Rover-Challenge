@@ -4,16 +4,54 @@ Se aproxima cada cuerpo con un círculo que lo contiene. Cada tramo completo
 se comprueba, incluidos diagonales y enlaces a puntos con decimales.
 No predice movimiento del compañero ni produce comandos de motores.
 """
-import heapq
 import math
 from navegacion import _finite
+
+# CircuitPython puede no traer heapq ni hypot. Las alternativas dan el mismo
+# resultado; en la PC se usan las de la biblioteca estandar.
+try:
+    from heapq import heappop, heappush
+except ImportError:
+    def heappush(heap, item):
+        heap.append(item)
+        i = len(heap) - 1
+        while i > 0:
+            padre = (i - 1) >> 1
+            if heap[padre] <= heap[i]:
+                break
+            heap[padre], heap[i] = heap[i], heap[padre]
+            i = padre
+
+    def heappop(heap):
+        ultimo = heap.pop()
+        if not heap:
+            return ultimo
+        primero, heap[0] = heap[0], ultimo
+        i, n = 0, len(heap)
+        while True:
+            hijo = 2 * i + 1
+            if hijo >= n:
+                break
+            if hijo + 1 < n and heap[hijo + 1] < heap[hijo]:
+                hijo += 1
+            if heap[i] <= heap[hijo]:
+                break
+            heap[i], heap[hijo] = heap[hijo], heap[i]
+            i = hijo
+        return primero
+
+try:
+    from math import hypot
+except ImportError:
+    def hypot(x, y):
+        return math.sqrt(x * x + y * y)
 
 
 def point_segment_distance(point, start, end):
     dx, dy = end[0] - start[0], end[1] - start[1]
     length2 = dx * dx + dy * dy
     t = 0 if length2 == 0 else max(0, min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length2))
-    return math.hypot(point[0] - start[0] - t * dx, point[1] - start[1] - t * dy)
+    return hypot(point[0] - start[0] - t * dx, point[1] - start[1] - t * dy)
 
 
 class RoutePlanner:
@@ -67,12 +105,21 @@ class RoutePlanner:
 
     @staticmethod
     def free_segment(scene, start, end):
+        # Sin llamadas a funciones Python: en la placa la pila (pystack) es de
+        # ~1,5 KB y el A* llama a esto desde lo más hondo. Es la misma cuenta
+        # que point_segment_distance, comparada al cuadrado.
         margin = scene["margin"]
         for x, y in (start, end):
             if not (margin <= x <= scene["cols"] - margin and margin <= y <= scene["rows"] - margin):
                 return False
+        sx, sy = start
+        dx, dy = end[0] - sx, end[1] - sy
+        length2 = dx * dx + dy * dy
         for x, y, radius in scene["circles"]:
-            if point_segment_distance((x, y), start, end) <= radius + 1e-9:
+            t = 0 if length2 == 0 else max(0, min(1, ((x - sx) * dx + (y - sy) * dy) / length2))
+            ex, ey = x - sx - t * dx, y - sy - t * dy
+            limite = radius + 1e-9
+            if ex * ex + ey * ey <= limite * limite:
                 return False
         return True
 
@@ -104,7 +151,7 @@ class RoutePlanner:
                     j -= 1
                 simplified.append(path[j])
                 i = j
-            distance = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(simplified, simplified[1:]))
+            distance = sum(hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(simplified, simplified[1:]))
             # El cálculo puede consumir parte del plazo de frescura.
             self.scene(state)
             if state.seq != result["seq"]:
@@ -134,11 +181,11 @@ class RoutePlanner:
         # a una celda que podría estar del otro lado de un objeto.
         for key, p in nodes.items():
             if self.free_segment(scene, start, p):
-                cost = math.hypot(p[0] - start[0], p[1] - start[1])
+                cost = hypot(p[0] - start[0], p[1] - start[1])
                 costs[key], parents[key] = cost, None
-                heapq.heappush(queue, (cost + math.hypot(p[0] - end[0], p[1] - end[1]), key))
+                heappush(queue, (cost + hypot(p[0] - end[0], p[1] - end[1]), key))
         while queue:
-            _, key = heapq.heappop(queue)
+            _, key = heappop(queue)
             if key in closed:
                 continue
             closed.add(key)
@@ -157,9 +204,9 @@ class RoutePlanner:
                 q = nodes[other]
                 if not self.free_segment(scene, p, q):
                     continue
-                candidate = costs[key] + math.hypot(q[0] - p[0], q[1] - p[1])
+                candidate = costs[key] + hypot(q[0] - p[0], q[1] - p[1])
                 if candidate < costs.get(other, float("inf")):
                     costs[other], parents[other] = candidate, key
-                    estimate = candidate + math.hypot(q[0] - end[0], q[1] - end[1])
-                    heapq.heappush(queue, (estimate, other))
+                    estimate = candidate + hypot(q[0] - end[0], q[1] - end[1])
+                    heappush(queue, (estimate, other))
         return None
