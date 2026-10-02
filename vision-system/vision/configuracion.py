@@ -13,6 +13,7 @@ en vez de barrer el diccionario.
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 from dataclasses import dataclass, replace
@@ -325,9 +326,14 @@ class ConteoAcopio:
 
     No está para tapar detecciones malas: de eso ya se ocupa el seguimiento,
     que con una detección no confiable conserva la última posición buena.
+
+    `tolerancia_mm` es cuánto agranda el ÁRBITRO, por cada lado, la ventana donde
+    tiene que caer el centro del cubo. Es su holgura frente al error de
+    ubicación, y no viaja en el mensaje: lo que viaja es el veredicto.
     """
 
     permanencia_minima_ms: int
+    tolerancia_mm: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -849,7 +855,8 @@ def cargar_config(ruta: str = CONFIG_POR_DEFECTO) -> ConfigVision:
     )
 
     conteo_acopio = ConteoAcopio(
-        permanencia_minima_ms=int(d["conteo_acopio"]["permanencia_minima_ms"])
+        permanencia_minima_ms=int(d["conteo_acopio"]["permanencia_minima_ms"]),
+        tolerancia_mm=float(d["conteo_acopio"]["tolerancia_mm"]),
     )
 
     ronda = Ronda(
@@ -998,6 +1005,26 @@ def geometrias_deposito(cfg: ConfigVision) -> dict[str, schema.GeometriaDepot]:
     centro está a igual distancia de dos bordes. `revisar_config` lo convierte en
     un error de configuración con nombre y apellido.
     """
+    return _geometrias(cfg, tolerancia_celdas=0.0)
+
+
+def geometrias_arbitro(cfg: ConfigVision) -> dict[str, schema.GeometriaDepot]:
+    """Las zonas como las juzga el ÁRBITRO: con su tolerancia ya aplicada.
+
+    Es la misma geometría de `geometrias_deposito`, con la ventana de aceptación
+    agrandada `conteo_acopio.tolerancia_mm` por cada lado. La usan el contador
+    de acopio —que decide— y la vista —que tiene que dibujar la ventana con la
+    que se decide, no otra—.
+
+    Las dos funciones conviven a propósito. La de arriba es la geometría
+    conservadora, la que garantiza que el cubo entra entero con cualquier
+    rotación, y contra ella se revisa la configuración. Esta es la que cuenta.
+    """
+    return _geometrias(
+        cfg, tolerancia_celdas=cfg.conteo_acopio.tolerancia_mm / cfg.tablero.cell_mm)
+
+
+def _geometrias(cfg: ConfigVision, tolerancia_celdas: float) -> dict[str, schema.GeometriaDepot]:
     cell_mm = cfg.tablero.cell_mm
     tam = cfg.lugares.tamano_deposito
     return {
@@ -1009,6 +1036,7 @@ def geometrias_deposito(cfg: ConfigVision) -> dict[str, schema.GeometriaDepot]:
             cols=cfg.tablero.cols,
             rows=cfg.tablero.rows,
             cube_side=cfg.elementos.cubos.lado_mm / cell_mm,
+            tolerance=tolerancia_celdas,
         )
         for dep in cfg.lugares.depositos
     }
@@ -1121,6 +1149,13 @@ def _revisar_zonas(cfg: ConfigVision) -> str | None:
 
     if cfg.conteo_acopio.permanencia_minima_ms < 0:
         return "conteo_acopio.permanencia_minima_ms no puede ser negativo"
+    media_diagonal_mm = cfg.elementos.cubos.lado_mm * math.sqrt(2.0) / 2.0
+    if not (0.0 <= cfg.conteo_acopio.tolerancia_mm < media_diagonal_mm):
+        return (
+            "conteo_acopio.tolerancia_mm debe estar entre 0 y la media diagonal del cubo "
+            "({:.1f} mm): es la holgura del árbitro sobre el margen conservador, no un "
+            "reemplazo de ese margen".format(media_diagonal_mm)
+        )
     if cfg.ronda.preparacion_ms <= 0:
         return (
             "ronda.preparacion_ms tiene que ser > 0: es lo que dura READY, y en cero "

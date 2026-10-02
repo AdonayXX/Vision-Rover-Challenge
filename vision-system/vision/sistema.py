@@ -61,7 +61,7 @@ try:  # como paquete
     from .geometry.distorsion import (
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
     )
-    from .mundo import VERSION_PROTOCOLO, RelojRonda
+    from .mundo import VERSION_PROTOCOLO, RelojRonda, con_entregas
     from .publish.puerto import ErrorPuerto
     from .publish.telemetria import PublicadorTelemetria
     from .record.acta import escribir_acta, mmss
@@ -89,7 +89,7 @@ except ImportError:  # como script suelto
         ErrorCalibracion, FuenteRectificada, Rectificador, comparar_con_camara, elegir_perfil,
     )
     from vision.mundo import (  # type: ignore[no-redef]
-        VERSION_PROTOCOLO, RelojRonda,
+        VERSION_PROTOCOLO, RelojRonda, con_entregas,
     )
     from vision.publish.puerto import ErrorPuerto  # type: ignore[no-redef]
     from vision.publish.telemetria import PublicadorTelemetria  # type: ignore[no-redef]
@@ -969,6 +969,14 @@ def main(argv: list[str] | None = None) -> int:
                         print("[fase] " + aviso_reto, flush=True)
                 except Exception as exc:  # noqa: BLE001 — a propósito
                     ultimo_error = "acopio: {}: {}".format(type(exc).__name__, exc)
+                # Lo que se publica es el veredicto SOSTENIDO —`contado`— y no el
+                # instantáneo: un cubo en el límite entra y sale con el temblor
+                # de la detección, y eso le haría al rover soltar y volver a
+                # buscar el mismo cubo.
+                estado = con_entregas(estado, frozenset(
+                    z.color for z in acopio.zonas if z.contado) if acopio else frozenset())
+                publicador.actualizar(estado)
+                ultimo_estado = estado
             except ErrorDuplicado as exc:
                 # Un duplicado que NO se pudo resolver. Se descarta el cuadro y
                 # el falla-abierto conserva el último estado bueno: entre dos

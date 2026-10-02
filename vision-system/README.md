@@ -372,6 +372,8 @@ Vision-Rover-Challenge/              # raíz del repositorio (fork de CENFOTEC)
         │
         ├── tools/                   # herramientas de puesta a punto
         │   ├── diagnostico_camara.py    # ¿la cámara sirve?
+        │   ├── diagnostico_cubos.py     # qué cubos ve, cuáles descarta y por qué
+        │   ├── diagnostico_falsos_positivos.py  # marcadores que el detector inventa
         │   ├── patron_calibracion.py    # genera los PDF para imprimir
         │   ├── calibrar_camara.py       # mide la distorsión del lente
         │   ├── precision_ubicacion.py   # ¿ubica con error aceptable?
@@ -381,6 +383,7 @@ Vision-Rover-Challenge/              # raíz del repositorio (fork de CENFOTEC)
         │   ├── verificar_cubos.py       # cubos contra verdad conocida
         │   ├── verificar_seguimiento.py # oclusión y edad
         │   ├── verificar_acopio.py      # ¿el cubo está dentro de su zona?
+        │   ├── verificar_ronda.py       # el árbitro: fases, cronómetro y acta
         │   ├── verificar_config.py      # la configuración: errores y avisos
         │   └── panel.py                 # el panel que dibujan las demás
         │
@@ -524,6 +527,34 @@ alcanza, y no hay nada que confundir.
 El **amarillo está reservado** para los obstáculos. Un objeto amarillo **nunca**
 es un cubo. Por eso los obstáculos no llevan campo de color: ya se sabe cuál es.
 
+### Por qué el umbral de color sale del tablero
+
+Para separar un cubo del tablero se le pide a cada píxel un mínimo de color. Ese
+mínimo fue, hasta octubre de 2026, un número fijo. Y un número fijo sirve para
+**una** luz.
+
+Se vio en la cancha: con mucha luz natural y cubos de acrílico, que reflejan, se
+probaron exposiciones de -4 a -8 y aparecía un cubo u otro, **nunca los tres**.
+Con mucha luz la tapa del cubo —que es casi todo lo que la cámara ve de él— se
+lava; con poca, el color se apaga. No hay una exposición buena para los tres
+colores a la vez.
+
+Lo que sí hay en todos los cuadros es **el tablero, que es gris por
+construcción**. Entonces:
+
+- el **tinte de la luz** se mide sobre el tablero —su color medio es el color de
+  la luz— y se le resta a todo el cuadro;
+- el **umbral** se pide como un múltiplo del color que le queda al tablero en
+  ese cuadro, entre un piso y un techo. Es la misma exigencia en cualquier sala;
+- los cubos se buscan **solo dentro de la cancha**, porque con el umbral más
+  bajo un piso apenas teñido se uniría a un cubo que esté en el borde.
+
+Medido con el ruido de color de una cámara real: de 32 a
+50 cubos bien ubicados sobre 66 casos de luz, sin costo por cuadro.
+
+**El límite, declarado:** lo que el sensor **quemó** no está en la imagen y no
+lo recupera ningún programa. Para eso la exposición se puede elegir al arrancar.
+
 ### Por qué un objeto tapado no desaparece
 
 Cuando un rover pasa por encima de un cubo, la cámara deja de verlo. El sistema
@@ -595,7 +626,7 @@ completo, el mismo que aparece en [`contrato/CONTRATO.md`](contrato/CONTRATO.md)
 
 ```json
 {
-  "v": 2,
+  "v": 3,
   "seq": 4137,
   "ts_ms": 1785012345678,
   "phase": "RUNNING",
@@ -606,9 +637,9 @@ completo, el mismo que aparece en [`contrato/CONTRATO.md`](contrato/CONTRATO.md)
     { "id": 11, "col": 15.265, "row": 28.661, "theta": 40.22, "age_ms": 0 }
   ],
   "cubes": [
-    { "color": "green", "col": 21.480, "row": 3.762, "age_ms": 0   },
-    { "color": "blue",  "col": 15.000, "row": 29.000, "age_ms": 425 },
-    { "color": "red",   "col": 33.071, "row": 25.983, "age_ms": 0   }
+    { "color": "green", "col": 21.480, "row": 3.762,  "age_ms": 0,   "in_depot": true  },
+    { "color": "blue",  "col": 15.000, "row": 29.000, "age_ms": 425, "in_depot": false },
+    { "color": "red",   "col": 33.071, "row": 25.983, "age_ms": 0,   "in_depot": false }
   ],
   "obstacles": [],
   "start":  { "col": 3.75, "row": 21.5 },
@@ -631,6 +662,11 @@ garantizado.
 Mirá también el cubo **azul**: tiene `age_ms: 425` porque el rover 11 está
 justo encima y lo tapa. El cubo **no desapareció** de la lista; sigue ahí con su
 última posición conocida y la edad creciendo. Eso es lo normal, no un error.
+
+Y el **verde** tiene `in_depot: true`: el árbitro ya lo da por entregado. Es el
+mismo veredicto que cuenta los cubos y cierra la ronda, así que el rover no
+tiene que calcular nada: lo lee. Pasa a `true` cuando el cubo lleva un segundo
+dentro de su zona, y vuelve a `false` en el mismo mensaje en que sale.
 
 Las posiciones van en **celdas con decimales** (una celda = 20 mm), con el origen
 en el marcador ID 0, `col` creciendo a la derecha y `row` hacia abajo. Los
@@ -704,10 +740,23 @@ Otras formas de arrancarlo:
 ```bash
 .venv/bin/python -m vision.sistema                # sin ventana: procesa y publica a ciegas
 .venv/bin/python -m vision.sistema --sintetico    # sin cámara, con imágenes generadas
+.venv/bin/python -m vision.sistema --ventana --exposicion -8   # sala con mucha luz
 ```
 
-Al arrancar pregunta **qué cámara** usar y qué perfil de calibración, y después
-queda corriendo. Mientras corre, el operador de la infraestructura oficial puede
+Al arrancar pregunta cuatro cosas —**con qué exposición**, **qué cámara**, qué
+perfil de calibración y **si calibrar los colores**— y después queda corriendo. La exposición es la que cambia
+de una sala a otra: Enter deja la del archivo de configuración, y un número la
+cambia solo para esa corrida. Más negativo es menos luz. Con `--exposicion` no
+pregunta. Sigue siendo exposición **fija**: se elige cuál, no pasa a automática,
+y el sistema informa si la cámara aceptó el valor.
+
+**Calibrar los colores** es para cuando la luz de la sala corre los tonos: con
+los tres cubos dentro de la cancha, el sistema los mira tres segundos y aprende
+el tono de cada uno para esa corrida. Enter lo saltea. Si no está seguro de cuál
+cubo es cuál, se niega y usa los colores del archivo. Con `--calibrar-colores`
+lo hace sin preguntar.
+
+ Mientras corre, el operador de la infraestructura oficial puede
 escribir por teclado `ready`, `stop`, `abort`, `quit`. Estos comandos cambian la
 fase de la ronda. Las otras dos transiciones —el arranque y el cierre por tiempo
 o por reto cumplido— **las hace el reloj del sistema**, no una persona.
@@ -728,6 +777,11 @@ dedujo, dibujado encima**: los cuatro marcadores, la grilla de celdas
 reproyectada, cada rover con su flecha de orientación y cada cubo con su base,
 etiquetados con **la celda exacta que se está publicando**. Lo que se ve ahí es
 lo que reciben los equipos.
+
+Debajo de la cuenta de acopio, el panel muestra **una fila por zona** con la
+hora del cronómetro en que entró su cubo y cuánto hace que está —por ejemplo
+`entró a 1:23 · hace 12.4 s`—. Si el cubo sale, por el motivo que sea, la hora se
+borra y se vuelve a tomar cuando reingrese.
 
 Es la forma más rápida de encontrar un problema: si la grilla dibujada no cae
 sobre la cuadrícula del tablero, la geometría está mal; si un cubo no aparece,
@@ -798,7 +852,7 @@ mirarlas a mano o para encadenarlas.
 ```bash
 .venv/bin/python -m vision.tools.verificar_geometria      # píxeles → celdas
 .venv/bin/python -m vision.tools.verificar_rovers         # posición y ángulo
-.venv/bin/python -m vision.tools.verificar_cubos          # color, base y oclusión
+.venv/bin/python -m vision.tools.verificar_cubos          # color, base, oclusión, luz y calibración
 .venv/bin/python -m vision.tools.verificar_seguimiento    # memoria, oclusión y edad
 .venv/bin/python -m vision.tools.verificar_acopio         # ¿el cubo está en su zona?
 .venv/bin/python -m vision.tools.verificar_config         # la configuración declarada
@@ -845,21 +899,21 @@ va engrosando. Así siempre hay algo que funciona y se puede verificar.
 
 | Pieza | Qué hace |
 |---|---|
-| **El contrato** (`contrato/`) | Formato definido, validador, simulador con patologías reales, cliente de referencia y manual completo. Protocolo **v2**: zonas de acopio rectangulares, salida al centro del lado, y la geometría del acopio compartida con los equipos. |
-| **La regla de acopio** (`vision/reglas/`) | Cuenta los cubos completamente dentro de su zona, con permanencia mínima para que el número no titile. El veredicto sale del contrato, así que la pantalla y el rover dicen lo mismo. El conteo **no se publica**, pero cuando están todos, el contador se lo informa al árbitro y **la ronda se cierra sola** con motivo `reto_cumplido`. |
+| **El contrato** (`contrato/`) | Formato definido, validador, simulador con patologías reales, cliente de referencia y manual completo. Protocolo **v3**: zonas de acopio rectangulares, salida al centro del lado, y **el veredicto de entrega de cada cubo publicado** en `in_depot`. |
+| **La regla de acopio** (`vision/reglas/`) | Cuenta los cubos completamente dentro de su zona, con permanencia mínima para que el número no titile. El árbitro agranda la ventana de aceptación **2,5 mm por lado**, y **publica su veredicto sostenido** en el campo `in_depot` de cada cubo, así que la pantalla y el rover dicen lo mismo sin que el rover calcule nada. Cuando están todos, el contador se lo informa al árbitro y **la ronda se cierra sola** con motivo `reto_cumplido`. Recuerda además **a qué hora del cronómetro entró cada cubo**: la marca se borra si el cubo sale y se toma de nuevo al reingresar, y va a la pantalla y al acta. |
 | **Generador sintético** (`vision/sources/`) | Crea imágenes del tablero con marcadores y rovers, **conociendo la verdad** de lo que dibujó. |
-| **Captura real** (`vision/sources/`) | Lee la webcam USB en un hilo propio que **nunca bloquea**, con exposición, enfoque y balance de blancos fijos —y **verificados por efecto**, porque muchas cámaras aceptan el ajuste y siguen haciendo lo que quieren—. Incluye un menú para elegir qué cámara abrir. |
+| **Captura real** (`vision/sources/`) | Lee la webcam USB en un hilo propio que **nunca bloquea**, con exposición, enfoque y balance de blancos fijos —y **verificados por efecto**, porque muchas cámaras aceptan el ajuste y siguen haciendo lo que quieren—. Incluye un menú para elegir qué cámara abrir, y la **exposición se puede elegir al arrancar** —por pregunta o con `--exposicion`— sin tocar el archivo, para salas con otra luz. |
 | **Geometría de esquinas** (`vision/geometry/`) | Detecta los 4 marcadores y convierte píxeles a celdas. Verificado contra la verdad del generador sintético, con los marcadores de **100 mm** reales: **exacto** con la cámara cenital y **0,44 mm** de error máximo con la cámara inclinada. El centro de cada marcador sale de **cruzar sus diagonales** y no de promediar sus esquinas (ver más abajo). |
 | **Calibración de distorsión** (`vision/geometry/`) | Corrige la curvatura del lente. Hace falta en **toda** cámara, también en las que no son gran angular: la C270 oficial mide 47,1° × 27,6° y distorsiona igual. **Dos cámaras ya calibradas y verificadas**: ArgomTech CAM40 (1920×1080, 0,314 px) y Logitech C270 (1280×720, 0,206 px). |
 | **Perfiles por cámara** (`vision/geometry/`) | Cada aparato guarda su propia calibración, y el sistema **avisa cuando el perfil no le corresponde** a la cámara conectada, en vez de corregir mal en silencio. |
 | **Detección de rovers** (`vision/detectors/`) | Encuentra los rovers por su marcador y deduce su **celda y su ángulo**, calculados en celdas y no en píxeles porque la perspectiva no conserva los ángulos. Verificado contra la verdad del generador: **0,8 mm** de error de posición y **1,3°** de orientación con la cámara inclinada, sobre 36 rovers repartidos. |
-| **Detección de cubos** (`vision/detectors/`) | Encuentra los cubos por color —croma en Lab para separar, matiz para clasificar— y los ubica por su **base**, ajustando el modelo del cubo al contorno visible. **1,05 mm** con el cubo despejado y **4,88 mm** con un rover empujándolo y tapándole el 22 %. |
+| **Detección de cubos** (`vision/detectors/`) | Encuentra los cubos por color —croma en Lab para separar, matiz para clasificar— y los ubica por su **base**, ajustando el modelo del cubo al contorno visible. **1,05 mm** con el cubo despejado y **4,88 mm** con un rover empujándolo y tapándole el 22 %. El umbral de color **se adapta a la luz de cada cuadro**: sale del croma del propio tablero, después de restar el tinte de la luz. Verificado en siete casos de iluminación. Los matices de referencia se pueden **aprender de los cubos al arrancar**, con la luz de ese momento. |
 | **Pose de cámara y paralaje** (`vision/geometry/`) | La pose sale de los mismos cuatro marcadores, sin declarar nada. Con ella, el corrimiento del marcador del rover baja de **27 mm a 1,0 mm**. |
 | **Seguimiento** (`vision/tracking/`) | Memoria entre cuadros: un objeto tapado conserva su posición y su edad crece, en vez de desaparecer. Acá **no hay problema de asociación**, porque cada objeto trae su identidad. |
 | **Publicación** (`vision/publish/`) | TCP/NDJSON en el 2026, con reloj propio y último-valor-gana. El transporte lo comparte con el simulador. |
 | **El sistema completo** (`vision/sistema.py`) | El programa que se enciende: elige la fuente, corre el bucle, falla abierto y arbitra las fases. |
 | **La vista en vivo** (`vision/vista.py`) | Ventana con la imagen y lo detectado encima, etiquetado con la celda publicada. Es un consumidor: solo lee y no le cuesta nada al procesamiento. |
-| **Herramientas de puesta a punto** (`vision/tools/`) | Once: diagnóstico de cámara, generación de los PDF, calibración, medición de precisión, medición de desfases, revisión de la configuración, y cinco verificaciones contra verdad conocida —geometría, rovers, cubos, seguimiento y acopio—. |
+| **Herramientas de puesta a punto** (`vision/tools/`) | Quince: diagnóstico de cámara, de cubos y de marcadores inventados, generación de los PDF, calibración, medición de precisión, medición de desfases, revisión de la configuración y de los ejemplos del contrato, y seis verificaciones contra verdad conocida —geometría, rovers, cubos, seguimiento, acopio y ronda—. |
 
 **Precisión medida sobre hardware real.** El criterio era **error máximo por
 debajo de 10 mm** —un cubo mide 60 mm, así que 10 mm mantiene el objetivo dentro

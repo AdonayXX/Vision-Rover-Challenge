@@ -92,11 +92,12 @@ Vision-Rover-Challenge/          # raíz del repositorio (fork)
 - **Puerto: `2026`.** Es el puerto oficial. El simulador del contrato y el sistema
   real publican en el **mismo** puerto, para que un equipo pase del simulador a la
   cancha sin tocar su código.
-- **Versión de protocolo: `v2`.** Viaja en el campo `v` de cada mensaje.
+- **Versión de protocolo: `v3`.** Viaja en el campo `v` de cada mensaje.
   Un cliente que ve una versión que no conoce **descarta el mensaje**, no adivina.
   La v2 (sep-2026) movió las zonas de acopio y la salida, y agregó los campos
-  raíz `depot_size` y `cube_side`. El detalle y la nota de migración están en
-  `contrato/CONTRATO.md`.
+  raíz `depot_size` y `cube_side`. La v3 (oct-2026) agregó a cada cubo
+  **`in_depot`**, el veredicto del árbitro. El detalle y las notas de migración
+  están en `contrato/CONTRATO.md`.
 - **El último valor gana:** buffer de **un mensaje por cliente**; si no drena, se pisa.
   **Nunca encolar telemetría vieja.**
 - Cada mensaje lleva **número de secuencia** y **marca de tiempo de captura**.
@@ -203,9 +204,8 @@ documento.** De ahí que no se escriba acta de una ronda sin geometría.
     esa misma distancia del suyo: todos los lugares fijos, al mismo margen.
   - El fondo pasó de 100 a 150 mm en sep-2026, por decisión de diseño del reto:
     con 100 la ventana de aceptación quedaba de 15 mm y un cubo que entraba
-    girado podía quedar afuera por una rendija. **El criterio conservador no se
-    toca; se agranda la zona.** Cambiar estas medidas **no sube la versión del
-    protocolo**: son datos que viajan en el mensaje.
+    girado podía quedar afuera por una rendija. Cambiar estas medidas **no sube
+    la versión del protocolo**: son datos que viajan en el mensaje.
   - **La orientación NO se declara: se deduce** del borde más cercano al centro.
     Un segundo dato declarado podría contradecir al primero.
   - El tamaño es **uno solo para las tres** y viaja una vez en el mensaje
@@ -214,8 +214,19 @@ documento.** De ahí que no se escriba acta de una ronda sin geometría.
     de cubos vive de que el tablero sea acromático, y tres rectángulos de color
     pegados serían tres manchas permanentes que segmentar.
   - Un cubo está entregado cuando queda **completamente dentro**: su centro a
-    **media diagonal del cubo** de cada borde. El criterio vive en el contrato,
-    para que el veredicto de la pantalla y el del rover sean el mismo código.
+    **media diagonal del cubo** de cada borde. La geometría vive en el contrato.
+  - **El árbitro agranda esa ventana una tolerancia chica por lado**
+    (`conteo_acopio.tolerancia_mm`, 2,5 mm), que **no viaja en el mensaje**. El
+    margen de media diagonal supone el peor giro del cubo, y un cubo bien puesto
+    podía quedar afuera por el error de ubicación.
+  - **El veredicto se publica, no se recalcula.** Cada cubo lleva `in_depot`:
+    el veredicto **sostenido** del árbitro —adentro, y con la permanencia mínima
+    cumplida—. Antes la regla era que el rover y la pantalla hicieran la misma
+    cuenta; con una tolerancia que el rover no conoce, dos cuentas ya no pueden
+    coincidir. Hay **una sola voz** y viaja en el mensaje. Demora solo entrar:
+    al salir, cae en el mismo mensaje.
+  - El simulador hace de árbitro para quien desarrolla sin cancha: su tolerancia
+    y su permanencia **tienen que ser las mismas** que las de la visión.
 - **La salida es UN punto**, compartido por los dos robots, al **centro del lado
   que va del marcador 0 al 3**.
 - **Lugares fijos** (salida y zonas de acopio) van en **listas separadas** de los cubos,

@@ -6,8 +6,9 @@ Toma el **estado del mundo** —dónde está cada cubo— y le aplica la regla d
 reglamento: un cubo está entregado cuando queda **completamente dentro** de la
 zona de acopio de su color. Devuelve la cuenta y el detalle por color.
 
-**No dibuja**: eso es de `vista.py`. **No publica**: el conteo no viaja en el
-mensaje. **No cierra la ronda**: cuando están los tres, se lo informa al árbitro
+**No dibuja**: eso es de `vista.py`. **No publica**: lo que viaja en el mensaje
+desde el protocolo v3 es el veredicto por cubo, `in_depot`, y lo pone el bucle
+del sistema con lo que este contador le devuelve. La cuenta total no viaja. **No cierra la ronda**: cuando están los tres, se lo informa al árbitro
 —que es quien decide y quien lleva el cronómetro— y él cierra. Acá se cuenta y
 se dice desde cuándo; la ronda la termina una sola voz.
 
@@ -44,6 +45,17 @@ estaba adentro al arrancar no entró a ninguna hora de esa ronda, y uno que entr
 en `IDLE` o `READY` tampoco: en esos casos la marca queda vacía. Y al prepararse
 una ronda nueva, las marcas de la anterior se vacían, para que un cubo que quedó
 puesto no muestre la hora de la vuelta pasada.
+
+La ventana del árbitro es un poco más grande que la conservadora
+---------------------------------------------------------------
+La geometría sale de `geometrias_arbitro`, que agranda la ventana de aceptación
+`conteo_acopio.tolerancia_mm` por cada lado. El margen conservador de media
+diagonal supone el peor giro del cubo, y la ubicación tiene un error del orden
+del milímetro: un cubo bien puesto podía quedar afuera por un pelo.
+
+Esa tolerancia no viaja en el mensaje, y por eso el veredicto sí: si el rover
+siguiera haciendo la cuenta conservadora y el árbitro la suya, serían dos
+respuestas distintas a la misma pregunta. Se publica una sola, la sostenida.
 
 El veredicto no se calcula acá
 ------------------------------
@@ -89,10 +101,10 @@ import time
 from dataclasses import dataclass
 
 try:  # como paquete
-    from ..configuracion import ConfigVision, geometrias_deposito
+    from ..configuracion import ConfigVision, geometrias_arbitro
     from ..mundo import EstadoMundo
 except ImportError:  # como script suelto
-    from vision.configuracion import ConfigVision, geometrias_deposito  # type: ignore[no-redef]
+    from vision.configuracion import ConfigVision, geometrias_arbitro  # type: ignore[no-redef]
     from vision.mundo import EstadoMundo  # type: ignore[no-redef]
 
 # Importar `configuracion` deja `contrato/` en el camino de búsqueda, así que
@@ -173,7 +185,7 @@ class ContadorAcopio:
         # entre cuadros, y rehacerlas veinte veces por segundo sería trabajo
         # perdido. Si la configuración fuera incoherente, esto lanza acá, al
         # construir, y no en medio de la ronda.
-        self._geometrias = geometrias_deposito(cfg)
+        self._geometrias = geometrias_arbitro(cfg)
         self._permanencia_ms = cfg.conteo_acopio.permanencia_minima_ms
         #: Desde cuándo cada color está adentro sin interrupción, en tiempo de
         #: captura. Se borra la entrada apenas sale: la permanencia se vuelve a
