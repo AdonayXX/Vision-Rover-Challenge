@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rover BLE · Vision Rover Challenge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --papel:#EDF1F0; --cuadro:#D5DEDD; --superficie:#F8FAF9;
+  --tinta:#15283A; --medio:#566A78; --linea:#B9C7CA;
+  --cinta:#F5B700; --pare:#D2283A; --ok:#178A5C; --giro:#7A3FBF;
+  --texto:"Barlow",system-ui,"Segoe UI",Roboto,sans-serif;
+  --titulo:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --papel:#0F1B23; --cuadro:#182832; --superficie:#14232D;
+    --tinta:#E4ECEE; --medio:#8EA3AE; --linea:#2C4350;
+    --cinta:#FFC52E; --pare:#F04A5A; --ok:#3CC48A; --giro:#B48CF0;
+  }
+}
+:root[data-theme="dark"]{
+  --papel:#0F1B23; --cuadro:#182832; --superficie:#14232D;
+  --tinta:#E4ECEE; --medio:#8EA3AE; --linea:#2C4350;
+  --cinta:#FFC52E; --pare:#F04A5A; --ok:#3CC48A; --giro:#B48CF0;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0; color:var(--tinta); font-family:var(--texto); font-size:16px; line-height:1.45;
+  background-color:var(--papel);
+  /* La cuadrícula de 2 cm de la arena */
+  background-image:
+    linear-gradient(var(--cuadro) 1px,transparent 1px),
+    linear-gradient(90deg,var(--cuadro) 1px,transparent 1px);
+  background-size:24px 24px;
+}
+.marco{max-width:1120px;margin:0 auto;padding:18px 16px 120px}
+
+/* ---------- Encabezado ---------- */
+header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;margin-bottom:18px}
+h1{font-family:var(--titulo);font-weight:700;font-size:clamp(30px,5vw,44px);line-height:1;margin:0;letter-spacing:-.01em}
+h1 small{display:block;font-family:var(--texto);font-weight:500;font-size:15px;color:var(--medio);letter-spacing:0;margin-top:4px}
+.conexion{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.estado{display:flex;align-items:center;gap:8px;font-weight:500;color:var(--medio)}
+.punto{width:11px;height:11px;border-radius:50%;background:var(--linea);outline:3px solid transparent}
+.punto.vivo{background:var(--ok);outline-color:color-mix(in srgb,var(--ok) 25%,transparent)}
+.punto.demo{background:var(--cinta)}
+
+button,select,input,textarea{font:inherit;color:inherit}
+button{
+  cursor:pointer;border:1.5px solid var(--tinta);background:var(--superficie);
+  border-radius:6px;padding:9px 14px;font-weight:600;
+}
+button:hover:not(:disabled){background:var(--papel)}
+button:disabled{opacity:.4;cursor:not-allowed}
+:focus-visible{outline:3px solid var(--cinta);outline-offset:2px}
+.primario{background:var(--tinta);color:var(--superficie)}
+.primario:hover:not(:disabled){background:var(--tinta);filter:brightness(1.2)}
+
+.aviso{
+  display:none;border-left:5px solid var(--pare);background:var(--superficie);
+  padding:12px 14px;margin-bottom:16px;border-radius:0 6px 6px 0;
+}
+.aviso.ver{display:block}
+.aviso code{font-size:14px}
+
+/* ---------- Diseño ---------- */
+.rejilla{display:grid;grid-template-columns:minmax(300px,440px) 1fr;gap:18px;align-items:start}
+@media (max-width:820px){.rejilla{grid-template-columns:1fr}.brujula{position:static}#btn-stop{width:78px;height:78px;font-size:22px}}
+section{background:var(--superficie);border:1.5px solid var(--linea);border-radius:10px;padding:16px}
+h2{font-family:var(--titulo);font-weight:600;font-size:22px;margin:0 0 4px}
+.ayuda{color:var(--medio);font-size:14px;margin:0 0 12px}
+
+/* ---------- Brújula ---------- */
+.brujula{position:sticky;top:calc(12px + env(safe-area-inset-top,0px))}
+#dial{width:100%;height:auto;display:block;touch-action:none;cursor:crosshair;user-select:none}
+#dial .anillo{fill:none;stroke:var(--tinta);stroke-width:2}
+#dial .marca{stroke:var(--medio);stroke-width:1}
+#dial .marca.mayor{stroke:var(--tinta);stroke-width:2.5}
+#dial text{fill:var(--medio);font-family:var(--titulo);font-size:17px;font-weight:600;text-anchor:middle;dominant-baseline:central}
+#dial .cero{fill:var(--tinta)}
+#arco{fill:none;stroke:var(--giro);stroke-width:10;stroke-linecap:round;opacity:.55}
+#marca-ref{fill:var(--giro)}
+#apuntar{stroke:var(--cinta);stroke-width:3;stroke-dasharray:6 6;display:none}
+#apuntar-txt{fill:var(--tinta);font-size:20px;display:none}
+.rover-cuerpo{fill:var(--cinta);stroke:var(--tinta);stroke-width:3}
+.rover-rueda{fill:var(--tinta)}
+.rover-frente{fill:var(--tinta)}
+
+.lecturas{display:grid;grid-template-columns:1fr 1fr;margin:8px 0 0;border-top:1.5px solid var(--linea)}
+.lecturas div{padding:10px 8px 8px}
+.lecturas div:nth-child(even){border-left:1px solid var(--linea)}
+.lecturas div:nth-child(n+3){border-top:1px solid var(--linea)}
+.lecturas dt{font-size:13px;color:var(--medio)}
+.lecturas dd{margin:0;font-family:var(--titulo);font-weight:700;font-size:28px;font-variant-numeric:tabular-nums;line-height:1.1}
+#l-rumbo{font-size:40px}
+#l-ref{color:var(--giro)}
+
+/* ---------- Controles ---------- */
+.columna{display:grid;gap:18px}
+.ajuste{display:grid;grid-template-columns:7.5em 1fr 3.6em;align-items:center;gap:10px;margin-bottom:8px}
+.ajuste label{font-weight:500}
+.ajuste output{font-family:var(--titulo);font-weight:700;font-size:20px;text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--tinta)}
+.botonera{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.botonera button{min-width:64px}
+.giro-btn{border-color:var(--giro);color:var(--giro)}
+.dividir{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media (max-width:560px){.dividir{grid-template-columns:1fr}.lecturas dd{font-size:24px}#l-rumbo{font-size:34px}}
+
+/* ---------- Joystick ---------- */
+#pad{
+  position:relative;width:min(220px,100%);aspect-ratio:1;margin:6px auto 0;border-radius:50%;
+  border:2px dashed var(--linea);touch-action:none;background:
+    radial-gradient(circle,var(--papel) 0 30%,transparent 31%);
+}
+#pad::before,#pad::after{content:"";position:absolute;background:var(--linea)}
+#pad::before{left:50%;top:8%;bottom:8%;width:1px}
+#pad::after{top:50%;left:8%;right:8%;height:1px}
+#perilla{
+  position:absolute;width:30%;height:30%;left:35%;top:35%;border-radius:50%;
+  background:var(--tinta);z-index:1;transition:transform .12s;
+}
+#pad.activo #perilla{transition:none;background:var(--ok)}
+.teclas{text-align:center;color:var(--medio);font-size:13px;margin:8px 0 0}
+
+/* ---------- Secuencia ---------- */
+textarea{
+  width:100%;min-height:170px;resize:vertical;border:1.5px solid var(--linea);border-radius:6px;
+  padding:10px;background:var(--papel);font-family:ui-monospace,Consolas,monospace;font-size:14px;line-height:1.6;
+}
+select,input[type=number],input[type=text]{
+  border:1.5px solid var(--linea);border-radius:6px;padding:8px 10px;background:var(--papel);
+}
+.fila{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.fila input[type=text]{flex:1;min-width:150px}
+.fila input[type=number]{width:7em}
+details summary{cursor:pointer;font-family:var(--titulo);font-weight:600;font-size:22px}
+details[open] summary{margin-bottom:8px}
+
+/* ---------- Registro ---------- */
+.registro{
+  margin-top:18px;background:var(--superficie);border:1.5px solid var(--linea);border-radius:10px;padding:12px 16px;
+}
+.registro-cab{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.registro-cab h2{margin:0}
+.registro-cab label{display:flex;gap:6px;align-items:center;color:var(--medio);font-size:14px}
+#log{
+  height:170px;overflow:auto;margin-top:8px;font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.6;
+  overflow-wrap:anywhere;
+}
+#log .tx{color:var(--medio)}
+#log .rx{color:var(--tinta)}
+#log .falla{color:var(--pare);font-weight:600}
+#log .nota{color:var(--giro)}
+#log time{color:var(--medio);margin-right:8px}
+
+/* ---------- STOP ---------- */
+#btn-stop{
+  position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:10;
+  width:92px;height:92px;border-radius:50%;border:4px solid var(--superficie);
+  background:var(--pare);color:#fff;font-family:var(--titulo);font-size:26px;font-weight:700;
+  box-shadow:0 0 0 3px var(--pare);
+}
+#btn-stop:hover{background:var(--pare);filter:brightness(1.1)}
+#btn-stop:active{transform:scale(.95)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="marco">
+
+<header>
+  <h1>Rover BLE<small>Comandos de movimiento con IMU · CenfoBot</small></h1>
+  <div class="conexion">
+    <span class="estado"><span class="punto" id="punto"></span><span id="estado">Sin conexión</span></span>
+    <button id="btn-demo" type="button">Probar sin rover</button>
+    <button id="btn-conectar" class="primario" type="button">Conectar rover</button>
+  </div>
+</header>
+
+<div class="aviso" id="sin-bt">
+  <strong>Este navegador no permite Bluetooth desde esta página.</strong>
+  Usa Chrome o Edge (escritorio o Android) y abre la app por <code>https://</code> o por
+  <code>http://localhost</code>: <code>python3 -m http.server 8000</code> y luego
+  <code>http://localhost:8000/rover_ble.html</code>. Abrir el archivo con doble clic no sirve.
+  En iPhone, Safari no tiene Web Bluetooth; la app Bluefy sí.
+</div>
+
+<div class="rejilla">
+
+  <!-- ===== Brújula ===== -->
+  <section class="brujula" aria-labelledby="t-rumbo">
+    <h2 id="t-rumbo">Rumbo</h2>
+    <p class="ayuda">Toca el dial para orientar el rover hacia ese ángulo. Positivo es a la derecha.</p>
+    <svg id="dial" viewBox="0 0 400 400" role="img" aria-label="Brújula con el rumbo del rover">
+      <g id="marcas"></g>
+      <circle class="anillo" cx="200" cy="200" r="150"/>
+      <path id="arco" d=""/>
+      <polygon id="marca-ref" points="0,0"/>
+      <line id="apuntar" x1="200" y1="200" x2="200" y2="60"/>
+      <text id="apuntar-txt" x="200" y="200"></text>
+      <g id="rover">
+        <rect class="rover-rueda" x="-52" y="-34" width="14" height="44" rx="4"/>
+        <rect class="rover-rueda" x="38" y="-34" width="14" height="44" rx="4"/>
+        <rect class="rover-cuerpo" x="-40" y="-50" width="80" height="96" rx="12"/>
+        <polygon class="rover-frente" points="0,-40 -16,-14 16,-14"/>
+      </g>
+    </svg>
+    <dl class="lecturas">
+      <div><dt>Rumbo</dt><dd id="l-rumbo">—</dd></div>
+      <div><dt>Referencia</dt><dd id="l-ref">—</dd></div>
+      <div><dt>Estado</dt><dd id="l-modo">—</dd></div>
+      <div><dt>En cola</dt><dd id="l-cola">—</dd></div>
+    </dl>
+  </section>
+
+  <div class="columna">
+
+    <!-- ===== Movimientos precisos ===== -->
+    <section aria-labelledby="t-precisos">
+      <h2 id="t-precisos">Movimientos precisos</h2>
+      <p class="ayuda">El rover mantiene el rumbo con el giroscopio. Los giros se suman a la referencia, así que cuatro de 90° cierran un cuadrado.</p>
+      <div class="ajuste"><label for="r-vel">Velocidad</label><input id="r-vel" type="range" min="0.2" max="1" step="0.05" value="0.5"><output id="o-vel">0.5</output></div>
+      <div class="ajuste"><label for="r-dur">Duración</label><input id="r-dur" type="range" min="0.2" max="5" step="0.1" value="1"><output id="o-dur">1 s</output></div>
+      <div class="ajuste"><label for="r-tvel">Vel. de giro</label><input id="r-tvel" type="range" min="0.2" max="0.7" step="0.05" value="0.35"><output id="o-tvel">0.35</output></div>
+      <div class="botonera">
+        <button type="button" data-mov="FWD" disabled>Avanzar</button>
+        <button type="button" data-mov="BACK" disabled>Retroceder</button>
+      </div>
+      <div class="botonera">
+        <button type="button" class="giro-btn" data-giro="-90" disabled>−90°</button>
+        <button type="button" class="giro-btn" data-giro="-45" disabled>−45°</button>
+        <button type="button" class="giro-btn" data-giro="-15" disabled>−15°</button>
+        <button type="button" class="giro-btn" data-giro="15" disabled>+15°</button>
+        <button type="button" class="giro-btn" data-giro="45" disabled>+45°</button>
+        <button type="button" class="giro-btn" data-giro="90" disabled>+90°</button>
+        <button type="button" class="giro-btn" data-giro="180" disabled>180°</button>
+      </div>
+    </section>
+
+    <div class="dividir">
+      <!-- ===== Manual ===== -->
+      <section aria-labelledby="t-manual">
+        <h2 id="t-manual">Manejo manual</h2>
+        <p class="ayuda">Mantén presionado y arrastra. Al soltar, el rover se detiene.</p>
+        <div id="pad" aria-label="Joystick"><div id="perilla"></div></div>
+        <p class="teclas">Flechas o WASD para manejar, espacio para detener</p>
+      </section>
+
+      <!-- ===== Secuencia ===== -->
+      <section aria-labelledby="t-sec">
+        <h2 id="t-sec">Secuencia</h2>
+        <p class="ayuda">Una orden por línea. El rover las ejecuta en orden.</p>
+        <textarea id="secuencia" spellcheck="false" aria-labelledby="t-sec"></textarea>
+        <div class="fila">
+          <select id="presets" aria-label="Secuencias de ejemplo">
+            <option value="cuadrado">Cuadrado</option>
+            <option value="idavuelta">Ida y vuelta</option>
+            <option value="zigzag">Zigzag</option>
+            <option value="giro360">Prueba de 360°</option>
+          </select>
+          <button type="button" id="btn-sec" class="primario" disabled>Ejecutar</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===== Ajustes ===== -->
+    <section>
+      <details>
+        <summary>Calibración y ajustes</summary>
+        <p class="ayuda">Calibra con el rover quieto sobre la mesa. "Fijar cero" toma la orientación actual como 0°.</p>
+        <div class="botonera">
+          <button type="button" data-cmd="CAL" disabled>Calibrar giroscopio</button>
+          <button type="button" data-cmd="ZERO" disabled>Fijar cero</button>
+          <button type="button" data-cmd="STAT" disabled>Ver parámetros</button>
+          <button type="button" data-cmd="PING" disabled>Ping</button>
+        </div>
+        <div class="fila">
+          <select id="set-clave" aria-label="Parámetro">
+            <option value="KP">KP · avance</option><option value="KI">KI · avance</option><option value="KD">KD · avance</option>
+            <option value="MAXC">MAXC · corrección máx.</option><option value="RAMPA">RAMPA · arranque (s)</option>
+            <option value="TMIN">TMIN · giro mínimo</option><option value="TLENTO">TLENTO · frenado (°)</option>
+            <option value="TOL">TOL · tolerancia (°)</option><option value="RG">RG · ganancia motor 2</option>
+            <option value="GS">GS · escala del giroscopio</option>
+          </select>
+          <input id="set-valor" type="number" step="any" placeholder="valor" aria-label="Valor">
+          <button type="button" id="btn-set" disabled>Aplicar</button>
+        </div>
+        <div class="fila">
+          <input id="cmd-libre" type="text" placeholder="Orden libre, p. ej. HEADING|0|0.5|3" aria-label="Orden libre">
+          <button type="button" id="btn-libre" disabled>Enviar</button>
+        </div>
+      </details>
+    </section>
+  </div>
+</div>
+
+<div class="registro">
+  <div class="registro-cab">
+    <h2>Registro</h2>
+    <label><input type="checkbox" id="crudo"> Datos crudos</label>
+    <button type="button" id="btn-limpiar">Limpiar</button>
+  </div>
+  <div id="log" role="log" aria-live="polite"></div>
+</div>
+
+</div>
+
+<button id="btn-stop" type="button" aria-label="Detener el rover">STOP</button>
+
+<script>
+"use strict";
+// ======================================================================
+// Protocolo (igual a code.py)
+// ======================================================================
+const UART = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const PREFIJO = "Rover";
+const MODOS = { I:"Quieto", M:"Manual", T:"Girando", D:"Avanzando", W:"Esperando", C:"Calibrando" };
+const ORDENES = ["STOP","MOTOR","PING","STAT","SET","FWD","BACK","TURN","FACE","HEADING","WAIT","ZERO","CAL"];
+
+const PRESETS = {
+  cuadrado: "# Cuadrado: avanzar y girar 90° cuatro veces\nFWD|1.5\nTURN|90\nFWD|1.5\nTURN|90\nFWD|1.5\nTURN|90\nFWD|1.5\nTURN|90",
+  idavuelta: "# Ida y vuelta\nFWD|2\nTURN|180\nFWD|2\nTURN|180",
+  zigzag: "# Zigzag\nTURN|45\nFWD|1\nTURN|-90\nFWD|1\nTURN|90\nFWD|1\nTURN|-45",
+  giro360: "# Calibrar escala: marca el frente, ejecuta,\n# y compara. Ajusta GS si no vuelve exacto.\nZERO\nWAIT|1\nTURN|360|0.3\nWAIT|1\nSTAT"
+};
+
+// ======================================================================
+// Estado
+// ======================================================================
+const $ = s => document.querySelector(s);
+const enc = new TextEncoder(), dec = new TextDecoder();
+let dispositivo = null, carEsc = null, conectado = false, demo = false, sim = null;
+let bufferRx = "", colaTx = [], transmitiendo = false;
+let ultimoDato = 0, avisoSilencio = false;
+let rumbo = 0, ref = 0, modo = "I";
+
+// ======================================================================
+// Registro
+// ======================================================================
+function log(texto, clase = "") {
+  const caja = $("#log");
+  const d = document.createElement("div");
+  if (clase) d.className = clase;
+  const t = document.createElement("time");
+  t.textContent = new Date().toLocaleTimeString("es-CR", { hour12:false });
+  d.append(t, texto);
+  caja.append(d);
+  while (caja.childElementCount > 400) caja.firstChild.remove();
+  caja.scrollTop = caja.scrollHeight;
+}
+
+// ======================================================================
+// Conexión BLE
+// ======================================================================
+async function conectar() {
+  if (conectado) { desconectar(); return; }
+  try {
+    log("Buscando rovers…", "nota");
+    dispositivo = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [UART] }, { namePrefix: PREFIJO }],
+      optionalServices: [UART]
+    });
+    dispositivo.addEventListener("gattserverdisconnected", alDesconectar);
+    log("Conectando a " + dispositivo.name, "nota");
+    const servidor = await dispositivo.gatt.connect();
+    const servicio = await servidor.getPrimaryService(UART);
+    let suscritas = 0; carEsc = null;
+    // Recorrer las características en lugar de asumir UUID (regla del skill)
+    for (const c of await servicio.getCharacteristics()) {
+      const p = c.properties;
+      log(`Característica …${c.uuid.slice(4, 8)}: ${p.notify ? "notify " : ""}${p.write ? "write " : ""}${p.writeWithoutResponse ? "writeNR" : ""}`);
+      if (p.notify) {
+        await c.startNotifications();
+        c.addEventListener("characteristicvaluechanged", alRecibir);
+        suscritas++;
+      }
+      if ((p.write || p.writeWithoutResponse) && !carEsc) carEsc = c;
+    }
+    log(`Suscrito a ${suscritas}, escritura ${carEsc ? "lista" : "no encontrada"}`, suscritas ? "nota" : "falla");
+    if (!carEsc) throw new Error("El rover no expone una característica de escritura");
+    conectado = true; demo = false;
+    ultimoDato = performance.now(); avisoSilencio = false;
+    actualizarEstado(dispositivo.name);
+    enviar("PING");
+  } catch (e) {
+    if (e.name !== "NotFoundError") log("Error: " + e.message, "falla");
+    else log("Búsqueda cancelada");
+  }
+}
+
+function desconectar() {
+  if (demo) { sim.parar(); sim = null; demo = false; conectado = false; actualizarEstado(); log("Demo terminada", "nota"); return; }
+  enviar("STOP");
+  setTimeout(() => dispositivo?.gatt?.connected && dispositivo.gatt.disconnect(), 150);
+}
+
+function alDesconectar() {
+  conectado = false; carEsc = null; colaTx = [];
+  actualizarEstado();
+  log("Rover desconectado. Se detuvo por seguridad.", "falla");
+}
+
+function actualizarEstado(nombre) {
+  const p = $("#punto");
+  p.className = "punto" + (conectado ? (demo ? " demo" : " vivo") : "");
+  $("#estado").textContent = conectado ? (demo ? "Rover simulado" : "Conectado a " + nombre) : "Sin conexión";
+  $("#btn-conectar").textContent = conectado && !demo ? "Desconectar" : "Conectar rover";
+  $("#btn-demo").textContent = demo ? "Terminar demo" : "Probar sin rover";
+  $("#btn-conectar").disabled = demo || !navigator.bluetooth;
+  $("#btn-demo").disabled = conectado && !demo;
+  document.querySelectorAll("[data-mov],[data-giro],[data-cmd],#btn-sec,#btn-set,#btn-libre")
+    .forEach(b => b.disabled = !conectado);
+  if (!conectado) { $("#l-modo").textContent = "—"; $("#l-cola").textContent = "—"; }
+}
+
+// ======================================================================
+// Transmisión: cola serializada, trozos de 20 bytes
+// ======================================================================
+function enviar(linea) {
+  linea = linea.trim();
+  if (!linea) return;
+  if (!conectado) { log("Sin conexión: " + linea, "falla"); return; }
+  if (linea === "STOP") {
+    colaTx = [];                                   // STOP salta la fila
+  } else if (linea.startsWith("MOTOR")) {
+    colaTx = colaTx.filter(l => !l.startsWith("MOTOR")); // solo el último MOTOR importa
+  }
+  colaTx.push(linea);
+  bombear();
+}
+
+async function bombear() {
+  if (transmitiendo) return;
+  transmitiendo = true;
+  try {
+    while (colaTx.length && conectado) {
+      const linea = colaTx.shift();
+      if (!linea.startsWith("MOTOR") || $("#crudo").checked) log("→ " + linea, "tx");
+      if (demo) { sim.recibir(linea); continue; }
+      const datos = enc.encode(linea + "\n");
+      for (let i = 0; i < datos.length; i += 20) {
+        const trozo = datos.slice(i, i + 20);
+        if (carEsc.properties.write && carEsc.writeValueWithResponse) await carEsc.writeValueWithResponse(trozo);
+        else if (carEsc.writeValueWithoutResponse) await carEsc.writeValueWithoutResponse(trozo);
+        else await carEsc.writeValue(trozo);
+      }
+      // El buffer de recepción del rover es de 64 bytes: dar aire entre líneas.
+      await new Promise(r => setTimeout(r, 35));
+    }
+  } catch (e) {
+    log("Error al enviar: " + e.message, "falla");
+  } finally {
+    transmitiendo = false;
+  }
+}
+
+// ======================================================================
+// Recepción
+// ======================================================================
+function alRecibir(ev) {
+  const texto = dec.decode(ev.target.value);
+  if ($("#crudo").checked) log("⇠ " + JSON.stringify(texto), "rx");
+  recibirTexto(texto);
+}
+
+function recibirTexto(texto) {
+  ultimoDato = performance.now();
+  bufferRx += texto;
+  let corte;
+  while ((corte = bufferRx.indexOf("\n")) >= 0) {
+    procesarLinea(bufferRx.slice(0, corte).trim());
+    bufferRx = bufferRx.slice(corte + 1);
+  }
+  if (bufferRx.length > 200) bufferRx = "";
+}
+
+function procesarLinea(l) {
+  if (!l) return;
+  if (l.startsWith("H,")) {
+    const [, h, m, q] = l.split(",");
+    rumbo = parseFloat(h); modo = m;
+    $("#l-rumbo").textContent = formatoAng(rumbo);
+    $("#l-modo").textContent = MODOS[m] || m;
+    $("#l-cola").textContent = q;
+    dibujarRover();
+  } else if (l.startsWith("R,")) {
+    ref = parseFloat(l.slice(2));
+    $("#l-ref").textContent = formatoAng(ref);
+    dibujarRover();
+  } else if (l.startsWith("#")) {
+    const msg = l.slice(1).trim();
+    log("← " + msg, msg.startsWith("err") ? "falla" : "rx");
+  } else {
+    log("← " + l, "rx");
+  }
+}
+
+// Aviso si conectado pero no llega nada (ver tabla de depuración del skill)
+setInterval(() => {
+  if (conectado && !demo && !avisoSilencio && performance.now() - ultimoDato > 4000) {
+    avisoSilencio = true;
+    log("Conectado pero sin datos hace 4 s. Revisa: ¿parpadea el LED del rover? ¿el nombre en el selector es el del code.py que acabas de copiar?", "falla");
+  }
+}, 1000);
+
+// ======================================================================
+// Brújula
+// ======================================================================
+const CX = 200, CY = 200, R = 150;
+const polar = (a, r) => [CX + r * Math.sin(a * Math.PI / 180), CY - r * Math.cos(a * Math.PI / 180)];
+const normal = a => { a = ((a + 180) % 360 + 360) % 360 - 180; return a === -180 ? 180 : a; };
+const formatoAng = a => (a > 0 ? "+" : "") + a.toFixed(1) + "°";
+
+(function dibujarMarcas() {
+  const g = $("#marcas"); let s = "";
+  for (let a = 0; a < 360; a += 5) {
+    const mayor = a % 45 === 0, medio = a % 15 === 0;
+    const [x1, y1] = polar(a, R), [x2, y2] = polar(a, R - (mayor ? 18 : medio ? 11 : 6));
+    s += `<line class="marca${mayor ? " mayor" : ""}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+    if (mayor) {
+      const [tx, ty] = polar(a, R + 22), v = normal(a);
+      s += `<text class="${v === 0 ? "cero" : ""}" x="${tx}" y="${ty}">${v > 0 && v !== 180 ? "+" + v : v}</text>`;
+    }
+  }
+  g.innerHTML = s;
+})();
+
+function dibujarRover() {
+  $("#rover").setAttribute("transform", `translate(${CX} ${CY}) rotate(${rumbo})`);
+  const [a, b, c] = [polar(ref, R + 2), polar(ref - 5, R + 14), polar(ref + 5, R + 14)];
+  $("#marca-ref").setAttribute("points", `${a} ${b} ${c}`);
+  const dif = normal(ref - rumbo);
+  if (Math.abs(dif) < 0.5 || !conectado) { $("#arco").setAttribute("d", ""); return; }
+  const [x1, y1] = polar(rumbo, R - 28), [x2, y2] = polar(rumbo + dif, R - 28);
+  $("#arco").setAttribute("d", `M${x1} ${y1} A${R - 28} ${R - 28} 0 ${Math.abs(dif) > 180 ? 1 : 0} ${dif > 0 ? 1 : 0} ${x2} ${y2}`);
+}
+
+function anguloPuntero(ev) {
+  const caja = $("#dial").getBoundingClientRect();
+  const x = (ev.clientX - caja.left) / caja.width * 400 - CX;
+  const y = (ev.clientY - caja.top) / caja.height * 400 - CY;
+  if (Math.hypot(x, y) < 40) return null;
+  return normal(Math.round(Math.atan2(x, -y) * 180 / Math.PI / 5) * 5);
+}
+$("#dial").addEventListener("pointermove", ev => {
+  const a = anguloPuntero(ev), l = $("#apuntar"), t = $("#apuntar-txt");
+  if (a === null || !conectado) { l.style.display = t.style.display = "none"; return; }
+  const [x, y] = polar(a, R - 4), [tx, ty] = polar(a, 78);
+  l.setAttribute("x2", x); l.setAttribute("y2", y);
+  t.setAttribute("x", tx); t.setAttribute("y", ty); t.textContent = (a > 0 ? "+" : "") + a + "°";
+  l.style.display = t.style.display = "inline";
+});
+$("#dial").addEventListener("pointerleave", () => { $("#apuntar").style.display = $("#apuntar-txt").style.display = "none"; });
+$("#dial").addEventListener("click", ev => {
+  const a = anguloPuntero(ev);
+  if (a !== null && conectado) enviar(`FACE|${a}|${num($("#r-tvel").value)}`);
+});
+
+// ======================================================================
+// Movimientos precisos
+// ======================================================================
+const num = v => String(+(+v).toFixed(2));
+for (const [r, o, suf] of [["#r-vel", "#o-vel", ""], ["#r-dur", "#o-dur", " s"], ["#r-tvel", "#o-tvel", ""]]) {
+  const act = () => $(o).textContent = num($(r).value) + suf;
+  $(r).addEventListener("input", act); act();
+}
+document.querySelectorAll("[data-mov]").forEach(b => b.addEventListener("click", () =>
+  enviar(`${b.dataset.mov}|${num($("#r-dur").value)}|${num($("#r-vel").value)}`)));
+document.querySelectorAll("[data-giro]").forEach(b => b.addEventListener("click", () =>
+  enviar(`TURN|${b.dataset.giro}|${num($("#r-tvel").value)}`)));
+document.querySelectorAll("[data-cmd]").forEach(b => b.addEventListener("click", () => enviar(b.dataset.cmd)));
+$("#btn-set").addEventListener("click", () => {
+  const v = $("#set-valor").value;
+  if (v === "") { log("Escribe un valor para " + $("#set-clave").value, "falla"); return; }
+  enviar(`SET|${$("#set-clave").value}|${v}`);
+});
+function enviarLibre() { const v = $("#cmd-libre").value.trim(); if (v) { enviar(v); $("#cmd-libre").value = ""; } }
+$("#btn-libre").addEventListener("click", enviarLibre);
+$("#cmd-libre").addEventListener("keydown", e => { if (e.key === "Enter") enviarLibre(); });
+
+// ======================================================================
+// Secuencias
+// ======================================================================
+$("#secuencia").value = PRESETS.cuadrado;
+$("#presets").addEventListener("change", e => $("#secuencia").value = PRESETS[e.target.value]);
+$("#btn-sec").addEventListener("click", () => {
+  const lineas = $("#secuencia").value.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#"));
+  const malas = lineas.filter(l => !ORDENES.includes(l.split("|")[0].toUpperCase()));
+  if (malas.length) { log("Orden desconocida: " + malas[0], "falla"); return; }
+  if (lineas.length > 30) { log("Máximo 30 órdenes por secuencia", "falla"); return; }
+  log(`Secuencia de ${lineas.length} órdenes`, "nota");
+  lineas.forEach(enviar);
+});
+
+// ======================================================================
+// Manejo manual: joystick y teclado -> MOTOR|izq|der con watchdog
+// ======================================================================
+let joy = { x: 0, y: 0, activo: false }, temporizadorJoy = null;
+const teclas = new Set();
+
+function mezcla(x, y) {
+  const vmax = +$("#r-vel").value;
+  const v = -y * vmax, w = x * vmax * 0.6;
+  const izq = Math.max(-1, Math.min(1, v + w)), der = Math.max(-1, Math.min(1, v - w));
+  return `MOTOR|${num(izq)}|${num(der)}`;
+}
+function iniciarManual() {
+  if (temporizadorJoy || !conectado) return;
+  temporizadorJoy = setInterval(() => {
+    if (joy.activo) enviar(mezcla(joy.x, joy.y));
+    else if (teclas.size) {
+      const x = (teclas.has("d") ? 1 : 0) - (teclas.has("a") ? 1 : 0);
+      const y = (teclas.has("s") ? 1 : 0) - (teclas.has("w") ? 1 : 0);
+      enviar(mezcla(x, y));
+    }
+  }, 120);   // < 600 ms del watchdog del rover
+}
+function terminarManual() {
+  if (joy.activo || teclas.size) return;
+  clearInterval(temporizadorJoy); temporizadorJoy = null;
+  if (conectado) enviar("STOP");
+}
+
+const pad = $("#pad"), perilla = $("#perilla");
+function moverPerilla(ev) {
+  const c = pad.getBoundingClientRect();
+  let x = (ev.clientX - c.left) / c.width * 2 - 1, y = (ev.clientY - c.top) / c.height * 2 - 1;
+  const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
+  joy.x = Math.abs(x) < 0.08 ? 0 : x; joy.y = Math.abs(y) < 0.08 ? 0 : y;
+  perilla.style.transform = `translate(${x * c.width * 0.35}px, ${y * c.height * 0.35}px)`;
+}
+pad.addEventListener("pointerdown", ev => {
+  if (!conectado) { log("Conecta el rover o usa la demo", "falla"); return; }
+  pad.setPointerCapture(ev.pointerId); joy.activo = true; pad.classList.add("activo");
+  moverPerilla(ev); iniciarManual();
+});
+pad.addEventListener("pointermove", ev => joy.activo && moverPerilla(ev));
+const soltar = () => {
+  if (!joy.activo) return;
+  joy = { x: 0, y: 0, activo: false }; pad.classList.remove("activo");
+  perilla.style.transform = ""; terminarManual();
+};
+pad.addEventListener("pointerup", soltar);
+pad.addEventListener("pointercancel", soltar);
+
+const MAPA = { ArrowUp: "w", ArrowDown: "s", ArrowLeft: "a", ArrowRight: "d", w: "w", a: "a", s: "s", d: "d", W: "w", A: "a", S: "s", D: "d" };
+document.addEventListener("keydown", e => {
+  if (e.target.matches("input,textarea,select")) return;
+  if (e.code === "Space") { e.preventDefault(); detener(); return; }
+  const k = MAPA[e.key]; if (!k || !conectado) return;
+  e.preventDefault(); teclas.add(k); iniciarManual();
+});
+document.addEventListener("keyup", e => {
+  const k = MAPA[e.key]; if (!k || !teclas.has(k)) return;
+  teclas.delete(k); terminarManual();
+});
+window.addEventListener("blur", () => { if (teclas.size) { teclas.clear(); terminarManual(); } });
+
+function detener() {
+  teclas.clear(); joy.activo = false; clearInterval(temporizadorJoy); temporizadorJoy = null;
+  if (conectado) enviar("STOP");
+}
+$("#btn-stop").addEventListener("click", detener);
+
+// ======================================================================
+// Rover simulado: misma lógica que code.py, para probar sin hardware
+// ======================================================================
+class RoverSimulado {
+  constructor() {
+    Object.assign(this, { h: 0, ref: 0, w: 0, modo: "I", cola: [], mov: {}, m1: 0, m2: 0, tMotor: 0, tTel: 0, tRef: 0, refEnv: null });
+    this.P = { KP: .015, KI: .0005, KD: .002, MAXC: .3, RAMPA: .25, TVEL: .35, TMIN: .17, TLENTO: 35, TOL: 1.5, VEL: .5, RG: 1, GS: 1 };
+    this.sesgo = 0.03; // un motor ligeramente más débil, como en la realidad
+    this.t = performance.now() / 1000;
+    this.id = setInterval(() => this.paso(), 10);
+  }
+  parar() { clearInterval(this.id); }
+  tx(s) { setTimeout(() => recibirTexto(s.slice(0, 19) + "\n"), 5); }
+  motores(i, d) { this.m1 = Math.max(-1, Math.min(1, i)); this.m2 = Math.max(-1, Math.min(1, d * this.P.RG)); }
+  fin(msg) { this.motores(0, 0); this.modo = "I"; this.mov = {}; if (msg) this.tx(msg); }
+  cercano(a) { return this.h + normal(a - normal(this.h)); }
+  recibir(l) {
+    const p = l.split("|"), c = p[0].toUpperCase(), n = (i, d) => p[i] !== undefined && p[i] !== "" ? +p[i] : d;
+    if (c === "STOP") { this.cola = []; this.ref = this.h; this.fin("# STOP"); return; }
+    if (c === "PING") { this.tx("# PONG Sim"); return; }
+    if (c === "STAT") { this.tx("# drift 0.00000"); this.tx(`# RG ${this.P.RG} GS ${this.P.GS}`); return; }
+    if (c === "SET") { const k = (p[1] || "").toUpperCase(); if (k in this.P && !isNaN(n(2))) { this.P[k] = n(2); this.tx(`# ${k}=${this.P[k]}`); } else this.tx("# err clave " + k); return; }
+    if (c === "MOTOR") { if (this.modo !== "M") { this.cola = []; this.fin(); this.modo = "M"; } this.motores(n(1, 0), n(2, 0)); this.tMotor = this.t; return; }
+    let cmd;
+    if (c === "FWD" || c === "BACK") cmd = [c, n(1, NaN), n(2, null)];
+    else if (c === "TURN" || c === "FACE") cmd = [c, n(1, NaN), n(2, null)];
+    else if (c === "HEADING") cmd = [c, n(1, NaN), n(2, NaN), n(3, NaN)];
+    else if (c === "WAIT") cmd = [c, n(1, NaN)];
+    else if (c === "ZERO" || c === "CAL") cmd = [c];
+    else { this.tx("# err ? " + c); return; }
+    if (cmd.some(v => Number.isNaN(v))) { this.tx("# err params " + c); return; }
+    if (this.modo === "M") this.fin();
+    this.cola.push(cmd); this.tx("# ok " + c);
+  }
+  iniciar([c, a, b, d]) {
+    const t = this.t;
+    if (c === "FWD" || c === "BACK" || c === "HEADING") {
+      let obj, vel, dur;
+      if (c === "HEADING") { obj = this.cercano(a); vel = b; dur = d; }
+      else { obj = this.ref; dur = a; vel = Math.abs(b ?? this.P.VEL) * (c === "BACK" ? -1 : 1); }
+      this.ref = obj; this.modo = "D"; this.mov = { obj, vel, dur, t0: t, integral: 0 };
+    } else if (c === "TURN" || c === "FACE") {
+      const obj = c === "TURN" ? this.ref + a : this.cercano(a);
+      this.ref = obj; this.modo = "T";
+      this.mov = { obj, vel: Math.abs(b ?? this.P.TVEL), t0: t, tmax: 3 + Math.abs(obj - this.h) / 40, tOk: null };
+    } else if (c === "WAIT") { this.modo = "W"; this.mov = { dur: a, t0: t }; }
+    else if (c === "ZERO") { this.h = 0; this.ref = 0; this.tx("# fin ZERO"); }
+    else if (c === "CAL") { this.modo = "C"; this.mov = { t0: t }; }
+  }
+  paso() {
+    const ahora = performance.now() / 1000, dt = Math.min(0.05, ahora - this.t); this.t = ahora;
+    // Física simple: velocidad angular con inercia, proporcional a la diferencia de ruedas
+    const wObj = 260 * ((this.m1 * (1 - this.sesgo)) - this.m2) / 2 + (Math.random() - .5) * 2;
+    this.w += (wObj - this.w) * Math.min(1, dt * 14);
+    if (this.modo !== "C") this.h += this.w * dt;
+    const P = this.P, m = this.mov;
+    if (this.modo === "M" && ahora - this.tMotor > 0.6) { this.ref = this.h; this.fin(); }
+    else if (this.modo === "D") {
+      const t = ahora - m.t0;
+      if (t >= m.dur) this.fin("# fin " + normal(this.h).toFixed(1));
+      else {
+        const e = m.obj - this.h; m.integral = Math.max(-100, Math.min(100, m.integral + e * dt));
+        const corr = Math.max(-P.MAXC, Math.min(P.MAXC, P.KP * e + P.KI * m.integral - P.KD * this.w));
+        const v = m.vel * Math.min(1, t / P.RAMPA); this.motores(v + corr, v - corr);
+      }
+    } else if (this.modo === "T") {
+      const e = m.obj - this.h;
+      if (Math.abs(e) <= P.TOL) {
+        this.motores(0, 0);
+        if (Math.abs(this.w) < 15) { if (m.tOk === null) m.tOk = ahora; else if (ahora - m.tOk > .12) { this.fin("# fin " + normal(this.h).toFixed(1)); } }
+        else m.tOk = null;
+      } else {
+        m.tOk = null;
+        const vmax = Math.max(m.vel, P.TMIN), v = P.TMIN + (vmax - P.TMIN) * Math.min(1, Math.abs(e) / P.TLENTO);
+        e > 0 ? this.motores(v, -v) : this.motores(-v, v);
+      }
+      if (this.modo === "T" && ahora - m.t0 > m.tmax) this.fin("# err tiempo " + e.toFixed(1));
+    } else if (this.modo === "W" && ahora - m.t0 >= m.dur) this.fin("# fin WAIT");
+    else if (this.modo === "C" && ahora - m.t0 >= 2.5) this.fin("# fin CAL");
+    if (this.modo === "I" && this.cola.length) this.iniciar(this.cola.shift());
+    if (ahora - this.tTel >= 0.2) {
+      this.tTel = ahora;
+      this.tx(`H,${normal(this.h).toFixed(1)},${this.modo},${Math.min(this.cola.length, 9)}`);
+      const r = normal(this.ref).toFixed(1);
+      if (r !== this.refEnv || ahora - this.tRef > 1) { this.tRef = ahora; this.refEnv = r; this.tx("R," + r); }
+    }
+  }
+}
+
+// ======================================================================
+// Arranque
+// ======================================================================
+$("#btn-conectar").addEventListener("click", conectar);
+$("#btn-demo").addEventListener("click", () => {
+  if (demo) { desconectar(); return; }
+  sim = new RoverSimulado(); demo = true; conectado = true;
+  actualizarEstado(); log("Demo: rover simulado con la misma lógica que code.py", "nota");
+});
+$("#btn-limpiar").addEventListener("click", () => $("#log").innerHTML = "");
+if (!navigator.bluetooth) { $("#sin-bt").classList.add("ver"); $("#btn-conectar").disabled = true; }
+actualizarEstado();
+dibujarRover();
+log("Listo. Conecta el rover (nombre que empiece con “Rover”) o prueba la demo.", "nota");
+</script>
+</body>
+</html>
