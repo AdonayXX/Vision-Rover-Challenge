@@ -14,6 +14,7 @@ from wifi_config import obtener_credenciales_wifi
 import registro_fallos
 from cliente_vision_rover import ClienteVision
 from autonomia import IrAPunto, Misiones
+from ronda import Ronda
 from modelo_rover import ModeloRover
 
 
@@ -191,10 +192,12 @@ def serve_client(
 
     finally:
         try:
-            if mission is not None:
-                # Una mision lanzada desde la PC no sobrevive a esa conexion.
-                mission.detener("conexion_cerrada")
-            controller.stop("conexion_cerrada")
+            # Una mision lanzada desde la PC no sobrevive a esa conexion; la
+            # ronda autonoma no depende de ninguna PC (reglamento 11.2).
+            if not getattr(mission, "autonoma", False):
+                if mission is not None:
+                    mission.detener("conexion_cerrada")
+                controller.stop("conexion_cerrada")
         finally:
             client.close()
     return replacement
@@ -362,6 +365,8 @@ def main(config_path="config_robot.json"):
             print("Vision:", config["vision_host"], config.get("vision_port", 2026))
         informe = [time.monotonic() + 10]
         mision = None
+        ronda = None
+        en_sesion = [False]       # con la PC conectada, la sesion ya mueve sensores y motores
         if vision:
             # Un solo modelo: lo que una mision aprende (escalas) lo usa la otra.
             modelo = cargar_modelo()
@@ -376,9 +381,23 @@ def main(config_path="config_robot.json"):
 
             mision = Misiones(IrAPunto(vision[0], modelo, controller, robot_id),
                               fabrica_llevar=fabrica_llevar)
+            # Incremento 3: la ronda arranca sola con la fase de la vision.
+            ronda = Ronda(vision[0], mision, robot_id,
+                          fase_inicio=config.get("fase_inicio", "RUNNING"),
+                          estrategia=config.get("estrategia", "reparto"),
+                          companero=config.get("companero_id"))
+            mision.ronda = ronda
+            print("Ronda: arranca en fase", ronda.fase_inicio, "estrategia", ronda.estrategia)
 
         def tick():
             alimentar()
+            if not en_sesion[0]:
+                # Sin PC (la competencia): nadie mas actualiza sensores ni la
+                # rampa de los motores. Con PC lo hace CommandSession.tick.
+                if sensors is not None:
+                    sensors.update(moving=controller.mode is not None or (
+                        mision is not None and mision.activa))
+                controller.update()
             if not vision:
                 return
             try:
@@ -386,9 +405,15 @@ def main(config_path="config_robot.json"):
             except Exception as error:
                 print("Error vision:", error)
             try:
+                ronda.tick()
+            except Exception as error:
+                mision.detener_mision("error_ronda: {}".format(error))
+                print("Error ronda:", error)
+            try:
                 mision.tick()
             except Exception as error:
-                mision.detener("error: {}".format(error))
+                # Falla este cubo; la ronda sigue con el siguiente.
+                mision.detener_mision("error: {}".format(error))
                 print("Error mision:", error)
             if time.monotonic() >= informe[0]:
                 informe[0] = time.monotonic() + 10
@@ -402,9 +427,10 @@ def main(config_path="config_robot.json"):
         while True:
             tick()
             if pending is None:
-                controller.stop(
-                    "esperando_cliente"
-                )
+                if mision is None or not mision.activa:
+                    controller.stop(
+                        "esperando_cliente"
+                    )
 
                 # Cada 2 s: si se cayo el Wi-Fi, reconectar y reabrir el puerto.
                 if server is None or time.monotonic() - revisado >= 2:
@@ -412,6 +438,11 @@ def main(config_path="config_robot.json"):
                     if server is None or not red_ok():
                         if server is not None:
                             print("Wi-Fi perdido; reconectando...")
+                            # Sin red no hay vision: que nada se mueva a ciegas
+                            # mientras se reconecta (la ronda sigue despues).
+                            controller.stop("wifi_perdido")
+                            if mision is not None:
+                                mision.detener_mision("wifi_perdido")
                             server.close()
                             server = None
                         if not conectar_wifi(ssid, password, alimentar):
@@ -437,6 +468,7 @@ def main(config_path="config_robot.json"):
                 address
             )
 
+            en_sesion[0] = True
             try:
                 pending = serve_client(
                     client,
@@ -457,6 +489,8 @@ def main(config_path="config_robot.json"):
                 )
                 registro_fallos.guardar(
                     "sesion", "{}: {}".format(type(error).__name__, error))
+            finally:
+                en_sesion[0] = False
 
     finally:
         try:

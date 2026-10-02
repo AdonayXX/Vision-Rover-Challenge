@@ -77,6 +77,8 @@ class Simulador:
         # ~30 mm a 150 mm/s, calibración 2-oct). None = sin inercia.
         self.inercia_ms = None
         self.v_real = self.w_real = 0.0
+        self.fase = "RUNNING"             # phase del contrato (incremento 3)
+        self.companeros = []              # otros rovers quietos: [{"id", "col", "row", "theta"}]
 
     def reloj_placa(self):
         return self.t + self.RELOJ_PLACA
@@ -109,11 +111,13 @@ class Simulador:
             th = math.radians(self.theta)
             d = self.real.desfase_marcador_mm / CELL
             self.seq += 1
-            mensaje = {"seq": self.seq, "ts_ms": self.t + self.sello, "grid": {"cols": 43, "rows": 43, "cell_mm": CELL},
+            mensaje = {"seq": self.seq, "ts_ms": self.t + self.sello, "phase": self.fase,
+                       "grid": {"cols": 43, "rows": 43, "cell_mm": CELL},
                        "cube_side": 3.0, "obstacles": [], "cubes": self._cubos_vistos(),
                        "depots": [dict(d) for d in DEPOSITOS], "depot_size": {"length": 10.0, "depth": 7.5},
                        "rovers": [{"id": 10, "col": self.col + d * math.cos(th),
-                                   "row": self.row - d * math.sin(th), "theta": self.theta, "age_ms": 0}]}
+                                   "row": self.row - d * math.sin(th), "theta": self.theta, "age_ms": 0}]
+                       + [dict(r, age_ms=0) for r in self.companeros]}
             llegada = self.t + self.sello + self.rand.uniform(*self.latencia)
             self.en_vuelo.append((llegada, mensaje))
         for item in [m for m in self.en_vuelo if m[0] <= self.t]:

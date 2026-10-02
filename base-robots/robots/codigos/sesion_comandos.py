@@ -24,7 +24,10 @@ class CommandSession:
         self.buffer = b""
         self.pending = b""
         self.rx = bytearray(128)
-        self.controller.stop("nueva_conexion")
+        # Durante una ronda autonoma la PC solo puede mirar: conectarse no
+        # para el rover (un STOP explicito si).
+        if not getattr(mission, "autonoma", False):
+            self.controller.stop("nueva_conexion")
 
     def tick(self):
         if self.last_motion is not None and self.clock() - self.last_motion >= self.watchdog:

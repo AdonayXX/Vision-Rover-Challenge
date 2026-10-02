@@ -289,6 +289,10 @@ class Misiones:
 
     `tick` es el metodo de la mision activa, no un envoltorio: en la placa
     cada llamada anidada gasta pila (pystack) y planificar ya va muy hondo.
+
+    Con una `ronda` (incremento 3) las misiones las lanza ella; una orden
+    manual (STOP, MOTOR, IR, LLEVAR... desde la PC) la detiene, pero que la PC
+    se conecte o se vaya no la toca.
     """
 
     def __init__(self, ir, llevar=None, fabrica_llevar=None):
@@ -296,6 +300,7 @@ class Misiones:
         # que no cabe en RAM da un error a la orden, no un arranque en bucle.
         self.ir, self.cubo, self.fabrica = ir, llevar, fabrica_llevar
         self.error_carga = None
+        self.ronda = None
         self.vision, self.robot_id = ir.vision, ir.robot_id
         self._activar(ir)
 
@@ -307,12 +312,17 @@ class Misiones:
     def activa(self):
         return self.actual.activa
 
+    @property
+    def autonoma(self):
+        """La ronda manda: conectarse o desconectarse desde la PC no la detiene."""
+        return self.ronda is not None and self.ronda.autonoma
+
     def iniciar(self, col, row):
         self.detener("nueva_mision")
         self._activar(self.ir)
         self.ir.iniciar(col, row)
 
-    def llevar(self, color):
+    def _mision_cubo(self):
         if self.cubo is None and self.fabrica is not None:
             try:
                 self.cubo = self.fabrica()
@@ -322,17 +332,38 @@ class Misiones:
                 raise ValueError(self.error_carga)
         if self.cubo is None:
             raise ValueError("Firmware sin mision de cubo")
-        self.detener("nueva_mision")
-        self._activar(self.cubo)
-        self.cubo.iniciar(color)
+        return self.cubo
 
-    def detener(self, motivo="stop"):
+    def llevar(self, color):
+        """LLEVAR manual (desde la PC): le quita el control a la ronda."""
+        cubo = self._mision_cubo()
+        self.detener("nueva_mision")
+        self._activar(cubo)
+        cubo.iniciar(color)
+
+    def llevar_en_ronda(self, color):
+        """La ronda lanza el siguiente cubo: no se detiene a si misma."""
+        cubo = self._mision_cubo()
+        self.detener_mision("siguiente_cubo")
+        self._activar(cubo)
+        cubo.iniciar(color)
+
+    def detener_mision(self, motivo="stop"):
+        """Para el movimiento en curso; la ronda (si hay) sigue decidiendo."""
         self.ir.detener(motivo)
         if self.cubo is not None:
             self.cubo.detener(motivo)
+
+    def detener(self, motivo="stop"):
+        """Una orden manual: para la mision y tambien la ronda."""
+        self.detener_mision(motivo)
+        if self.ronda is not None:
+            self.ronda.detener(motivo)
 
     def informe(self):
         datos = self.actual.informe()
         if self.error_carga is not None:
             datos["error_carga"] = self.error_carga
+        if self.ronda is not None:
+            datos["ronda"] = self.ronda.informe()
         return datos

@@ -32,6 +32,7 @@ DEFAULT_FILES = [
     os.path.join(CODE_DIR, "modelo_rover.py"),
     os.path.join(CODE_DIR, "autonomia.py"),
     os.path.join(CODE_DIR, "llevar_cubo.py"),
+    os.path.join(CODE_DIR, "ronda.py"),
     os.path.join(CODE_DIR, "rutas.py"),
     os.path.join(CODE_DIR, "rutas_placa.py"),
     os.path.join(CODE_DIR, "navegacion.py"),
