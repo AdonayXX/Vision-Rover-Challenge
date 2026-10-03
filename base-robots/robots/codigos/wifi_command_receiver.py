@@ -22,9 +22,41 @@ def _nada():
     pass
 
 
-def conectar_wifi(ssid, password, alimentar=_nada):
+_memoria_red_vista = [False]
+
+
+def _memoria_red():
+    import gc
+    gc.collect()
+    if not _memoria_red_vista[0]:             # una vez por arranque: el registro va a la flash
+        _memoria_red_vista[0] = True
+        registro_fallos.guardar("memoria", "red_o_sesion")
+    time.sleep(0.05)                          # si se repite, que no gire en vacío
+
+
+def _sin_memoria(mision):
+    """Sin RAM: juntar basura y cancelar lo que se movía, con un motivo fijo
+    (armar un texto también pide memoria). La ronda sigue con otro cubo; antes
+    esto tumbaba la placa entera (cancha 2-oct: MemoryError fatal en bucle)."""
+    import gc
+    gc.collect()
+    mision.detener_mision("sin_memoria")
+
+
+def conectar_wifi(ssid, password, alimentar=_nada, forzar=False):
     import wifi
 
+    if forzar:
+        # La IP puede seguir puesta con el enlace caído: apagar y prender la
+        # radio es la única forma segura de volver a asociarse.
+        try:
+            wifi.radio.enabled = False
+            time.sleep(1)
+            alimentar()
+            wifi.radio.enabled = True
+            time.sleep(1)
+        except Exception as error:
+            print("Error reiniciando Wi-Fi:", error)
     for intento in range(5):
         alimentar()
         try:
@@ -350,8 +382,28 @@ def main(config_path="config_robot.json"):
         # Un solo pool por radio; sigue valido tras reconectar el Wi-Fi.
         pool = socketpool.SocketPool(wifi.radio)
 
+        motivo_red = [None]
+
         def red_ok():
-            return wifi.radio.ipv4_address is not None
+            if wifi.radio.ipv4_address is None:
+                motivo_red[0] = "sin_ip"
+                return False
+            # Asociado al router (CircuitPython 9: None si se cayó el enlace).
+            try:
+                if wifi.radio.ap_info is None:
+                    motivo_red[0] = "sin_router"
+                    return False
+            except (AttributeError, NotImplementedError):
+                pass
+            # La visión calla 20 s sin que ninguna PC esté conectada: lo más
+            # probable es que el Wi-Fi se haya caído sin avisar (cancha 2-oct:
+            # la placa quedó muda hasta apagarla y prenderla).
+            if vision and not en_sesion[0]:
+                silencio = vision[0].silencio_ms()
+                if silencio is not None and silencio > 20000:
+                    motivo_red[0] = "vision_callada"
+                    return False
+            return True
 
         pending = None
         revisado = -1e9
@@ -402,15 +454,21 @@ def main(config_path="config_robot.json"):
                 return
             try:
                 vision[0].poll(puede_bloquear=controller.mode is None)
+            except MemoryError:
+                _sin_memoria(mision)
             except Exception as error:
                 print("Error vision:", error)
             try:
                 ronda.tick()
+            except MemoryError:
+                _sin_memoria(mision)
             except Exception as error:
                 mision.detener_mision("error_ronda: {}".format(error))
                 print("Error ronda:", error)
             try:
                 mision.tick()
+            except MemoryError:
+                _sin_memoria(mision)
             except Exception as error:
                 # Falla este cubo; la ronda sigue con el siguiente.
                 mision.detener_mision("error: {}".format(error))
@@ -425,72 +483,92 @@ def main(config_path="config_robot.json"):
         # ---------------------------------
 
         while True:
-            tick()
-            if pending is None:
-                if mision is None or not mision.activa:
-                    controller.stop(
-                        "esperando_cliente"
-                    )
-
-                # Cada 2 s: si se cayo el Wi-Fi, reconectar y reabrir el puerto.
-                if server is None or time.monotonic() - revisado >= 2:
-                    revisado = time.monotonic()
-                    if server is None or not red_ok():
-                        if server is not None:
-                            print("Wi-Fi perdido; reconectando...")
-                            # Sin red no hay vision: que nada se mueva a ciegas
-                            # mientras se reconecta (la ronda sigue despues).
-                            controller.stop("wifi_perdido")
-                            if mision is not None:
-                                mision.detener_mision("wifi_perdido")
-                            server.close()
-                            server = None
-                        if not conectar_wifi(ssid, password, alimentar):
-                            time.sleep(2)
-                            continue
-                        server = abrir_servidor(pool, port)
-                        print(
-                            "Comandos de prueba:",
-                            wifi.radio.ipv4_address,
-                            port
+            try:
+                tick()
+                if pending is None:
+                    if mision is None or not mision.activa:
+                        controller.stop(
+                            "esperando_cliente"
                         )
 
-                pending = aceptar(server)
-                if pending is None:
-                    time.sleep(0.05)
-                    continue
+                    # Cada 2 s: si se cayo el Wi-Fi, reconectar y reabrir el puerto.
+                    if server is None or time.monotonic() - revisado >= 2:
+                        revisado = time.monotonic()
+                        if server is None or not red_ok():
+                            caida = server is not None
+                            if server is not None:
+                                print("Wi-Fi perdido; reconectando...", motivo_red[0])
+                                try:
+                                    registro_fallos.guardar("wifi", "perdido: {} a los {} s".format(
+                                        motivo_red[0], round(time.monotonic() - arranque)))
+                                except Exception:
+                                    pass
+                                # Sin red no hay vision: que nada se mueva a ciegas
+                                # mientras se reconecta (la ronda sigue despues).
+                                controller.stop("wifi_perdido")
+                                if mision is not None:
+                                    mision.detener_mision("wifi_perdido")
+                                server.close()
+                                server = None
+                            if not conectar_wifi(ssid, password, alimentar, forzar=caida):
+                                time.sleep(2)
+                                continue
+                            if vision:
+                                vision[0].reiniciar_silencio()    # 20 s más antes de volver a sospechar
+                            server = abrir_servidor(pool, port)
+                            print(
+                                "Comandos de prueba:",
+                                wifi.radio.ipv4_address,
+                                port
+                            )
 
-            client, address = pending
-            pending = None
+                    pending = aceptar(server)
+                    if pending is None:
+                        time.sleep(0.05)
+                        continue
 
-            print(
-                "Cliente conectado:",
-                address
-            )
+                client, address = pending
+                pending = None
 
-            en_sesion[0] = True
-            try:
-                pending = serve_client(
-                    client,
-                    controller,
-                    config["watchdog_seconds"],
-                    sensors=sensors,
-                    server=server,
-                    red_ok=red_ok,
-                    alimentar=tick,
-                    info=info,
-                    mission=mision
-                )
-
-            except Exception as error:
                 print(
-                    "Sesion cerrada:",
-                    error
+                    "Cliente conectado:",
+                    address
                 )
-                registro_fallos.guardar(
-                    "sesion", "{}: {}".format(type(error).__name__, error))
-            finally:
+
+                en_sesion[0] = True
+                try:
+                    pending = serve_client(
+                        client,
+                        controller,
+                        config["watchdog_seconds"],
+                        sensors=sensors,
+                        server=server,
+                        red_ok=red_ok,
+                        alimentar=tick,
+                        info=info,
+                        mission=mision
+                    )
+
+                except MemoryError:
+                    raise                 # lo atiende el bucle, sin armar textos
+                except Exception as error:
+                    print(
+                        "Sesion cerrada:",
+                        error
+                    )
+                    registro_fallos.guardar(
+                        "sesion", "{}: {}".format(type(error).__name__, error))
+                finally:
+                    en_sesion[0] = False
+
+            except MemoryError:
+                # Sin RAM en la red (sockets, Wi-Fi: "Out of memory") o en la
+                # sesion de la PC. Antes salia de main() y la placa se reiniciaba
+                # a mitad de la ronda (cancha 2-oct). Se corta la conexion de la
+                # PC y se sigue: la mision y la ronda no se tocan.
+                pending = None
                 en_sesion[0] = False
+                _memoria_red()
 
     finally:
         try:

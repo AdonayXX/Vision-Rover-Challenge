@@ -32,11 +32,16 @@ def ahora_ms():
 
 class ClienteVision:
     def __init__(self, pool, host, port=2026, reconectar_s=1.0, conexion_s=0.5,
-                 validar=True, reloj=ahora_ms):
+                 validar=True, reloj=ahora_ms, sin_datos_s=3.0):
         self.pool, self.host, self.port = pool, host, port
         self.reconectar_ms = int(reconectar_s * 1000)
         self.conexion_s = conexion_s
         self.validar, self.reloj = validar, reloj
+        # La visión publica a 20 Hz: varios segundos callada es una conexión
+        # muerta aunque el socket no dé error (Wi-Fi caído sin aviso).
+        self.sin_datos_ms = int(sin_datos_s * 1000)
+        self.ultimo_dato_ms = None       # último byte recibido (o conexión abierta)
+        self.alguna_vez = False          # ya recibió algo: la visión existe
         self.sock = None
         self.buffer = b""
         self.rx = bytearray(1024)
@@ -83,6 +88,7 @@ class ClienteVision:
         self.sock = sock
         self.conexiones += 1
         self.estado = "conectado"
+        self.ultimo_dato_ms = self.reloj()
         return True
 
     def poll(self, puede_bloquear=True):
@@ -102,6 +108,9 @@ class ClienteVision:
                 n = self.sock.recv_into(self.rx)
             except OSError as error:
                 if error.args and error.args[0] in _EAGAIN:
+                    if self.reloj() - self.ultimo_dato_ms > self.sin_datos_ms:
+                        self._cerrar("vision_sin_datos")
+                        return False
                     break
                 self._cerrar("error_red: {}".format(error))
                 return False
@@ -109,6 +118,8 @@ class ClienteVision:
                 self._cerrar("vision_cerro_conexion")
                 return False
             self.bytes += n
+            self.ultimo_dato_ms = self.reloj()
+            self.alguna_vez = True
             self.buffer += bytes(self.rx[:n])
             fin = self.buffer.rfind(b"\n")
             if fin >= 0:
@@ -159,6 +170,17 @@ class ClienteVision:
         self.edad_total += edad
         self.edad_max = max(self.edad_max, edad)
         return True
+
+    def silencio_ms(self):
+        """Hace cuánto no llega nada de la visión (None si nunca llegó nada)."""
+        if not self.alguna_vez or self.ultimo_dato_ms is None:
+            return None
+        return self.reloj() - self.ultimo_dato_ms
+
+    def reiniciar_silencio(self):
+        self.ultimo_dato_ms = self.reloj()
+        if self.sock is not None:
+            self._cerrar("wifi_reconectado")     # ese socket era de la red anterior
 
     def edad_relativa_ms(self):
         """Edad del ultimo mensaje respecto de la entrega mas rapida vista."""

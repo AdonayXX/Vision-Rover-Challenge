@@ -74,6 +74,14 @@ class RepartoTests(unittest.TestCase):
         a, b = repartir(mensaje(self.ROVERS, cubos), 10), repartir(mensaje(self.ROVERS, cubos), 11)
         self.assertEqual(sorted(a + b), ["blue", "green"])
 
+    def test_referee_verdict_counts_as_delivered(self):
+        # v3: el árbitro tiene 2,5 mm de holgura; si dice in_depot, ya está.
+        casi = dict(TRES[0], col=39.25 - 1.7)                  # 34 mm: afuera por la cuenta propia
+        m = mensaje(self.ROVERS[:1], [casi] + TRES[1:])
+        self.assertIn("red", repartir(m, 10))
+        m["cubes"][0]["in_depot"] = True
+        self.assertEqual(sorted(repartir(m, 10)), ["blue", "green"])
+
     def test_single_pending_cube_goes_to_exactly_one_rover(self):
         cubos = [TRES[0], dict(TRES[1], row=3.75, col=21.5), dict(TRES[2], row=39.25, col=21.5)]
         a, b = repartir(mensaje(self.ROVERS, cubos), 10), repartir(mensaje(self.ROVERS, cubos), 11)
@@ -94,6 +102,31 @@ class RondaTests(unittest.TestCase):
         for color in ("red", "green", "blue"):
             self.assertTrue(entregado(sim, color)[0], color)
         self.assertLess(sim.t, 120000)
+
+    def test_mission_and_planner_are_loaded_before_the_round(self):
+        # En la placa cargar LlevarCubo y reservar el A* pide mucha RAM: se
+        # hace en IDLE/READY, quieto, y no al arrancar la ronda (cancha 2-oct).
+        sim = simulador((5.0, 21.5, 0.0), TRES)
+        sim.fase = "IDLE"
+        modelo, motores = ModeloRover(), Motores(sim)
+        creados = []
+
+        def fabrica():
+            creados.append(LlevarCubo(sim.vision, modelo, motores, 10, reloj=sim.reloj_placa))
+            return creados[-1]
+        misiones = Misiones(IrAPunto(sim.vision, modelo, motores, 10, reloj=sim.reloj_placa),
+                            fabrica_llevar=fabrica)
+        ronda = Ronda(sim.vision, misiones, 10, reloj=sim.reloj_placa)
+        misiones.ronda = ronda
+        correr(sim, ronda, misiones, 500)
+        self.assertEqual(len(creados), 1)
+        self.assertIsNotNone(creados[0].planner)
+        self.assertIsNotNone(creados[0].planner._n)                 # búferes ya reservados
+        self.assertTrue(all(i == 0 and d == 0 for t, i, d in sim.ordenes))
+        sim.fase = "RUNNING"
+        correr(sim, ronda, misiones, 120000, True)
+        self.assertEqual(ronda.estado, COMPLETA, ronda.informe())
+        self.assertEqual(len(creados), 1)                           # la misma, sin recargar
 
     def test_end_of_round_stops_everything_and_rearms(self):
         sim = simulador((5.0, 21.5, 0.0), TRES)

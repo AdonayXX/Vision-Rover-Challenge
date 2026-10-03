@@ -59,14 +59,14 @@ def _carga(pos, orden, cubos, zonas):
 
 def pendientes(mensaje):
     """Colores con cubo visible, zona conocida y todavía fuera de ella."""
-    from llevar_cubo import cubo_en_su_zona
+    from llevar_cubo import entregado
     salida = []
     for color in COLORES:
         cubo = _buscar(mensaje["cubes"], "color", color)
         zona = _buscar(mensaje.get("depots", ()), "color", color)
         if cubo is None or zona is None:
             continue
-        if not cubo_en_su_zona(cubo, zona, mensaje["depot_size"], mensaje["grid"], mensaje["cube_side"])[0]:
+        if not entregado(cubo, zona, mensaje):
             salida.append(color)
     return salida
 
@@ -119,13 +119,16 @@ class Ronda:
 
     def __init__(self, vision, misiones, robot_id, fase_inicio="RUNNING", estrategia="reparto",
                  companero=None, intentos_por_cubo=2, ayuda_ms=300000, max_edad_ms=1500,
-                 companero_cerca_mm=200, sin_dueno_ms=30000, reloj=ahora_ms):
+                 companero_cerca_mm=200, sin_dueno_ms=30000, reintento_ms=15000, reloj=ahora_ms):
         self.vision, self.misiones, self.robot_id = vision, misiones, robot_id
         self.fase_inicio, self.estrategia, self.companero = fase_inicio, estrategia, companero
         self.intentos_por_cubo, self.ayuda_ms, self.max_edad_ms = intentos_por_cubo, ayuda_ms, max_edad_ms
         self.reloj = reloj
         self.companero_cerca_mm, self.sin_dueno_ms = companero_cerca_mm, sin_dueno_ms
+        self.reintento_ms = reintento_ms
         self.estado, self.motivo, self.fase = ESPERANDO, None, None
+        self.preparada = False                # LLEVAR y el planificador ya cargados
+        self.error_preparar = None
         self._reiniciar()
 
     def _reiniciar(self):
@@ -134,6 +137,8 @@ class Ronda:
         self.inicio_ms = None
         self.pausa_hasta = 0
         self.atendido = {}                    # color -> último momento con un rover cerca
+        self.mem = None                       # bytes libres al lanzar el último cubo
+        self.reintentar_en = None             # cuándo volver a probar los que fallaron
 
     @property
     def autonoma(self):
@@ -151,6 +156,13 @@ class Ronda:
         if mensaje is None:
             return
         self.fase = mensaje.get("phase")
+        if not self.preparada:
+            # Con la primera telemetría, antes de la ronda y con el rover quieto.
+            self.preparada = True
+            try:
+                self.misiones.preparar()
+            except Exception as error:        # MemoryError incluido: se reintenta al llevar
+                self.error_preparar = "{}: {}".format(type(error).__name__, error)
         if self.fase != self.fase_inicio:
             if self.autonoma:
                 self.estado, self.motivo = TERMINADA, "fase_" + str(self.fase)
@@ -205,12 +217,22 @@ class Ronda:
             if color not in afuera and color not in self.hechos:
                 self.hechos.append(color)
         if self.estado == COMPLETA:
-            self._ayudar(mensaje, afuera, ahora)
-            return
+            # Los suyos que fallaron: la cancha pudo cambiar (el compañero movió
+            # algo, el cubo se corrió). Quieto no gana nada; se vuelve a probar.
+            fallidos = [c for c in self.mis_cubos if c in afuera]
+            if fallidos and self.reintentar_en is not None and ahora >= self.reintentar_en:
+                for color in fallidos:
+                    self.intentos[color] = self.intentos_por_cubo - 1
+                self.reintentar_en = None
+                self.estado = CORRIENDO
+            else:
+                self._ayudar(mensaje, afuera, ahora)
+                return
         candidatos = [c for c in self.mis_cubos if c in afuera
                       and self.intentos.get(c, 0) < self.intentos_por_cubo]
         if not candidatos:
             self.estado = COMPLETA
+            self.reintentar_en = ahora + self.reintento_ms
             return
         yo = _buscar(mensaje["rovers"], "id", self.robot_id)
         if yo is None:
@@ -232,6 +254,8 @@ class Ronda:
         # Primero los que menos fallaron; entre ellos, el más barato desde aquí.
         self.actual = min(candidatos, key=lambda c: (self.intentos.get(c, 0),
                                                      _carga(yo, (c,), cubos, zonas), c))
+        from llevar_cubo import memoria_libre
+        self.mem = memoria_libre()
         self.misiones.llevar_en_ronda(self.actual)
 
     def _ayudar(self, mensaje, afuera, ahora):
@@ -269,6 +293,10 @@ class Ronda:
             datos["fallos"] = self.fallos
         if self.motivo:
             datos["motivo"] = self.motivo
+        if self.mem is not None:
+            datos["mem"] = self.mem
+        if self.error_preparar:
+            datos["error_preparar"] = self.error_preparar
         if self.inicio_ms is not None:
             datos["t_s"] = round((self.reloj() - self.inicio_ms) / 1000, 1)
         return datos

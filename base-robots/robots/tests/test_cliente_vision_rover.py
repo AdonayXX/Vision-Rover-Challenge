@@ -107,6 +107,25 @@ class ClienteVisionTests(unittest.TestCase):
         self.now = 5400
         self.assertEqual(self.cliente.edad_relativa_ms(), 300)
 
+    def test_silent_connection_is_closed_and_reported(self):
+        # Wi-Fi caído sin aviso: el socket no da error, sólo deja de llegar
+        # nada. A los 3 s se cierra; silencio_ms sigue creciendo para que la
+        # placa reinicie el Wi-Fi si dura (cancha 2-oct).
+        self.assertIsNone(self.cliente.silencio_ms())          # nunca llegó nada
+        self.sock.trozos = [linea(1)]
+        self.assertTrue(self.cliente.poll())
+        self.now += 2000
+        self.assertFalse(self.cliente.poll())
+        self.assertEqual(self.cliente.estado, "ok")
+        self.now += 1500
+        self.assertFalse(self.cliente.poll())
+        self.assertEqual(self.cliente.estado, "vision_sin_datos")
+        self.assertTrue(self.sock.cerrado)
+        self.now += 20000
+        self.assertEqual(self.cliente.silencio_ms(), 23500)
+        self.cliente.reiniciar_silencio()
+        self.assertEqual(self.cliente.silencio_ms(), 0)
+
     def test_invalid_message_is_counted_not_used(self):
         self.sock.trozos = [b'{"v": 3}\n']
         self.assertFalse(self.cliente.poll())

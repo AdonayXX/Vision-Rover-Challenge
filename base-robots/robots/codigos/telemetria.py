@@ -1,4 +1,7 @@
-"""Consumo de JSON crudo v2, sin imports del sistema oficial ni de hardware.
+"""Consumo de JSON crudo v2/v3, sin imports del sistema oficial ni de hardware.
+
+v3 (oct-2026) sólo suma `in_depot` a cada cubo: el veredicto del árbitro.
+Se aceptan las dos para poder probar con una visión vieja o nueva.
 
 El permiso sólo describe disponibilidad de datos; no garantiza ruta libre.
 El adaptador de red para computadora vive en robots/pc/cliente_vision.py.
@@ -34,7 +37,7 @@ def validate(message):
     """Valida el formato publicado; no importa schema.py en el consumidor."""
     _fields(message, "v seq ts_ms phase clock grid rovers cubes obstacles start depots depot_size cube_side")
     _integer(message["v"])
-    if message["v"] != 2:
+    if message["v"] not in (2, 3):
         raise ValueError("Version de telemetria desconocida")
     _integer(message["seq"])
     _integer(message["ts_ms"])
@@ -60,7 +63,7 @@ def validate(message):
     seen = {}
     for name, fields, key in (
         ("rovers", "id col row theta age_ms", "id"),
-        ("cubes", "color col row age_ms", "color"),
+        ("cubes", "color col row age_ms in_depot" if message["v"] == 3 else "color col row age_ms", "color"),
         ("depots", "color col row", "color"),
         ("obstacles", "col row age_ms", None),
     ):
@@ -73,6 +76,8 @@ def validate(message):
             _position(value)
             if name != "depots":
                 _integer(value["age_ms"])
+            if name == "cubes" and "in_depot" in value and type(value["in_depot"]) is not bool:
+                raise ValueError("in_depot debe ser true o false")
             if name == "rovers":
                 _integer(value["id"])
                 _number(value["theta"], 0)

@@ -5,40 +5,45 @@ se comprueba, incluidos diagonales y enlaces a puntos con decimales.
 No predice movimiento del compañero ni produce comandos de motores.
 """
 import math
+from array import array
 from navegacion import _finite
 
-# CircuitPython puede no traer heapq ni hypot. Las alternativas dan el mismo
-# resultado; en la PC se usan las de la biblioteca estandar.
-try:
-    from heapq import heappop, heappush
-except ImportError:
-    def heappush(heap, item):
-        heap.append(item)
-        i = len(heap) - 1
-        while i > 0:
-            padre = (i - 1) >> 1
-            if heap[padre] <= heap[i]:
-                break
-            heap[padre], heap[i] = heap[i], heap[padre]
-            i = padre
+# Cola de prioridad de ENTEROS sobre una lista que se reserva una vez: en la
+# placa ni las tuplas ni los float por entrada, ni la lista que crece y se
+# achica, dejan memoria suelta. `tam` es cuántos hay; lo demás es basura.
+def _meter(cola, tam, valor):
+    if tam == len(cola):
+        cola.append(valor)
+    else:
+        cola[tam] = valor
+    i = tam
+    while i > 0:
+        padre = (i - 1) >> 1
+        if cola[padre] <= cola[i]:
+            break
+        cola[padre], cola[i] = cola[i], cola[padre]
+        i = padre
+    return tam + 1
 
-    def heappop(heap):
-        ultimo = heap.pop()
-        if not heap:
-            return ultimo
-        primero, heap[0] = heap[0], ultimo
-        i, n = 0, len(heap)
+
+def _sacar(cola, tam):
+    """Devuelve el menor; el que llama resta uno a `tam`."""
+    primero = cola[0]
+    tam -= 1
+    if tam:
+        cola[0] = cola[tam]
+        i = 0
         while True:
             hijo = 2 * i + 1
-            if hijo >= n:
+            if hijo >= tam:
                 break
-            if hijo + 1 < n and heap[hijo + 1] < heap[hijo]:
+            if hijo + 1 < tam and cola[hijo + 1] < cola[hijo]:
                 hijo += 1
-            if heap[i] <= heap[hijo]:
+            if cola[i] <= cola[hijo]:
                 break
-            heap[i], heap[hijo] = heap[hijo], heap[i]
+            cola[i], cola[hijo] = cola[hijo], cola[i]
             i = hijo
-        return primero
+    return primero
 
 try:
     from math import hypot
@@ -57,7 +62,7 @@ def point_segment_distance(point, start, end):
 class RoutePlanner:
     def __init__(self, robot_radius_mm, peer_radius_mm, clearance_mm,
                  obstacle_side_mm=100, step_cells=1, max_nodes=4096,
-                 required_colors=("red", "green", "blue")):
+                 required_colors=("red", "green", "blue"), edge_mm=None):
         for value in (robot_radius_mm, peer_radius_mm, obstacle_side_mm, step_cells):
             if _finite(value) <= 0:
                 raise ValueError("Radios, lado de obstaculo y paso deben ser positivos")
@@ -74,6 +79,12 @@ class RoutePlanner:
         self.step = step_cells
         self.max_nodes = max_nodes
         self.required_colors = tuple(required_colors)
+        # edge_mm: cuánto tiene que quedar el CENTRO del rover dentro de la
+        # cancha. None = el radio más el margen, como con cualquier objeto.
+        # La orilla no es una pared: con un valor chico el cuerpo puede
+        # asomarse fuera para empujar un cubo pegado al borde.
+        self.edge = edge_mm
+        self._n = None                     # tamaño de los búferes del A*
 
     def scene(self, state):
         reason = state.reason()
@@ -100,15 +111,21 @@ class RoutePlanner:
                 else:
                     radius = self.obstacle_side * math.sqrt(2) / (2 * scale)
                 circles.append((item["col"], item["row"], radius + margin))
-        return {"cols": msg["grid"]["cols"], "rows": msg["grid"]["rows"],
-                "margin": margin, "circles": circles, "cell_mm": scale}
+        cols, rows = msg["grid"]["cols"], msg["grid"]["rows"]
+        edge = margin
+        if self.edge is not None:
+            # Puede tapar un marcador de esquina: la visión de la U aguanta uno
+            # menos sin perder precisión (AnclajeCancha conserva la homografía).
+            edge = self.edge / scale
+        return {"cols": cols, "rows": rows, "margin": margin, "edge": edge,
+                "circles": circles, "cell_mm": scale}
 
     @staticmethod
     def free_segment(scene, start, end):
         # Sin llamadas a funciones Python: en la placa la pila (pystack) es de
         # ~1,5 KB y el A* llama a esto desde lo más hondo. Es la misma cuenta
         # que point_segment_distance, comparada al cuadrado.
-        margin = scene["margin"]
+        margin = scene.get("edge", scene["margin"])
         for x, y in (start, end):
             if not (margin <= x <= scene["cols"] - margin and margin <= y <= scene["rows"] - margin):
                 return False
@@ -163,50 +180,81 @@ class RoutePlanner:
             result["motivo"] = str(error)
         return result
 
+    def _buffers(self, n):
+        # Se reservan UNA vez y se reusan en cada ruta. En la placa el montón
+        # se fragmenta con cada mensaje de la visión, y un A* que pide
+        # memoria nueva en cada plan termina sin un bloque seguido (cancha
+        # 2-oct: MemoryError de 1784 bytes al planificar el tercer cubo).
+        if self._n != n:
+            self._n = None
+            self._estado = self._costo = self._padre = self._cola = None
+            self._estado = bytearray(n)              # 0 ocupado, 1 abierto, 2 cerrado
+            self._costo = array("f", [0.0] * n)
+            self._padre = array("h", [0] * n)        # -1 = enlazado al origen
+            self._cola = [0] * (2 * n)
+            self._n = n
+        return self._estado, self._costo, self._padre, self._cola
+
     def _search(self, scene, start, end):
-        step, margin = self.step, scene["margin"]
+        step, margin = self.step, scene.get("edge", scene["margin"])
         xmin, xmax = math.ceil(margin / step), math.floor((scene["cols"] - margin) / step)
         ymin, ymax = math.ceil(margin / step), math.floor((scene["rows"] - margin) / step)
-        count = max(0, xmax - xmin + 1) * max(0, ymax - ymin + 1)
+        ancho = max(0, ymax - ymin + 1)
+        count = max(0, xmax - xmin + 1) * ancho
         if count > self.max_nodes:
             raise ValueError("grilla_supera_limite_de_nodos")
-        nodes = {}
+        if count == 0:
+            return None
+        # Tamaño fijo (la grilla entera) para no reasignar cuando cambia el margen.
+        n = max(count, (math.floor(scene["cols"] / step) + 1) * (math.floor(scene["rows"] / step) + 1))
+        estado, costo, padre, cola = self._buffers(n)
+        # Nodo i = (x - xmin) * ancho + (y - ymin); prioridad entera
+        # int(estimado * 64) * n + i: sin tuplas, y a igual estimado gana el
+        # menor (x, y), como antes con las tuplas.
+        i = 0
         for x in range(xmin, xmax + 1):
             for y in range(ymin, ymax + 1):
                 p = (x * step, y * step)
-                if self.free_segment(scene, p, p):
-                    nodes[(x, y)] = p
-        costs, parents, queue, closed = {}, {}, [], set()
+                estado[i] = 1 if self.free_segment(scene, p, p) else 0
+                costo[i] = 1e30
+                i += 1
+        tam = 0
         # Enlaces verificados desde la pose exacta: no redondear al rover
         # a una celda que podría estar del otro lado de un objeto.
-        for key, p in nodes.items():
-            if self.free_segment(scene, start, p):
-                cost = hypot(p[0] - start[0], p[1] - start[1])
-                costs[key], parents[key] = cost, None
-                heappush(queue, (cost + hypot(p[0] - end[0], p[1] - end[1]), key))
-        while queue:
-            _, key = heappop(queue)
-            if key in closed:
+        for i in range(count):
+            if estado[i]:
+                p = ((xmin + i // ancho) * step, (ymin + i % ancho) * step)
+                if self.free_segment(scene, start, p):
+                    cost = hypot(p[0] - start[0], p[1] - start[1])
+                    costo[i], padre[i] = cost, -1
+                    tam = _meter(cola, tam, int((cost + hypot(p[0] - end[0], p[1] - end[1])) * 64) * n + i)
+        while tam:
+            i = _sacar(cola, tam) % n
+            tam -= 1
+            if estado[i] != 1:
                 continue
-            closed.add(key)
-            p = nodes[key]
+            estado[i] = 2
+            x, y = xmin + i // ancho, ymin + i % ancho
+            p = (x * step, y * step)
             if self.free_segment(scene, p, end):
                 path = [end]
-                while key is not None:
-                    path.append(nodes[key])
-                    key = parents[key]
+                while i != -1:
+                    path.append(((xmin + i // ancho) * step, (ymin + i % ancho) * step))
+                    i = padre[i]
                 path.append(start)
                 return list(reversed(path))
             for dx, dy in ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)):
-                other = (key[0] + dx, key[1] + dy)
-                if other not in nodes or other in closed:
+                ox, oy = x + dx, y + dy
+                if not (xmin <= ox <= xmax and ymin <= oy <= ymax):
                     continue
-                q = nodes[other]
+                j = (ox - xmin) * ancho + (oy - ymin)
+                if estado[j] != 1:
+                    continue
+                q = (ox * step, oy * step)
                 if not self.free_segment(scene, p, q):
                     continue
-                candidate = costs[key] + hypot(q[0] - p[0], q[1] - p[1])
-                if candidate < costs.get(other, float("inf")):
-                    costs[other], parents[other] = candidate, key
-                    estimate = candidate + hypot(q[0] - end[0], q[1] - end[1])
-                    heappush(queue, (estimate, other))
+                candidate = costo[i] + hypot(q[0] - p[0], q[1] - p[1])
+                if candidate < costo[j]:
+                    costo[j], padre[j] = candidate, i
+                    tam = _meter(cola, tam, int((candidate + hypot(q[0] - end[0], q[1] - end[1])) * 64) * n + j)
         return None

@@ -3,6 +3,12 @@
 Código que corre **en la placa** (IdeaBoard, CircuitPython 9) del rover del
 **Vision Rover Challenge**. Se sube con `tools/subir_esp32_gui.py` ("Subir paquete
 completo"); la lista exacta está en `DEFAULT_FILES` de esa herramienta.
+Los módulos se suben **compilados (`.mpy`)** con el `mpy-cross` oficial de
+Adafruit para la versión de CircuitPython de la placa (la herramienta la lee de
+`boot_out.txt` y lo descarga a `tools/mpy-cross/`). Así la placa no compila el
+código al importarlo, que pedía tanta RAM de golpe que la ronda se caía.
+`code.py` y `safemode.py` van como `.py`; los `.py` viejos de los módulos se
+borran de la placa, porque si quedan la placa los carga antes que el `.mpy`.
 
 Los ejemplos originales de la universidad (motores, IR, ultrasonido, color, IMU,
 PID, ESP-NOW, etc.) siguen en la carpeta `codigos/` de la raíz del repositorio.

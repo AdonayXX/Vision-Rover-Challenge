@@ -334,6 +334,13 @@ class Misiones:
             raise ValueError("Firmware sin mision de cubo")
         return self.cubo
 
+    def preparar(self):
+        """Carga LLEVAR y su planificador ANTES de la ronda, con el rover quieto:
+        en el primer segundo de la ronda la RAM ya está ocupada y fragmentada."""
+        cubo = self._mision_cubo()
+        if hasattr(cubo, "preparar"):
+            cubo.preparar()
+
     def llevar(self, color):
         """LLEVAR manual (desde la PC): le quita el control a la ronda."""
         cubo = self._mision_cubo()

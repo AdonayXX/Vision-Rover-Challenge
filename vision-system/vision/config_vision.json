@@ -48,9 +48,6 @@
     "_nota_disposicion": "Nombres en vez de números para que la disposición no se rompa al cambiar cols/rows. origen=(0,0), fin_col=(cols,0), diagonal=(cols,rows), fin_row=(0,rows)."
   },
   "deteccion_marcadores": {
-    "usar_aruco3": true,
-    "lado_minimo_aruco3_px": 16,
-    "_nota_rapidez": "ArUco3 busca candidatos con piramide; las esquinas se refinan en la imagen original. Se vuelve al detector clasico si falta una esquina o un rover seguido. 16 px permite los marcadores pequenos de los rovers; el valor 32 de OpenCV los perdia en la captura real.",
     "_acerca_de": "Cómo se convierte la salida cruda del detector de ArUco en los marcadores que el sistema usa. NO es el detector en sí: es qué se hace con lo que devuelve, y en particular qué se hace cuando dos marcadores distintos decodifican el MISMO ID en un cuadro.",
     "_EL_PROBLEMA": "El tablero es una cuadrícula fina de blanco y negro, que es la materia prima perfecta para inventar marcadores, y DICT_4X4_50 tiene poca distancia entre códigos. Medido sobre la cancha real el 11-sep-2026: 54 falsos positivos por minuto, 12 IDs distintos, de 13,2 a 18,0 mm de lado contra los 100 de una esquina y los 41,6 del marcador del rover con paralaje. 46 de esas 108 detecciones cayeron en el ID 10, que es un ID DECLARADO DE ROVER.",
     "_POR_QUE_IMPORTA_EL_DUPLICADO": "Un fantasma que decodifica como 10 no se ve como un rover de más: COLISIONA con el marcador real del rover 10. Antes se armaba un diccionario por ID y el segundo pisaba al primero según el orden en que OpenCV barrió la imagen, sin avisar: el rover se publicaba por un cuadro en un punto cualquiera del tablero, con edad cero, o sea presentado como fresco y seguro, y el seguimiento conservaba esa posición pisada hasta la siguiente detección buena. Con un ID de esquina es peor: la homografía se recalcula con los cuatro visibles —sin que la comprobación de desvío intervenga, porque esa solo actúa con tres— y todas las coordenadas salen mal en silencio.",
@@ -108,8 +105,6 @@
     "_NO_HAY_PROBLEMA_DE_ASOCIACION": "Acá NO hace falta un seguidor de los clásicos, y conviene entender por qué: en este reto CADA OBJETO TRAE SU PROPIA IDENTIDAD. El rover la trae en el ID de su marcador ArUco y el cubo en su color, y no hay dos del mismo. O sea que no hay que adivinar qué detección de este cuadro corresponde a cuál del anterior —que es el problema difícil de todo seguimiento— porque la respuesta viene escrita en el objeto. Lo que queda es memoria y edad, que es mucho más simple y mucho más confiable.",
     "edad_maxima_ms": 60000,
     "_NOTA_EDAD_MAXIMA": "Después de este tiempo sin una observación buena, el objeto se saca de la lista. OJO: esto NO es para manejar oclusiones —para eso está la edad, y el contrato promete que un objeto tapado NO desaparece—. Es para barrer FANTASMAS: una detección espuria que nunca se repite, o un objeto que de verdad se fue de la cancha. Sesenta segundos son generosos a propósito: una ronda dura minutos y una oclusión normal dura segundos, así que una oclusión legítima nunca llega a este límite.",
-    "velocidad_maxima_rover_mm_s": 1000.0,
-    "_NOTA_VELOCIDAD_MAXIMA_ROVER": "Guarda de plausibilidad temporal para un rover YA seguido. Si una detección con el mismo ID exige que el rover haya recorrido más de este límite desde su última observación buena, no refresca la memoria: se conserva la pose anterior y su edad crece. Evita que un falso ArUco de la cuadrícula haga 'teletransportarse' al rover cuando el marcador real se tapa. 1000 mm/s es deliberadamente holgado para la prueba física actual; debe medirse y reajustarse si el hardware real demuestra una velocidad mayor.",
     "refrescar_con_cubos_no_confiables": false,
     "_NOTA_NO_CONFIABLES": "Si una detección de cubo marcada como NO confiable debe refrescar la posición y la edad. En false —lo correcto— no la refresca: se conserva la última posición buena y la edad sigue creciendo. Es exactamente lo que pide el contrato para un objeto ocluido, y es honesto: una detección no confiable dice 'el cubo está por acá' pero no 'está acá'. Poner true haría que el sistema publique posiciones que él mismo considera dudosas, con edad cero, o sea presentándolas como frescas y seguras."
   },
@@ -197,15 +192,11 @@
       "izquierda": 0.0
     },
     "desfase_angular_grados": 0.0,
-    "desfase_angular_por_id": {
-      "10": 90.0
-    },
-    "_nota_desfase_por_id": "El valor por ID REEMPLAZA el general; no se suma a él. Rover 10: ajuste inicial +90 grados a partir de la captura con theta=89.2 y confirmación del usuario de que las palas apuntan a la izquierda (aprox. 180 grados). Verificar la flecha en otras orientaciones; no es una calibración fina. Rover 11 conserva el valor general.",
     "_QUE_SON_LOS_DESFASES": "El marcador NO está en el centro de rotación del robot, y su orientación NO es necesariamente la del frente del robot (las paletas). Lo que se detecta es la pose del MARCADOR; lo que el contrato publica es la pose del ROBOT. Estos dos desfases son el puente entre una y otra.",
     "_POR_QUE_ADELANTE_E_IZQUIERDA_Y_NO_COL_Y_ROW": "Porque el desfase es solidario al ROBOT y el robot gira. Un vector guardado como (col, row) sería válido para una sola orientación: apenas el robot girara 90 grados apuntaría a cualquier lado. Guardado como adelante/izquierda —el marco del propio robot— vale para toda orientación, y el detector lo rota por el ángulo detectado antes de sumarlo.",
     "_CONVENCION": "El vector va DEL centro del marcador AL centro de rotación. `adelante` positivo = el centro de rotación queda hacia las paletas (marcador montado hacia atrás). `izquierda` positiva = hacia la izquierda del robot. `desfase_angular_grados` es el ángulo que hay que sumarle a la orientación del marcador para obtener la del frente del robot, positivo antihorario, misma convención que el contrato.",
-    "_ESTADO": "Desfase de posición en cero, pendiente de medir. Desfase angular general en cero, con excepción +90 para el montaje actual del rover 10.",
-    "_ESTADO_desfase_angular": "La medición histórica del 9-ago-2026 dio aproximadamente cero para el montaje de entonces. No describe el montaje actual confirmado por el usuario: se aplica +90 únicamente al rover 10 mediante desfase_angular_por_id. Falta verificar el ajuste en varias orientaciones.",
+    "_ESTADO": "⚠️ LOS DOS EN CERO, pero por razones DISTINTAS: uno por medición confirmada y el otro todavía pendiente. La diferencia importa y por eso van separados abajo. En cero, la pose del robot es idéntica a la del marcador.",
+    "_ESTADO_desfase_angular": "✅ MEDIDO Y CONFIRMADO ≈ 0 (9-ago-2026, robot real, marcador ID 10, con vision/tools/medir_desfases.py). Dos sesiones independientes, de cuatro orientaciones cada una, dieron +0,18° y −0,50°, con dispersión de ~1°. O sea: el marcador está alineado con el frente del robot dentro de ±1°, que es el propio ruido de la medición. Se deja en cero DELIBERADAMENTE: un grado no cambia la navegación. Este método —alinear las paletas con la cuadrícula y declarar el rumbo— NO depende de que el robot gire en el lugar, y por eso su resultado vale aunque la medición de posición no haya salido.",
     "_ESTADO_desfase_posicion": "⚠️ TODAVÍA NO MEDIDO. Se intentó dos veces el 9-ago-2026 y la herramienta RECHAZÓ las dos con veredicto INSUFICIENTE: el robot SE TRASLADÓ mientras giraba, entre 6 y 12 cm. Con eso el modelo de giro puro no se cumple y el radio que devuelve el ajuste no mide el desfase: mide qué tan bien un círculo explica una nube que no es un círculo. Los dos intentos dieron 10,7 ± 6,9 mm y 1,8 ± 4,5 mm, que NO coinciden entre sí. Lo único que se puede afirmar hoy es que el desfase es menor que unos 10 mm —el umbral de precisión del sistema—, NO que sea despreciable. Se deja en cero porque es el mejor valor disponible, no porque esté verificado.",
     "_COMO_CERRAR_EL_DESFASE_DE_POSICION": "Hace falta un giro sobre el eje DE VERDAD: las dos ruedas en sentidos opuestos y a la misma velocidad, no un pivote sobre una rueda ni empujarlo a mano. Durante la captura, la herramienta ahora avisa en vivo si el robot se está trasladando, comparando el tamaño de la nube de puntos con el círculo que va ajustando: si el marcador está casi centrado, la nube tiene que quedar como una manchita de pocos milímetros; si se pasea por la pantalla, hay traslación y conviene parar y reintentar. Las sesiones crudas de los dos intentos fallidos quedaron en vision/mediciones/desfases_rover10_*.json, guardadas a propósito: documentan un intento fallido con su motivo.",
     "_SI_SE_CAMBIA_EL_ROBOT": "Estas mediciones valen para ESTE robot con SU marcador pegado donde está hoy. Si se cambia el robot, se despega o se remonta el marcador, las dos hay que rehacerlas: no son propiedades del sistema de visión sino de un aparato concreto.",
@@ -253,7 +244,7 @@
     "_nota_croma": "Croma mínimo en Lab, `raiz(a*² + b*²)`, para que un píxel cuente como coloreado. El croma de Lab ES la saturación en sentido perceptual. Se usa Lab y no HSV para el umbral Y para la clasificación —un solo espacio— porque el matiz de HSV se vuelve inestable justo donde más importa: con poca luz o poca saturación da saltos entre extremos.",
     "matices_lab_grados": {
       "red": 39.9,
-      "green": 171.0,
+      "green": 136.0,
       "blue": 306.2,
       "yellow": 103.0
     },
@@ -310,7 +301,7 @@
         175
       ]
     },
-    "_nota_colores_cubo": "Color con que se dibuja cada cubo en la imagen sintética, en RGB. NO son mediciones de los cubos reales: son plásticos saturados plausibles para ejercitar segmentación y clasificación. Las referencias del hardware real viven en `deteccion_cubos.matices_lab_grados`. El amarillo se conserva como clase de EXCLUSIÓN aunque no haya obstáculos.",
+    "_nota_colores_cubo": "Color con que se dibuja cada cubo en la imagen sintética, en RGB. NO son los colores del cubo real: son plásticos saturados plausibles, elegidos para que la segmentación por croma tenga algo realista que separar. Los del cubo real no hace falta medirlos: los tres primarios están de 94 a 170 grados de matiz entre sí en Lab, así que clasificarlos es fácil. El par ajustado es verde-amarillo (33 grados), y por eso el amarillo se conserva como clase de EXCLUSIÓN aunque no haya obstáculos.",
     "brillo_tapa": 1.0,
     "brillo_lateral": 0.62,
     "_nota_brillo": "La tapa del cubo recibe luz de frente y las caras laterales de refilón, así que se ven más oscuras. Dibujarlo es lo que vuelve realista la mancha: un cubo NO se ve como un cuadrado de color uniforme, y el detector tiene que vérselas con eso.",

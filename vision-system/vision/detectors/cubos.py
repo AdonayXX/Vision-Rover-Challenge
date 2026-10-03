@@ -11,8 +11,9 @@ El color ES la identidad
 No hay dos cubos del mismo color, así que el color alcanza para identificarlos y
 no llevan ID. El **amarillo está reservado**: un objeto amarillo nunca es un
 cubo. Sigue siendo una clase del clasificador aunque esta edición del reto no
-tenga obstáculos, para que una mancha amarilla se descarte en vez de forzarse a
-uno de los colores de cubo.
+tenga obstáculos, porque verde y amarillo están a solo 33° de matiz —el par más
+ajustado con diferencia— y sin esa clase cualquier objeto amarillo suelto se
+leería como cubo verde.
 
 Croma para separar, matiz para clasificar
 -----------------------------------------
@@ -22,10 +23,10 @@ perceptual— es por definición un objeto de interés. Es un filtro que separa 
 fondo del contenido casi gratis, y de paso deja fuera al chasis negro del rover.
 
 La clase sale del **matiz**, el ángulo `atan2(b*, a*)`, y no de la distancia a un
-color RGB. El matiz es mucho más estable ante iluminación que comparar canales
-crudos. Los valores de referencia se pueden calibrar con los cubos reales, y el
-umbral de croma puede tener una recuperación específica por color cuando una cara
-del plástico queda menos saturada que las demás.
+color de referencia. El matiz es casi invariante a la iluminación y a lo saturado
+que sea el plástico: un cubo rojo a la sombra sigue teniendo matiz de rojo aunque
+le bajen el croma y la luminosidad. Por eso no hace falta medir los cubos reales
+antes de arrancar.
 
 El umbral de croma sale del tablero, no de un número
 ---------------------------------------------------
@@ -209,8 +210,8 @@ def clasificar(matiz: float, cfg: ConfigVision) -> str | None:
 
     El amarillo participa de la comparación y después se descarta. Eso es lo
     que lo vuelve una clase de **exclusión** y no una ausencia: si se lo sacara
-    de la lista, una mancha amarilla podría terminar forzada al color de cubo
-    más cercano.
+    de la lista, un objeto amarillo caería en el más cercano de los tres —el
+    verde, a 33°— en vez de descartarse.
     """
     dc = cfg.deteccion_cubos
     mejor, distancia_mejor = None, 360.0
@@ -516,18 +517,6 @@ def ajustar_cubo(contorno_celdas: np.ndarray, lado_celdas: float, nadir: np.ndar
 # --------------------------------------------------------------------------
 
 
-def area_cara_local_px(sistema: SistemaCoordenadas, centro_px, lado_celdas: float) -> float:
-    """Área de una cara en el piso, proyectada donde está el candidato.
-
-    Con perspectiva, los dos lados tienen escalas distintas y cambian de un
-    extremo al otro de la cancha. Elevar al cuadrado un lado medido en el
-    origen subestimaba el área y rechazaba cubos reales en cámaras inclinadas.
-    """
-    col, row = sistema.a_celdas(np.asarray([centro_px], dtype=np.float64))[0]
-    cara = sistema.a_pixeles(cuadrado(col, row, lado_celdas, 0.0))
-    return max(1.0, float(cv2.contourArea(cara.astype(np.float32))))
-
-
 def detectar_cubos(
     imagen_bgr: np.ndarray,
     sistema: SistemaCoordenadas,
@@ -577,7 +566,6 @@ def detectar_cubos(
     etiqueta_de: dict[str, int] = {}
     for etiqueta in range(1, cantidad):
         area = int(stats[etiqueta, cv2.CC_STAT_AREA])
-        area_cara = area_cara_local_px(sistema, centros[etiqueta], lado_celdas)
         if not (area_cara * dc.area_minima_relativa <= area <= area_cara * dc.area_maxima_relativa):
             if rechazos is not None and area >= area_cara * _RECHAZO_MINIMO_RELATIVO:
                 region = (etiquetas == etiqueta).astype(np.uint8)

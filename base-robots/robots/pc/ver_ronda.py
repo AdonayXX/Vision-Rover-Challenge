@@ -43,21 +43,27 @@ def main():
                         args.robot_ip, estado.get("robot_id"), args.robot_id))
                     return 1
                 print("Mirando al rover {} (Ctrl+C sale sin tocarlo)".format(args.robot_id), flush=True)
+                # Si la placa se reinició (error fatal, BROWNOUT, WATCHDOG) lo dice aquí.
+                print("  placa: encendida hace {} s, ultimo reinicio={}{}".format(
+                    estado.get("uptime_s"), estado.get("reset_reason"),
+                    ", fallos={}".format(estado["fallos"]) if estado.get("fallos") else ""), flush=True)
                 inicio = time.monotonic()
                 while True:
                     estado = preguntar(sock, buffer)
                     mision = estado.get("mision") or {}
                     ronda = mision.get("ronda") or {}
+                    mem = (estado.get("vision") or {}).get("mem_libre")
                     clave = (ronda.get("estado"), ronda.get("fase"), ronda.get("actual"),
                              tuple(ronda.get("hechos") or ()), mision.get("estado"), mision.get("motivo"))
                     if clave != anterior or time.monotonic() - ultimo_print > 5:
-                        print("{:6.1f}s fase={} ronda={} cubos={} hechos={} actual={} | mision={} {}{}".format(
+                        print("{:6.1f}s fase={} ronda={} cubos={} hechos={} actual={} | mision={} {}{}{}".format(
                             time.monotonic() - inicio, ronda.get("fase"), ronda.get("estado"),
                             ronda.get("mis_cubos"), ronda.get("hechos"), ronda.get("actual"),
                             mision.get("estado"), mision.get("motivo") or "",
-                            "  fallos={}".format(ronda["fallos"]) if ronda.get("fallos") else ""), flush=True)
+                            "  fallos={}".format(ronda["fallos"]) if ronda.get("fallos") else "",
+                            "  ram={}".format(mem) if mem else ""), flush=True)
                         anterior, ultimo_print = clave, time.monotonic()
-                    time.sleep(.3)
+                    time.sleep(1.0)        # cada informe gasta RAM de red en la placa (cancha 2-oct)
         except KeyboardInterrupt:
             print("Fin (el rover sigue solo).")
             return 0

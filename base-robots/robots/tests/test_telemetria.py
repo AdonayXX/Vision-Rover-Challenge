@@ -92,13 +92,27 @@ class TelemetryTests(unittest.TestCase):
     def test_invalid_does_not_replace_last_good_but_blocks(self):
         self.accept()
         previous = copy.deepcopy(self.state.message)
-        self.message["v"] = 3
+        self.message["v"] = 4
         self.assertFalse(self.accept())
         self.assertEqual(self.state.message, previous)
         self.assertIsNotNone(self.state.reason())
         self.message.update(v=2, seq=2)
         self.assertTrue(self.accept())
         self.assertIsNone(self.state.reason())
+
+    def test_protocol_v3_requires_boolean_in_depot(self):
+        # v3 (oct-2026): cada cubo trae el veredicto del árbitro.
+        self.message["v"] = 3
+        self.assertFalse(self.accept())                       # v3 sin in_depot
+        self.message["cubes"][0]["in_depot"] = 1
+        self.message["seq"] = 2
+        self.assertFalse(self.accept())                       # 1 no es true
+        self.message["cubes"][0]["in_depot"] = True
+        self.message["seq"] = 3
+        self.assertTrue(self.accept())
+        self.assertIs(self.state.cube("red")["in_depot"], True)
+        self.message.update(v=2, seq=4)
+        self.assertFalse(self.accept())                       # v2 no trae ese campo
 
     def test_bad_shapes_numbers_and_identities(self):
         good = copy.deepcopy(self.message)

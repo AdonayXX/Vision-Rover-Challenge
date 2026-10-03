@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+import urllib.request
 from tkinter import filedialog, messagebox, ttk
 
 
@@ -38,6 +39,17 @@ DEFAULT_FILES = [
     os.path.join(CODE_DIR, "navegacion.py"),
 ]
 
+# Los modulos se suben COMPILADOS (.mpy) con el mpy-cross oficial de Adafruit
+# para la version de CircuitPython de la placa: asi la placa no compila el
+# codigo al importarlo, que pedia tanta RAM de golpe que la ronda se caia
+# (cancha 2-oct: MemoryError fatal al planificar). El codigo fuente no cambia.
+# CircuitPython ejecuta estos por NOMBRE: tienen que quedar como .py.
+NO_COMPILAR = {"code.py", "boot.py", "safemode.py"}
+MPY_DIR = os.path.join(PROJECT_ROOT, "tools", "mpy-cross")
+MPY_URL = ("https://adafruit-circuit-python.s3.amazonaws.com/bin/mpy-cross/windows/"
+           "mpy-cross-windows-{version}.static.exe")
+CIRCUITPYTHON_POR_DEFECTO = "9.2.4"
+
 
 class Esp32Uploader(tk.Tk):
     def __init__(self):
@@ -58,6 +70,7 @@ class Esp32Uploader(tk.Tk):
         self.ssid_var = tk.StringVar()
         self.password_var = tk.StringVar()
         self.ask_wifi_var = tk.BooleanVar(value=False)
+        self.compilar_var = tk.BooleanVar(value=True)
 
         self._build_ui()
         self.load_wifi_config()
@@ -109,6 +122,12 @@ class Esp32Uploader(tk.Tk):
             command=self.reset_board,
         )
         self.reset_btn.pack(side="left", padx=(8, 0))
+
+        ttk.Checkbutton(
+            buttons,
+            text="Compilar a .mpy (recomendado)",
+            variable=self.compilar_var,
+        ).pack(side="left", padx=(12, 0))
 
         selected_box = ttk.LabelFrame(root, text="Archivos seleccionados")
         selected_box.pack(fill="x", pady=(0, 10))
@@ -292,7 +311,74 @@ class Esp32Uploader(tk.Tk):
         if aviso:
             self.write_log("AVISO: " + aviso + "\n")
         borrar = [] if any(r == "/modelo_movimiento.json" for _, r in propios) else ["/modelo_movimiento.json"]
-        self.upload_files(DEFAULT_FILES + propios, borrar)
+        if not self.compilar_var.get():
+            # Sin compilar: los .mpy viejos no estorban (un .py se importa
+            # antes que un .mpy del mismo nombre), pero se borran igual.
+            borrar += ["/" + os.path.splitext(os.path.basename(f))[0] + ".mpy" for f in DEFAULT_FILES
+                       if f.endswith(".py") and os.path.basename(f) not in NO_COMPILAR]
+            self.upload_files(DEFAULT_FILES + propios, borrar)
+            return
+        self.set_busy(True, "Compilando...")
+        thread = threading.Thread(target=self._paquete_compilado_worker,
+                                  args=(DEFAULT_FILES + propios, borrar), daemon=True)
+        thread.start()
+
+    def _version_placa(self):
+        """Version de CircuitPython de la placa, leida de boot_out.txt."""
+        try:
+            texto = "".join(self.run_command(self.ampy_command("get", "boot_out.txt")))
+        except RuntimeError:
+            texto = ""
+        encontrada = re.search(r"CircuitPython (\d+\.\d+\.\d+)", texto)
+        if encontrada:
+            return encontrada.group(1)
+        self.log_queue.put(("log", "AVISO: no pude leer la version de la placa; uso "
+                                   f"CircuitPython {CIRCUITPYTHON_POR_DEFECTO}.\n"))
+        return CIRCUITPYTHON_POR_DEFECTO
+
+    def _mpy_cross(self, version):
+        """mpy-cross oficial para esa version; se descarga una sola vez."""
+        os.makedirs(MPY_DIR, exist_ok=True)
+        exe = os.path.join(MPY_DIR, f"mpy-cross-{version}.exe")
+        if not os.path.isfile(exe):
+            url = MPY_URL.format(version=version)
+            self.log_queue.put(("log", f"Descargando mpy-cross {version} de Adafruit...\n{url}\n"))
+            temporal = exe + ".parcial"
+            urllib.request.urlretrieve(url, temporal)
+            os.replace(temporal, exe)
+        salida = "".join(self.run_command([exe, "--version"]))
+        if version not in salida:
+            raise RuntimeError(f"mpy-cross no corresponde a CircuitPython {version}: {salida}")
+        return exe
+
+    def _paquete_compilado_worker(self, archivos, borrar):
+        try:
+            self.log_queue.put(("log", f"Usando puerto {self.port()}\nLeyendo version de la placa...\n"))
+            version = self._version_placa()
+            self.log_queue.put(("log", f"Placa con CircuitPython {version}\n"))
+            exe = self._mpy_cross(version)
+            salida = os.path.join(MPY_DIR, "build", version)
+            os.makedirs(salida, exist_ok=True)
+            comandos, borrar = [], list(borrar)
+            for item in archivos:
+                origen, remoto = item if isinstance(item, tuple) else (item, self.remote_name(item))
+                if not os.path.isfile(origen):
+                    raise RuntimeError(f"No existe: {origen}")
+                nombre = os.path.basename(origen)
+                if not nombre.endswith(".py") or nombre in NO_COMPILAR:
+                    comandos.append((origen, remoto))
+                    continue
+                base = os.path.splitext(nombre)[0]
+                mpy = os.path.join(salida, base + ".mpy")
+                self.run_command([exe, "-o", mpy, origen])
+                comandos.append((mpy, "/" + base + ".mpy"))
+                borrar.append("/" + base + ".py")      # si queda el .py, la placa carga ese
+            self.log_queue.put(("log", f"Compilados {sum(r.endswith('.mpy') for _, r in comandos)} modulos.\n"))
+            self._upload_worker(comandos, borrar)
+        except Exception as error:
+            self.log_queue.put(("log", f"\nERROR: {error}\n"))
+            self.log_queue.put(("status", "Error"))
+            self.log_queue.put(("done", None))
 
     def upload_selected_files(self):
         if not self.selected_files:
@@ -524,8 +610,12 @@ class Esp32Uploader(tk.Tk):
             for path, remote in commands:
                 self.log_queue.put(("log", f"Subiendo {path} -> {remote}\n"))
                 self.run_command(self.ampy_command("put", path, remote))
+            if borrar:
+                # Solo lo que esta: cada llamada a ampy tarda un par de segundos.
+                presentes = {"/" + linea.strip().lstrip("/") for linea in self.run_command(self.ampy_command("ls"))}
+                borrar = [remote for remote in borrar if remote in presentes]
             for remote in borrar:
-                self.log_queue.put(("log", f"Borrando {remote} de la placa (era de otro rover o viejo)\n"))
+                self.log_queue.put(("log", f"Borrando {remote} de la placa (viejo o de otro rover)\n"))
                 try:
                     self.run_command(self.ampy_command("rm", remote))
                 except RuntimeError:
@@ -533,6 +623,10 @@ class Esp32Uploader(tk.Tk):
             self.log_queue.put(("log", "\nComprobando archivos en la placa...\n"))
             en_placa = {"/" + linea.strip().lstrip("/") for linea in self.run_command(self.ampy_command("ls"))}
             faltan = [remote for _, remote in commands if remote not in en_placa]
+            sobran = [remote for remote in borrar if remote.endswith(".py") and remote in en_placa]
+            if sobran:
+                raise RuntimeError("No se pudieron borrar (la placa los cargaria en vez del .mpy): "
+                                   + ", ".join(sobran))
             if faltan:
                 raise RuntimeError("No quedaron en la placa: " + ", ".join(faltan))
             self.log_queue.put(("log", f"Los {len(commands)} archivos estan en la placa.\n"))

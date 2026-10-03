@@ -276,13 +276,15 @@ class LlevarCuboTests(unittest.TestCase):
         correr(mision, sim)
         self.assert_entregado(mision, sim, "red")
 
-    def test_blocked_push_corridor_aborts_without_pushing_into_it(self):
+    def test_blocked_push_corridor_goes_around_without_pushing_into_it(self):
+        # El azul tapa el empuje recto del rojo. Desde que el rover puede
+        # asomarse fuera de la cancha (borde_mm) hay sitio para correr el rojo
+        # de lado y entregarlo; antes abortaba con corredor_bloqueado.
         sim = simulador((10.0, 21.5, 0.0), [{"color": "red", "col": 22.0, "row": 21.5},
                                             {"color": "blue", "col": 31.0, "row": 21.5}])
         mision = llevar(sim, "red")
-        correr(mision, sim)
-        self.assertEqual(mision.estado, ABORTADO)
-        self.assertTrue(mision.motivo.startswith("corredor_bloqueado: cubo blue"), mision.motivo)
+        correr(mision, sim, 60000)
+        self.assert_entregado(mision, sim, "red")
         self.assertNotIn("blue", sim.empujados)
 
     def test_cube_against_the_far_wall_is_moved_out_first(self):

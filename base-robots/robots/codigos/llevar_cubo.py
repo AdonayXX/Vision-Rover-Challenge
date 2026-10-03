@@ -83,6 +83,15 @@ def punto_detras(cubo, meta, distancia_mm, cell_mm):
     return {"col": cubo["col"] - dc / largo * d, "row": cubo["row"] - dr / largo * d}
 
 
+def memoria_libre():
+    """En la placa: junta la basura y devuelve los bytes libres. En la PC: None."""
+    import gc
+    if not hasattr(gc, "mem_free"):
+        return None
+    gc.collect()
+    return gc.mem_free()
+
+
 def cubo_en_su_zona(cubo, depot, depot_size, grid, cube_side):
     """Regla del contrato v2 (CONTRATO.md, sección 3). Devuelve (adentro, falta en celdas)."""
     distancias = (depot["row"], grid["rows"] - depot["row"],
@@ -96,6 +105,14 @@ def cubo_en_su_zona(cubo, depot, depot_size, grid, cube_side):
     exceso_row = max(0.0, abs(cubo["row"] - depot["row"]) - (semi_row - margen))
     falta = _norma(exceso_col, exceso_row)
     return falta == 0.0, falta
+
+
+def entregado(cubo, depot, mensaje):
+    """¿Ya cuenta? Manda el árbitro (`in_depot`, protocolo v3); la cuenta propia
+    es un poco más estricta que la suya, así que si dice adentro, él también."""
+    if cubo.get("in_depot") is True:
+        return True
+    return cubo_en_su_zona(cubo, depot, mensaje["depot_size"], mensaje["grid"], mensaje["cube_side"])[0]
 
 
 def corredor_bloqueado(mensaje, color, cubo, meta, rover, robot_id, contacto_mm,
@@ -174,7 +191,7 @@ class LlevarCubo:
     def __init__(self, vision, modelo, motores, robot_id, reloj=ahora_ms, max_edad_ms=800,
                  espera_max_ms=3000, max_ms=150000, max_replanes=10, max_empujes=8,
                  aproximacion_mm=160.0, contacto_mm=110.0, radio_mm=85.0, holgura_mm=10.0,
-                 holgura_ruta_mm=25.0, paso_ruta=2, retroceso_mm=80.0, v_empuje=120.0, w_empuje=35.0, kp_empuje=2.0,
+                 holgura_ruta_mm=25.0, paso_ruta=2, borde_mm=10.0, retroceso_mm=80.0, v_empuje=120.0, w_empuje=35.0, kp_empuje=2.0,
                  lateral_max_mm=40.0, linea_ok_mm=25.0, linea_max_mm=40.0, desvio_max_deg=30.0,
                  alinear_deg=4.0, tolerancia_empuje_mm=6.0, sesgo_mm=5.0, cubo_ciego_ms=3500,
                  previo_mm=70.0, sensores=None, us_contacto_mm=45.0, us_libre_mm=None,
@@ -185,6 +202,10 @@ class LlevarCubo:
         self.max_replanes, self.max_empujes = max_replanes, max_empujes
         self.aproximacion_mm, self.contacto_inicial_mm = aproximacion_mm, contacto_mm
         self.radio_mm, self.holgura_mm, self.paso_ruta = radio_mm, holgura_mm, paso_ruta
+        # El centro puede llegar a 10 mm del borde: el rover se asoma fuera para
+        # empujar un cubo pegado a la orilla (cancha 2-oct: dos cubos en rincones
+        # sin sitio detras con el margen de un objeto, 95 mm).
+        self.borde_mm = borde_mm
         self.holgura_ruta_mm = holgura_ruta_mm
         self.retroceso_mm = retroceso_mm
         self.v_empuje, self.w_empuje, self.kp_empuje = v_empuje, w_empuje, kp_empuje
@@ -334,19 +355,17 @@ class LlevarCubo:
     def _planificar(self, mensaje, centro, t_obs, cubo, deposito, cell):
         if not self._tras_parada(t_obs - max(0, self.cubo_viejo_ms)):
             return                            # rover Y cubo vistos ya parado
-        if cubo_en_su_zona(cubo, deposito, mensaje["depot_size"], mensaje["grid"], mensaje["cube_side"])[0]:
+        if entregado(cubo, deposito, mensaje):
             return self._retirar(centro, cubo, cell)
         meta = self.submeta or deposito
         if self.replanes >= self.max_replanes:
             return self._abortar("demasiados_intentos")
         self.replanes += 1
+        self.ultimo["mem"] = memoria_libre()    # parado: buen momento para juntar basura
         detras = punto_detras(cubo, meta, self.aproximacion_mm, cell)
         if detras is None:
             return self._abortar("cubo_sobre_el_centro_de_la_zona")
-        if self.planner is None:
-            from rutas import RoutePlanner
-            self.planner = RoutePlanner(self.radio_mm, self.radio_mm, self.holgura_mm,
-                                        step_cells=self.paso_ruta, required_colors=())
+        self.preparar()
         escena = _Escena(mensaje, self.robot_id, centro)
         estorbo = corredor_bloqueado(mensaje, self.color, cubo, meta, detras, self.robot_id,
                                      self.contacto_mm, self.radio_mm, self.holgura_mm)
@@ -576,7 +595,7 @@ class LlevarCubo:
         adentro, falta = cubo_en_su_zona(cubo, deposito, mensaje["depot_size"], mensaje["grid"],
                                          mensaje["cube_side"])
         self.ultimo["falta_mm"] = round(falta * cell)
-        if adentro:
+        if adentro or cubo.get("in_depot") is True:   # el árbitro tiene 2,5 mm de holgura
             return self._retirar(centro, cubo, cell)
         meta = self.submeta or deposito
         error = giro_corto(rumbo(cubo, meta) - centro["theta"])
@@ -627,6 +646,19 @@ class LlevarCubo:
         self._retroceder(centro, cell, "cubo_fuera_de_zona")
 
     # ------------------------------------------------------------ auxiliares
+    def preparar(self):
+        """Crea el planificador y reserva sus búferes (una vez)."""
+        if self.planner is None:
+            from rutas import RoutePlanner
+            self.planner = RoutePlanner(self.radio_mm, self.radio_mm, self.holgura_mm,
+                                        step_cells=self.paso_ruta, required_colors=(),
+                                        edge_mm=self.borde_mm)
+            mensaje = self.vision.mensaje
+            if mensaje is not None:
+                grid = mensaje["grid"]
+                self.planner._buffers((int(grid["cols"] // self.paso_ruta) + 1)
+                                      * (int(grid["rows"] // self.paso_ruta) + 1))
+
     def _reubicacion(self, mensaje, escena, cubo, deposito, cell):
         """Dónde dejar el cubo para que después quepa el rover detrás, rumbo a su zona.
 
