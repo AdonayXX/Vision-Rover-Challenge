@@ -11,10 +11,14 @@
 #   · El rover integra el giroscopio TODO el tiempo, no solo durante un
 #     movimiento. Así existe un rumbo global y los giros se encadenan sin
 #     acumular error: TURN|90 cuatro veces cierra un cuadrado.
+#   · FWD y BACK mantienen el ángulo con el que iniciaron: el rover sigue
+#     recto en la dirección en que quedó, sin curvarse para corregir.
 #   · Nada bloquea. Un ciclo único lee BLE, avanza el movimiento en curso y
 #     envía telemetría, de modo que STOP interrumpe en cualquier momento.
 #   · Los giros son de lazo cerrado sobre el rumbo (con rampa de frenado y
 #     verificación de asentamiento), no de "acumular hasta llegar".
+#   · El acelerómetro verifica los avances: confirma que el rover arrancó y
+#     en la dirección ordenada, detecta choques y mide el frenado.
 #
 # CONVENCIÓN DE ÁNGULOS (igual que test_motores.py: right() = giro horario)
 #   rumbo positivo = giro a la DERECHA (horario visto desde arriba)
@@ -29,20 +33,44 @@
 #     STAT                  reporta drift, ganancias y estado
 #     SET|clave|valor       ajusta un parámetro (ver PARAMETROS)
 #   En cola (se ejecutan una tras otra):
-#     FWD|seg|vel           avanza recto sobre el rumbo de referencia
-#     BACK|seg|vel          retrocede recto sobre el rumbo de referencia
+#     FWD|seg|vel           avanza recto manteniendo el ángulo inicial
+#     BACK|seg|vel          retrocede recto manteniendo el ángulo inicial
 #     TURN|grados|vel       gira relativo al rumbo de referencia
 #     FACE|rumbo|vel        gira hasta un rumbo absoluto
 #     HEADING|rumbo|vel|seg avanza manteniendo un rumbo absoluto (repo)
 #     WAIT|seg              espera
 #     ZERO                  el rumbo actual pasa a ser 0
 #     CAL                   recalibra el drift (el rover debe estar quieto)
+#     EJE                   avanza 0.5 s y detecta qué eje del acelerómetro
+#                           apunta hacia adelante (necesita ~20 cm libres)
 #   "vel" es opcional en FWD, BACK, TURN y FACE.
 #
 # MENSAJES DEL ROVER (líneas < 20 bytes, regla del skill BLE)
 #   H,rumbo,modo,cola     telemetría a 5 Hz. modo: I M T D W C
 #   R,rumbo               rumbo de referencia (cuando cambia y cada 1 s)
 #   # texto               confirmaciones, fin de movimiento y errores
+#
+# VERIFICACIÓN CON ACELERÓMETRO (FWD, BACK, HEADING)
+#   El acelerómetro no mide velocidad: a velocidad constante marca lo mismo
+#   que detenido. Lo que sí se ve son los CAMBIOS de velocidad:
+#     arranque -> pulso en la dirección ordenada  (confirma movimiento)
+#     frenado  -> pulso en la dirección contraria (confirma que venía moviéndose)
+#     choque   -> pulso contrario brusco y grande
+#   Cada avance tiene tres fases, todas reportadas como modo D:
+#     1. base   0.12 s quieto: mide la aceleración en reposo (gravedad e
+#               inclinación) para restarla después
+#     2. mueve  el avance normal con PID; en los primeros VENT segundos debe
+#               aparecer el pulso de arranque
+#     3. frena  0.25 s con motores frenados: mide el pulso de frenado y deja
+#               al rover quieto antes de la siguiente orden
+#   Mensajes:
+#     # err sin mov v.02   no hubo pulso de arranque: bloqueado o patinando
+#                          (v = vibración; alta con ruedas girando en el aire)
+#     # err dir -.08       el pulso fue en sentido contrario: motores invertidos
+#     # choque -.52g       impacto durante el avance
+#     # aviso no frenó     arrancó pero no se detectó frenado: quizá se trabó
+#     #a+.11 f-.14 v.02    resumen: pulso de arranque, de frenado y vibración (g)
+#   Un error detiene el rover y vacía la cola.
 
 import time
 import math
@@ -76,12 +104,23 @@ GYRO_SIGN = -1.0
 # Si marca 352°, GYRO_SCALE = 360 / 352 = 1.023
 GYRO_SCALE = 1.0
 
+# Eje del acelerómetro que apunta hacia ADELANTE: 0 = X, 1 = Y, 2 = Z.
+# -1 = sin calibrar: los avances funcionan pero sin verificación.
+# Para obtenerlo, envía EJE con el rover en el piso y espacio libre al frente.
+# Responde, por ejemplo, "# eje Y+ p.12": ACC_EJE = 1, ACC_SIGNO = 1.
+ACC_EJE = -1
+ACC_SIGNO = 1
+
 PARAMETROS = {
     # Avance recto (PID de move_heading.py)
-    "KP": 0.015,
-    "KI": 0.0005,
-    "KD": 0.002,
-    "MAXC": 0.30,    # corrección máxima
+    # Los valores de move_heading.py (KP 0.015, KI 0.0005) son débiles: con
+    # 3° de error corrigen solo 0.045, menos de lo que suele diferir un
+    # motor del otro. Con KI tan bajo, el error se queda varios grados.
+    "KP": 0.03,      # corrección por grado de error
+    "KI": 0.015,     # corrección por grado·segundo acumulado
+    "KD": 0.002,     # amortiguación sobre la velocidad angular (°/s)
+    "MAXC": 0.45,    # corrección máxima por motor
+    "VMIN": 0.12,    # potencia desde la que arranca la rampa (zona muerta)
     "RAMPA": 0.25,   # segundos de arranque suave (menos patinaje)
     # Giros
     "TVEL": 0.35,    # velocidad de giro por defecto
@@ -92,7 +131,22 @@ PARAMETROS = {
     "VEL": 0.5,      # velocidad de avance por defecto
     "RG": RIGHT_GAIN,
     "GS": GYRO_SCALE,
+    # Verificación con acelerómetro
+    "VERIF": 1,      # 1 = activa, 0 = desactivada
+    "AEJE": ACC_EJE,
+    "ASIG": ACC_SIGNO,
+    "UARR": 0.04,    # g mínimos del pulso de arranque
+    "UCHO": 0.35,    # g del pulso contrario que se considera choque
+    "VENT": 0.5,     # s para que aparezca el pulso de arranque
+    "TRIM": 1,       # 1 = aprender el desbalance de motores entre avances
 }
+
+T_BASE = 0.12            # s midiendo reposo antes de arrancar
+T_FRENO = 0.25           # s midiendo el frenado
+TAU_ACEL = 0.04          # s, filtro del acelerómetro (vibración de motores)
+TAU_VIB = 0.2            # s, promedio de la vibración
+G = 9.80665
+NOMBRES_EJE = "XYZ"
 
 WATCHDOG_MOTOR = 0.6     # s sin MOTOR -> se detiene
 PERIODO_TELEMETRIA = 0.2
@@ -112,6 +166,7 @@ try:
     # 500 °/s basta para el rover y da 4x más resolución que 2000 °/s.
     sensor.gyro_range = GyroRange.RANGE_500_DPS
     sensor.gyro_data_rate = Rate.RATE_416_HZ
+    sensor.accelerometer_data_rate = Rate.RATE_416_HZ
 except Exception as e:  # noqa: BLE001
     print("Config IMU por defecto:", e)
 
@@ -154,6 +209,12 @@ def pixel(color):
 
 def gyro_z():
     return sensor.gyro[2]
+
+
+def leer_acel():
+    """Aceleración en g (incluye la gravedad)."""
+    ax, ay, az = sensor.acceleration
+    return (ax / G, ay / G, az / G)
 
 
 def calibrar_drift(segundos=3.0):
@@ -223,7 +284,7 @@ def anunciar():
 # --------------------------------------------------
 
 rumbo = 0.0          # rumbo integrado, SIN envolver (permite giros de 720°)
-rumbo_ref = 0.0      # rumbo al que deben referirse FWD/BACK/TURN
+rumbo_ref = 0.0      # rumbo planificado: base de TURN (FWD/BACK no lo usan)
 velocidad_ang = 0.0  # °/s, convención del rover (derecha positiva)
 drift = 0.0
 
@@ -235,6 +296,14 @@ t_ultimo_motor = 0.0
 
 def fmt(v):
     return "{:.1f}".format(v)
+
+
+def fmtg(v, signo=True):
+    """0.114 -> '+.11'. Compacto para caber en 20 bytes."""
+    t = ("{:+.2f}" if signo else "{:.2f}").format(v)
+    if abs(v) < 1:
+        t = t.replace("0.", ".", 1)
+    return t
 
 
 def objetivo_cercano(rumbo_abs):
@@ -268,17 +337,21 @@ def iniciar(cmd):
 
     if nombre in ("FWD", "BACK", "HEADING"):
         if nombre == "HEADING":
+            # HEADING apunta a un rumbo absoluto y lo vuelve la referencia.
             objetivo = objetivo_cercano(cmd[1])
             vel, dur = cmd[2], cmd[3]
+            rumbo_ref = objetivo
         else:
-            objetivo = rumbo_ref
+            # FWD y BACK mantienen el ángulo CON EL QUE INICIARON.
+            # Si el giro anterior terminó en 89.2° en vez de 90°, el rover
+            # avanza recto a 89.2° en lugar de curvarse para buscar 90°.
+            # rumbo_ref NO cambia: el siguiente TURN se calcula sobre el plan
+            # (90° + giro), así el error de cada giro no se acumula.
+            objetivo = rumbo
             dur = cmd[1]
             vel = cmd[2] if cmd[2] is not None else PARAMETROS["VEL"]
             vel = abs(vel) * (-1 if nombre == "BACK" else 1)
-        rumbo_ref = objetivo
-        modo = "D"
-        mov = {"obj": objetivo, "vel": vel, "dur": dur, "t0": ahora,
-               "integral": 0.0}
+        iniciar_avance(objetivo, vel, dur, ahora)
 
     elif nombre in ("TURN", "FACE"):
         if nombre == "TURN":
@@ -306,25 +379,243 @@ def iniciar(cmd):
         modo = "C"
         mov = {"t0": ahora, "suma": 0.0, "n": 0}
 
+    elif nombre == "EJE":
+        # Avance corto, sin verificación, registrando los tres ejes.
+        iniciar_avance(rumbo, abs(PARAMETROS["VEL"]), 0.5, ahora,
+                       detectar_eje=True)
+
+
+aviso_eje_enviado = False
+
+# Desbalance aprendido de los motores, por sentido (1 adelante, -1 atrás).
+# Es la corrección promedio del último avance dividida entre la velocidad.
+# Se aplica como prealimentación proporcional a la velocidad del momento:
+# durante la rampa, cuando la velocidad es baja, también es baja, y a
+# velocidad plena es completa. El PID solo corrige lo que falte.
+trim = {1: 0.0, -1: 0.0}
+
+
+def eje_calibrado():
+    return int(PARAMETROS["AEJE"]) in (0, 1, 2)
+
+
+def iniciar_avance(objetivo, vel, dur, ahora, detectar_eje=False):
+    global modo, mov, aviso_eje_enviado
+    verif = (PARAMETROS["VERIF"] >= 1 and vel != 0 and not detectar_eje)
+    if verif and not eje_calibrado():
+        verif = False
+        if not aviso_eje_enviado:
+            aviso_eje_enviado = True
+            enviar("# aviso: falta EJE")
+    medir = verif or detectar_eje
+    modo = "D"
+    mov = {
+        "obj": objetivo, "vel": vel, "dur": dur,
+        "integral": 0.0,
+        "emax": 0.0, "t_emax": 0.0, "cmax": 0.0,
+        "c_suma": 0.0, "n_reg": 0, "rg_sug": None, "w_f": 0.0,
+        "s": 1 if vel >= 0 else -1,
+        "verif": verif, "eje": detectar_eje, "medir": medir,
+        # Si no hay nada que medir, se salta la fase base.
+        "fase": "base" if medir else "mueve", "t0": ahora,
+        "suma": [0.0, 0.0, 0.0], "n": 0, "base": (0.0, 0.0, 0.0),
+        "filt": [0.0, 0.0, 0.0], "vib": 0.0,
+        "arr_max": 0.0, "arr_min": 0.0, "fre_min": 0.0,
+        "picos": [0.0, 0.0, 0.0], "confirmado": False,
+    }
+
 
 # ---------- avance de cada movimiento (se llama en cada ciclo) ----------
 
-def paso_avance(ahora, dt):
-    t = ahora - mov["t0"]
-    if t >= mov["dur"]:
-        terminar("# fin " + fmt(normalize_angle(rumbo)))
+def aprender_trim():
+    """Al terminar un avance: aprender el desbalance y sugerir RIGHT_GAIN."""
+    if mov["n_reg"] < 20:     # tramo muy corto: no hubo régimen estable
         return
+    v = mov["vel"]
+    c = mov["c_suma"] / mov["n_reg"]       # corrección promedio por motor
+    if PARAMETROS["TRIM"] >= 1:
+        s = mov["s"]
+        trim[s] = limit(0.5 * trim[s] + 0.5 * c / v, -0.8, 0.8)
+    # Con izq = v + c y der = (v - c)·RG el rover va recto. Un RG que
+    # logre lo mismo sin corrección es RG · (v - c) / (v + c).
+    if abs(v + c) > 0.05:
+        mov["rg_sug"] = PARAMETROS["RG"] * (v - c) / (v + c)
+
+
+def filtrar_acel(dt):
+    """Lee el acelerómetro, resta la base y filtra. Devuelve la aceleración
+    sobre el eje de avance, con signo positivo = dirección ordenada."""
+    try:
+        a = leer_acel()
+    except Exception as e:  # noqa: BLE001
+        print("ACEL:", e)
+        return 0.0
+    base, filt = mov["base"], mov["filt"]
+    alfa = min(1.0, dt / TAU_ACEL)
+    dev2 = 0.0
+    for i in range(3):
+        d = a[i] - base[i]
+        filt[i] += alfa * (d - filt[i])
+        dev2 += (d - filt[i]) ** 2
+    # Vibración: lo que el filtro deja fuera (motores, ruedas, piso).
+    mov["vib"] += min(1.0, dt / TAU_VIB) * (math.sqrt(dev2) - mov["vib"])
+    if not eje_calibrado():
+        return 0.0
+    return mov["s"] * PARAMETROS["ASIG"] * filt[int(PARAMETROS["AEJE"])]
+
+
+def fallar_avance(mensaje):
+    """Error de verificación: detener, vaciar la cola y avisar."""
+    global cola, rumbo_ref
+    print(mensaje, "arr", mov.get("arr_max"), "vib", mov.get("vib"))
+    cola = []
+    rumbo_ref = rumbo
+    terminar(mensaje)
+
+
+def decidir_arranque():
+    """Al cerrar la ventana sin confirmación: ¿al revés o sin movimiento?"""
+    uarr = PARAMETROS["UARR"]
+    if mov["arr_min"] <= -uarr and mov["arr_max"] < uarr:
+        fallar_avance("# err dir " + fmtg(mov["arr_min"]))
+    else:
+        fallar_avance("# err sin mov v" + fmtg(mov["vib"], False))
+
+
+def paso_avance(ahora, dt):
+    fase = mov["fase"]
+
+    # ---------- 1. base: medir el reposo ----------
+    if fase == "base":
+        stop_motores()
+        try:
+            a = leer_acel()
+            for i in range(3):
+                mov["suma"][i] += a[i]
+            mov["n"] += 1
+        except Exception as e:  # noqa: BLE001
+            print("ACEL:", e)
+        if ahora - mov["t0"] >= T_BASE:
+            n = max(1, mov["n"])
+            mov["base"] = tuple(v / n for v in mov["suma"])
+            mov["fase"] = "mueve"
+            mov["t0"] = ahora      # la duración se cuenta desde aquí
+        return
+
+    t = ahora - mov["t0"]
     error = mov["obj"] - rumbo   # >0: hay que girar a la derecha
-    mov["integral"] = limit(mov["integral"] + error * dt, -100, 100)
-    correccion = (PARAMETROS["KP"] * error
-                  + PARAMETROS["KI"] * mov["integral"]
-                  - PARAMETROS["KD"] * velocidad_ang)  # D sobre la medición
-    correccion = limit(correccion, -PARAMETROS["MAXC"], PARAMETROS["MAXC"])
+
+    # ---------- 3. frena: medir el pulso de frenado ----------
+    if fase == "frena":
+        stop_motores()
+        if mov["medir"]:
+            sa = filtrar_acel(dt)
+            mov["fre_min"] = min(mov["fre_min"], sa)
+        if t >= T_FRENO:
+            cerrar_avance(error)
+        return
+
+    # ---------- 2. mueve ----------
+    ventana = max(PARAMETROS["VENT"], PARAMETROS["RAMPA"] + 0.2)
+    if mov["medir"]:
+        sa = filtrar_acel(dt)
+        if t <= ventana:
+            mov["arr_max"] = max(mov["arr_max"], sa)
+            mov["arr_min"] = min(mov["arr_min"], sa)
+            if mov["eje"]:
+                for i in range(3):
+                    if abs(mov["filt"][i]) > abs(mov["picos"][i]):
+                        mov["picos"][i] = mov["filt"][i]
+        if mov["verif"]:
+            if not mov["confirmado"]:
+                if sa >= PARAMETROS["UARR"]:
+                    mov["confirmado"] = True
+                elif t > ventana:
+                    decidir_arranque()
+                    return
+            if sa <= -PARAMETROS["UCHO"]:
+                fallar_avance("# choque " + fmtg(sa) + "g")
+                return
+
+    if t >= mov["dur"]:
+        # Avance más corto que la ventana: decidir con lo que se midió.
+        if mov["verif"] and not mov["confirmado"]:
+            decidir_arranque()
+            return
+        stop_motores()
+        aprender_trim()
+        mov["fase"] = "frena"
+        mov["t0"] = ahora
+        mov["vib_mueve"] = mov["vib"]
+        return
+
     escala = min(1.0, t / PARAMETROS["RAMPA"]) if PARAMETROS["RAMPA"] > 0 else 1.0
-    v = mov["vel"] * escala
+    # La rampa parte de VMIN, no de cero: así ambos motores salen juntos de
+    # la zona muerta. Partiendo de cero, uno arranca antes que el otro y el
+    # rover pivotea en los primeros instantes.
+    vabs = abs(mov["vel"])
+    vmin = min(PARAMETROS["VMIN"], vabs)
+    v = mov["s"] * (vmin + (vabs - vmin) * escala)
+
+    maxc = PARAMETROS["MAXC"]
+    lim = maxc / PARAMETROS["KI"] if PARAMETROS["KI"] > 0 else 0.0
+    mov["integral"] = limit(mov["integral"] + error * dt, -lim, lim)
+    # La vibración de los motores mete ruido en el giroscopio; sin filtrar,
+    # el término D lo convierte en sacudidas de corrección.
+    mov["w_f"] += min(1.0, dt / 0.03) * (velocidad_ang - mov["w_f"])
+    pid = (PARAMETROS["KP"] * error
+           + PARAMETROS["KI"] * mov["integral"]
+           - PARAMETROS["KD"] * mov["w_f"])  # D sobre la medición filtrada
+    ff = trim[mov["s"]] * v if PARAMETROS["TRIM"] >= 1 else 0.0
+    correccion = limit(ff + pid, -maxc, maxc)
+
+    if abs(error) > mov["emax"]:
+        mov["emax"] = abs(error)
+        mov["t_emax"] = t
+    mov["cmax"] = max(mov["cmax"], abs(correccion))
+    if escala >= 1.0 and t > PARAMETROS["RAMPA"] + 0.3:
+        mov["c_suma"] += correccion          # régimen estable
+        mov["n_reg"] += 1
     # motor_1 es la rueda izquierda: izq > der gira a la derecha,
     # tanto avanzando como retrocediendo.
     motores(v + correccion, v - correccion)
+
+
+def cerrar_avance(error):
+    """Fin del avance, ya detenido: reportar rumbo, desvío y mediciones."""
+    m = mov
+    terminar("# fin {} e{}".format(fmt(normalize_angle(rumbo)), fmt(-error)))
+    if not m["eje"]:
+        # Desvío máximo durante el tramo y corrección máxima aplicada.
+        # Si cmax llega a MAXC, el PID se quedó sin margen.
+        # Desvío máximo, en qué segundo ocurrió, y corrección máxima.
+        # Si c llega a MAXC, el PID se quedó sin margen.
+        enviar("#emax {}@{} c{}".format(fmt(m["emax"]), fmt(m["t_emax"]),
+                                         fmtg(m["cmax"], False)))
+        if m["rg_sug"] is not None:
+            enviar("# RG sug {:.3f}".format(m["rg_sug"]))
+    if m["eje"]:
+        picos = m["picos"]
+        i = max(range(3), key=lambda k: abs(picos[k]))
+        if abs(picos[i]) < 0.03:
+            enviar("# err eje sin pulso")
+            print("EJE: picos", picos)
+            return
+        signo = 1 if picos[i] > 0 else -1
+        PARAMETROS["AEJE"] = i
+        PARAMETROS["ASIG"] = signo
+        enviar("# eje {}{} p{}".format(NOMBRES_EJE[i], "+" if signo > 0 else "-",
+                                        fmtg(abs(picos[i]), False)))
+        print("EJE: picos", picos)
+        print("Escribir en code.py: ACC_EJE = {}  ACC_SIGNO = {}".format(i, signo))
+        return
+    if m["verif"]:
+        enviar("#a{} f{} v{}".format(fmtg(m["arr_max"]), fmtg(m["fre_min"]),
+                                     fmtg(m.get("vib_mueve", m["vib"]), False)))
+        # Si arrancó pero al final no hubo frenado, probablemente quedó
+        # trabado a mitad del tramo (sin un choque lo bastante brusco).
+        if m["fre_min"] > -PARAMETROS["UARR"] / 2:
+            enviar("# aviso no frenó")
 
 
 def paso_giro(ahora):
@@ -409,8 +700,16 @@ def procesar_comando(linea):
         if c == "STAT":
             enviar("# drift " + "{:.5f}".format(drift))
             enviar("# RG {} GS {}".format(PARAMETROS["RG"], PARAMETROS["GS"]))
-            enviar("# KP {}".format(PARAMETROS["KP"]))
+            enviar("# KP {} KI {}".format(PARAMETROS["KP"], PARAMETROS["KI"]))
+            enviar("# trim {} {}".format(fmtg(trim[1]), fmtg(trim[-1])))
             enviar("# TMIN {}".format(PARAMETROS["TMIN"]))
+            if eje_calibrado():
+                enviar("# eje {}{} verif {}".format(
+                    NOMBRES_EJE[int(PARAMETROS["AEJE"])],
+                    "+" if PARAMETROS["ASIG"] > 0 else "-",
+                    int(PARAMETROS["VERIF"])))
+            else:
+                enviar("# eje sin calibrar")
             return
         if c == "SET":
             clave = partes[1].upper()
@@ -418,6 +717,10 @@ def procesar_comando(linea):
                 enviar("# err clave " + clave)
                 return
             PARAMETROS[clave] = num(partes, 2)
+            if clave in ("RG", "TRIM"):
+                # El desbalance aprendido dependía del RG anterior.
+                trim[1] = 0.0
+                trim[-1] = 0.0
             enviar("# {}={}".format(clave, PARAMETROS[clave]))
             return
 
@@ -435,7 +738,7 @@ def procesar_comando(linea):
                    max(0.0, num(partes, 3)))
         elif c == "WAIT":
             cmd = (c, max(0.0, num(partes, 1)))
-        elif c in ("ZERO", "CAL"):
+        elif c in ("ZERO", "CAL", "EJE"):
             cmd = (c,)
         else:
             enviar("# err ? " + c)
