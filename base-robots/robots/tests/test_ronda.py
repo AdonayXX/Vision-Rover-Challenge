@@ -74,6 +74,20 @@ class RepartoTests(unittest.TestCase):
         a, b = repartir(mensaje(self.ROVERS, cubos), 10), repartir(mensaje(self.ROVERS, cubos), 11)
         self.assertEqual(sorted(a + b), ["blue", "green"])
 
+    def test_hidden_cube_counts_only_if_the_referee_says_so(self):
+        # Cancha 3-oct: un rover tapaba un cubo ya sacado de su zona; con su
+        # última posición vista la cuenta propia lo daba por entregado y nadie
+        # volvía a buscarlo. Tapado (edad > 500 ms) sólo vale in_depot.
+        dentro = dict(TRES[0], col=39.25)                         # en el centro de su zona
+        m = mensaje(self.ROVERS[:1], [dentro] + TRES[1:])
+        for cubo in m["cubes"]:
+            cubo["in_depot"] = False
+        self.assertNotIn("red", repartir(m, 10))                  # visto ahora: cuenta propia
+        m["cubes"][0]["age_ms"] = 2000
+        self.assertIn("red", repartir(m, 10))                     # tapado y el árbitro no lo cuenta
+        m["cubes"][0]["in_depot"] = True
+        self.assertNotIn("red", repartir(m, 10))
+
     def test_referee_verdict_counts_as_delivered(self):
         # v3: el árbitro tiene 2,5 mm de holgura; si dice in_depot, ya está.
         casi = dict(TRES[0], col=39.25 - 1.7)                  # 34 mm: afuera por la cuenta propia

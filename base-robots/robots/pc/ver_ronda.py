@@ -25,6 +25,18 @@ def preguntar(sock, buffer):
     return json.loads(linea)
 
 
+def _radio(radio):
+    """ESP-NOW con el compañero: mensajes recibidos y hace cuánto llegó el último."""
+    if not radio:
+        return ""
+    texto = "  radio: tx={} rx={} hace={}ms canal={}".format(
+        radio.get("tx"), radio.get("rx"), radio.get("edad_ms", "-"), radio.get("canal", "?"))
+    for clave in ("plan", "robados", "cedidos", "ajenos", "errores", "ultimo_error", "error"):
+        if radio.get(clave):
+            texto += " {}={}".format(clave, radio[clave])
+    return texto
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--robot-ip", required=True)
@@ -56,12 +68,13 @@ def main():
                     clave = (ronda.get("estado"), ronda.get("fase"), ronda.get("actual"),
                              tuple(ronda.get("hechos") or ()), mision.get("estado"), mision.get("motivo"))
                     if clave != anterior or time.monotonic() - ultimo_print > 5:
-                        print("{:6.1f}s fase={} ronda={} cubos={} hechos={} actual={} | mision={} {}{}{}".format(
+                        print("{:6.1f}s fase={} ronda={} cubos={} hechos={} actual={} | mision={} {}{}{}{}".format(
                             time.monotonic() - inicio, ronda.get("fase"), ronda.get("estado"),
                             ronda.get("mis_cubos"), ronda.get("hechos"), ronda.get("actual"),
                             mision.get("estado"), mision.get("motivo") or "",
                             "  fallos={}".format(ronda["fallos"]) if ronda.get("fallos") else "",
-                            "  ram={}".format(mem) if mem else ""), flush=True)
+                            "  ram={}".format(mem) if mem else "",
+                            _radio(ronda.get("radio"))), flush=True)
                         anterior, ultimo_print = clave, time.monotonic()
                     time.sleep(1.0)        # cada informe gasta RAM de red en la placa (cancha 2-oct)
         except KeyboardInterrupt:

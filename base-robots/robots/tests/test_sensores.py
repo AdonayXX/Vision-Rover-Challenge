@@ -23,6 +23,7 @@ from test_control import Clock, Robot, Socket
 class SensorTests(unittest.TestCase):
     def setUp(self):
         self.cfg = json.loads((BASE / "codigos/config_sensores.json").read_text())
+        self.cfg["color"]["barrido"] = True       # estas pruebas son del barrido de color
         self.clock, self.robot = Clock(), Robot()
         self.hw = SimpleNamespace(errors={}, sonar=Mock(),
                                   ir=[SimpleNamespace(value=12000) for _ in range(4)],
@@ -42,6 +43,20 @@ class SensorTests(unittest.TestCase):
                 self.hw.light.value = sample
                 self.sensors.update()
                 self.clock.advance(self.cfg["color"]["sample_interval_seconds"] + .001)
+
+    def test_competition_config_never_lights_the_color_led(self):
+        # Con la configuración que se sube a la placa, el LED rojo/verde/azul
+        # no se enciende nunca: la cámara lo tomaba por un cubo (cancha 3-oct).
+        cfg = json.loads((BASE / "codigos/config_sensores.json").read_text())
+        self.assertIs(cfg["color"]["barrido"], False)
+        hw = SimpleNamespace(errors={}, sonar=Mock(), ir=[SimpleNamespace(value=12000) for _ in range(4)],
+                             light=SimpleNamespace(value=40000), pixel=[(0, 0, 0)])
+        hw.sonar.poll.return_value = (True, 250)
+        sensors = SensoresRover(hw, cfg, self.clock)
+        for _ in range(400):                      # parado, mucho más que un barrido completo
+            sensors.update(moving=False)
+            self.assertEqual(hw.pixel[0], (0, 0, 0))
+            self.clock.advance(.02)
 
     def test_forward_requires_fresh_readings(self):
         self.assertIsNotNone(self.sensors.reason(.2, .2))

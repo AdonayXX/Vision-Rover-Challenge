@@ -86,10 +86,11 @@ class HardwareSensores:
             for item in allocated:
                 item.deinit()
             self.errors["ir"] = str(exc)
+        # El LED primero y por separado: guarda el último color mientras tenga
+        # corriente, aunque la placa se reinicie. Si algo del sensor fallaba
+        # antes de apagarlo, quedaba encendido con el color de un barrido
+        # viejo, y la cámara lo puede tomar por un cubo (rover 10, 3-oct).
         try:
-            if c["analog"] != "IO33":
-                raise ValueError("AO en IO4 usa ADC2 y no funciona con Wi-Fi en ESP32; confirmar AO a IO33 libre")
-            self.light = analogio.AnalogIn(getattr(board, c["analog"]))
             self.pixel = neopixel.NeoPixel(
                 getattr(board, c["led"]), 1,
                 brightness=c.get("brightness", 1), auto_write=False
@@ -97,9 +98,14 @@ class HardwareSensores:
             self.pixel[0] = (0, 0, 0)
             self.pixel.show()
         except Exception as exc:
-            if self.light is not None:
-                self.light.deinit()
-                self.light = None
+            self.pixel = None
+            self.errors["color"] = str(exc)
+        try:
+            if c["analog"] != "IO33":
+                raise ValueError("AO en IO4 usa ADC2 y no funciona con Wi-Fi en ESP32; confirmar AO a IO33 libre")
+            self.light = analogio.AnalogIn(getattr(board, c["analog"]))
+        except Exception as exc:
+            self.light = None
             self.errors["color"] = str(exc)
 
     def deinit(self):

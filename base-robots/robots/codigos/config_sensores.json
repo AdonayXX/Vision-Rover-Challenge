@@ -20,6 +20,8 @@
     "floor_ranges": null
   },
   "color": {
+    "barrido": false,
+    "_nota_barrido": "false en competencia: el LED en rojo/verde/azul a pleno brillo lo ve la camara como un cubo. true solo para pruebas de banco del sensor.",
     "led": "IO32",
     "analog": "IO33",
     "brightness": 1.0,

@@ -47,3 +47,33 @@ def obtener_credenciales_wifi(config, input_fn=input):
         password = input_fn("Password: ")
 
     return ssid, password
+
+
+def elegir_ap(redes, ssid, umbral_dbm=-70):
+    """Antena (bssid, canal) de la red a la que conectarse: la MISMA en los dos rovers.
+
+    ESP-NOW sólo cruza entre rovers en el mismo canal, y en una red con varias
+    antenas cada uno se colgaba de la que oía mejor (cancha 3-oct: el 10 en el
+    canal 11 y el 11 en el 1; ninguno oyó al otro en toda la ronda). Regla que
+    da lo mismo en los dos aunque midan distinto: entre las antenas con señal
+    >= umbral, el canal más bajo y, en él, la más fuerte. Si ninguna llega al
+    umbral, la más fuerte. None si la red no aparece (se conecta sin elegir).
+    """
+    vistas = {}
+    for red in redes:
+        try:
+            if red.ssid != ssid:
+                continue
+            bssid = bytes(red.bssid)
+            if bssid not in vistas or red.rssi > vistas[bssid][0]:
+                vistas[bssid] = (red.rssi, red.channel)
+        except (AttributeError, TypeError):
+            continue
+    if not vistas:
+        return None
+    buenas = [(canal, -rssi, bssid) for bssid, (rssi, canal) in vistas.items() if rssi >= umbral_dbm]
+    if buenas:
+        canal, _, bssid = min(buenas)
+        return bssid, canal
+    bssid = max(vistas, key=lambda b: vistas[b][0])
+    return bssid, vistas[bssid][1]

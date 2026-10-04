@@ -56,7 +56,13 @@ def obstaculo_en_camino(mensaje, desde, hasta, radio_rover_mm=85.0, holgura_mm=1
             if grupo == "rovers" and item["id"] == propio:
                 continue
             libre = radio_rover_mm + holgura_mm + medio
-            if distancia_a_segmento((item["col"], item["row"]), a, b) * cell < libre:
+            punto = (item["col"], item["row"])
+            cerca = distancia_a_segmento(punto, a, b) * cell
+            if cerca < libre:
+                # El otro rover ya estaba así de cerca (salen juntos de la
+                # salida) y el tramo no lo acerca más: alejarse no estorba.
+                if grupo == "rovers" and cerca >= distancia_a_segmento(punto, a, a) * cell - 5:
+                    continue
                 return nombre + (" " + item["color"] if "color" in item else "")
     return None
 
@@ -354,6 +360,12 @@ class Misiones:
         self.detener_mision("siguiente_cubo")
         self._activar(cubo)
         cubo.iniciar(color)
+
+    def ir_en_ronda(self, col, row):
+        """La ronda manda al rover a estacionarse (IR), sin detenerse a sí misma."""
+        self.detener_mision("aparcar")
+        self._activar(self.ir)
+        self.ir.iniciar(col, row)
 
     def detener_mision(self, motivo="stop"):
         """Para el movimiento en curso; la ronda (si hay) sigue decidiendo."""

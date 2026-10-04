@@ -79,6 +79,7 @@ class Simulador:
         self.v_real = self.w_real = 0.0
         self.fase = "RUNNING"             # phase del contrato (incremento 3)
         self.companeros = []              # otros rovers quietos: [{"id", "col", "row", "theta"}]
+        self.id = 10                      # ID del marcador de este rover
 
     def reloj_placa(self):
         return self.t + self.RELOJ_PLACA
@@ -114,8 +115,9 @@ class Simulador:
             mensaje = {"seq": self.seq, "ts_ms": self.t + self.sello, "phase": self.fase,
                        "grid": {"cols": 43, "rows": 43, "cell_mm": CELL},
                        "cube_side": 3.0, "obstacles": [], "cubes": self._cubos_vistos(),
+                       "start": {"col": 3.75, "row": 21.5},
                        "depots": [dict(d) for d in DEPOSITOS], "depot_size": {"length": 10.0, "depth": 7.5},
-                       "rovers": [{"id": 10, "col": self.col + d * math.cos(th),
+                       "rovers": [{"id": self.id, "col": self.col + d * math.cos(th),
                                    "row": self.row - d * math.sin(th), "theta": self.theta, "age_ms": 0}]
                        + [dict(r, age_ms=0) for r in self.companeros]}
             llegada = self.t + self.sello + self.rand.uniform(*self.latencia)

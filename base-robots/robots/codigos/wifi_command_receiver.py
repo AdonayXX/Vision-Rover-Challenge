@@ -43,7 +43,22 @@ def _sin_memoria(mision):
     mision.detener_mision("sin_memoria")
 
 
-def conectar_wifi(ssid, password, alimentar=_nada, forzar=False):
+def _buscar_ap(wifi, ssid, alimentar):
+    """(bssid, canal) elegido con elegir_ap, o None si no se pudo buscar."""
+    from wifi_config import elegir_ap
+    alimentar()
+    try:
+        redes = wifi.radio.start_scanning_networks()
+        try:
+            return elegir_ap(redes, ssid)
+        finally:
+            wifi.radio.stop_scanning_networks()
+    except Exception as error:
+        print("AVISO: no se pudo buscar antenas:", error)
+        return None
+
+
+def conectar_wifi(ssid, password, alimentar=_nada, forzar=False, elegir=True):
     import wifi
 
     if forzar:
@@ -66,7 +81,16 @@ def conectar_wifi(ssid, password, alimentar=_nada, forzar=False):
                 print("Ya conectado:", wifi.radio.ipv4_address)
                 return True
 
-            wifi.radio.connect(ssid, password)
+            # Los dos rovers en la misma antena (canal) para que ESP-NOW cruce.
+            # Los dos últimos intentos, sin elegir: mejor conectado a
+            # cualquiera que sin red.
+            ap = _buscar_ap(wifi, ssid, alimentar) if elegir and intento < 3 else None
+            if ap is None:
+                wifi.radio.connect(ssid, password)
+            else:
+                print("Antena elegida:", ":".join("{:02x}".format(b) for b in ap[0]), "canal", ap[1])
+                alimentar()
+                wifi.radio.connect(ssid, password, channel=ap[1], bssid=ap[0])
 
             print("Conectado:", wifi.radio.ipv4_address)
             _sin_ahorro_energia(wifi)
@@ -366,7 +390,8 @@ def main(config_path="config_robot.json"):
 
         conectado = conectar_wifi(
             ssid,
-            password
+            password,
+            elegir=config.get("wifi_elegir_antena", True)
         )
 
         if not conectado:
@@ -437,7 +462,8 @@ def main(config_path="config_robot.json"):
             ronda = Ronda(vision[0], mision, robot_id,
                           fase_inicio=config.get("fase_inicio", "RUNNING"),
                           estrategia=config.get("estrategia", "reparto"),
-                          companero=config.get("companero_id"))
+                          companero=config.get("companero_id"),
+                          robar=config.get("robar", False))
             mision.ronda = ronda
             print("Ronda: arranca en fase", ronda.fase_inicio, "estrategia", ronda.estrategia)
 
@@ -510,11 +536,21 @@ def main(config_path="config_robot.json"):
                                     mision.detener_mision("wifi_perdido")
                                 server.close()
                                 server = None
-                            if not conectar_wifi(ssid, password, alimentar, forzar=caida):
+                            if not conectar_wifi(ssid, password, alimentar, forzar=caida,
+                                                 elegir=config.get("wifi_elegir_antena", True)):
                                 time.sleep(2)
                                 continue
                             if vision:
                                 vision[0].reiniciar_silencio()    # 20 s más antes de volver a sospechar
+                            if ronda is not None and config.get("espnow", True):
+                                # ESP-NOW con el compañero, en el canal de este router.
+                                if ronda.enlace is None:
+                                    from enlace import Enlace
+                                    from cliente_vision_rover import ahora_ms
+                                    ronda.enlace = Enlace(ronda.robot_id, ahora_ms)
+                                    print("ESP-NOW:", "activo" if ronda.enlace.activo else ronda.enlace.error)
+                                elif caida:
+                                    ronda.enlace.reiniciar()
                             server = abrir_servidor(pool, port)
                             print(
                                 "Comandos de prueba:",

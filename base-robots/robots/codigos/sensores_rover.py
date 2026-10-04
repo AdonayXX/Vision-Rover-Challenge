@@ -203,6 +203,11 @@ class SensoresRover:
         # Se mide detenido; el control por pasos ofrece esa ventana.
         if self.hw.light is None or self.hw.pixel is None:
             return
+        # El barrido enciende el LED en rojo, verde y azul a pleno brillo: la
+        # cámara de la U lo puede tomar por un CUBO (cancha 3-oct). La ronda no
+        # usa el sensor de color, así que sólo barre si se pide ("barrido").
+        if not self.cfg["color"].get("barrido", False):
+            return
         try:
             if moving:
                 self._set_pixel((0, 0, 0))

@@ -84,6 +84,9 @@ class RoutePlanner:
         # La orilla no es una pared: con un valor chico el cuerpo puede
         # asomarse fuera para empujar un cubo pegado al borde.
         self.edge = edge_mm
+        # True: también alejarse de un cubo que ya está demasiado cerca (lo usa
+        # la ronda para estacionarse; las misiones lo resuelven con SALIR).
+        self.escapar = False
         self._n = None                     # tamaño de los búferes del A*
 
     def scene(self, state):
@@ -97,6 +100,7 @@ class RoutePlanner:
         age = state.capture_age_ms()
         scale = msg["grid"]["cell_mm"]
         margin = (self.radius + self.clearance) / scale
+        own = state.rover(state.robot_id)
         circles = []
         for group in ("rovers", "cubes", "obstacles"):
             for item in msg[group]:
@@ -110,6 +114,15 @@ class RoutePlanner:
                     radius = msg["cube_side"] * math.sqrt(2) / 2
                 else:
                     radius = self.obstacle_side * math.sqrt(2) / (2 * scale)
+                if own is not None and (group == "rovers" or self.escapar):
+                    # Ya más cerca que el margen: del compañero al salir juntos
+                    # (16 cm), de un cubo recién entregado al retirarse. Sin
+                    # esto no había ruta a ningún lado y se quedaba trabado.
+                    # Puede alejarse, nunca acercarse más.
+                    cerca = hypot(item["col"] - own["col"], item["row"] - own["row"])
+                    if cerca < radius + margin:
+                        circles.append((item["col"], item["row"], max(0.0, cerca - 0.05)))
+                        continue
                 circles.append((item["col"], item["row"], radius + margin))
         cols, rows = msg["grid"]["cols"], msg["grid"]["rows"]
         edge = margin

@@ -287,6 +287,85 @@ class LlevarCuboTests(unittest.TestCase):
         self.assert_entregado(mision, sim, "red")
         self.assertNotIn("blue", sim.empujados)
 
+    def test_partner_crossing_is_waited_for_instead_of_going_around(self):
+        # Cancha 3-oct 16:50: el 11 pasó por detrás del 10, que tomó eso por
+        # un corredor tapado, reubicó el verde rodeándolo por el borde de
+        # arriba y la cámara lo perdió. Ahora espera a que pase y empuja recto.
+        cubos = [{"color": "green", "col": 20.5, "row": 10.5}]
+        sim = simulador((18.9, 19.0, 90.0), cubos)
+        sim.companeros = [{"id": 11, "col": 19.0, "row": 26.0, "theta": 0.0}]
+        mision = llevar(sim, "green")
+        submetas, fila = [], 99.0
+        while sim.t < 60000 and mision.activa:
+            if sim.t >= 2500:
+                sim.companeros = [{"id": 11, "col": 6.0, "row": 30.0, "theta": 0.0}]   # ya pasó
+            sim.paso()
+            mision.tick()
+            fila = min(fila, sim.row)
+            if mision.submeta is not None:
+                submetas.append(mision.submeta)
+        self.assert_entregado(mision, sim, "green")
+        self.assertEqual(submetas, [])                          # no movió el cubo de lado
+        self.assertGreater(fila, 5.0)                           # ni se acercó al borde
+
+    def test_partner_that_does_not_move_makes_it_drop_the_cube_not_relocate_it(self):
+        # Cancha 3-oct 17:18: reubicar el verde por culpa del 11 lo sacó de la
+        # cancha. Ahora lo suelta ("rover": la ronda espera y sigue con otro);
+        # sólo si el otro sigue ahí después de max_cesiones vuelve a reubicar.
+        cubos = [{"color": "green", "col": 20.5, "row": 10.5}]
+        sim = simulador((18.9, 19.0, 90.0), cubos)
+        sim.companeros = [{"id": 11, "col": 19.0, "row": 26.0, "theta": 0.0}]   # aparcado ahí
+        mision = llevar(sim, "green")
+        for vez in range(mision.max_cesiones):
+            if vez:
+                mision.iniciar("green")
+            while sim.t < 20000 * (vez + 1) and mision.activa:
+                sim.paso()
+                mision.tick()
+                self.assertIsNone(mision.submeta)
+            self.assertEqual(mision.estado, ABORTADO)
+            self.assertIn("rover", mision.motivo)
+        mision.iniciar("green")                                   # ya cedió 3 veces
+        while sim.t < 90000 and mision.activa and mision.submeta is None:
+            sim.paso()
+            mision.tick()
+        self.assertIsNotNone(mision.submeta)
+
+    def test_backing_off_never_leaves_the_camera_view(self):
+        # Cancha 3-oct: el rover 11 se salió y la visión lo perdió. Marcha
+        # atrás de 80 mm con la cola a 30 mm del borde: se acorta.
+        sim = simulador((3.5, 21.5, 0.0), [{"color": "red", "col": 20.0, "row": 21.5}])
+        mision = llevar(sim, "red")
+        sim.paso()
+        while sim.vision.mensaje is None:
+            sim.paso()
+        punto = mision._dentro({"col": 3.5, "row": 21.5, "theta": 0.0}, -80.0, CELL)
+        self.assertGreaterEqual(punto["col"], mision.borde_mm / CELL)
+        lejos = mision._dentro({"col": 20.0, "row": 21.5, "theta": 0.0}, -80.0, CELL)
+        self.assertAlmostEqual(lejos["col"], 16.0)                  # en medio: los 80 mm completos
+
+    def test_spinning_wheels_back_off_instead_of_draining_the_battery(self):
+        # Cancha 3-oct: el rover 11 quedó trabado con las ruedas patinando y
+        # se reinició por bajo voltaje una y otra vez. Ahora: motores con
+        # potencia y la cámara lo ve quieto 2 s -> para y retrocede.
+        sim = simulador((10.0, 21.5, 0.0), [{"color": "red", "col": 30.0, "row": 21.5}])
+        mision = llevar(sim, "red")
+        real = sim.real.velocidades
+        correr(mision, sim, 1500)
+        sim.real.velocidades = lambda izquierda, derecha: (0.0, 0.0)    # patina: no avanza
+        inicio = sim.t
+        while sim.t < inicio + 4000 and "atasco" not in mision.ultimo:
+            sim.paso()
+            mision.tick()
+        self.assertIn("atasco", mision.ultimo)
+        self.assertLess(sim.t - inicio, 3500)
+        while sim.t < inicio + 30000 and mision.activa:                  # sigue trabado
+            sim.paso()
+            mision.tick()
+        self.assertEqual((mision.estado, mision.motivo), (ABORTADO, "atascado"))
+        self.assertEqual(sim.ordenes[-1][1:], (0.0, 0.0))               # motores quietos
+        sim.real.velocidades = real
+
     def test_cube_against_the_far_wall_is_moved_out_first(self):
         # Azul a 140 mm de la pared de arriba y su zona abajo: el rover no cabe
         # entre el cubo y la pared, así que primero lo despega empujando de lado.

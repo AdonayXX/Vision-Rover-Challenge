@@ -5,7 +5,12 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "codigos"))
 
-from wifi_config import obtener_credenciales_wifi
+from wifi_config import elegir_ap, obtener_credenciales_wifi
+
+
+class Red:
+    def __init__(self, ssid, bssid, rssi, channel):
+        self.ssid, self.bssid, self.rssi, self.channel = ssid, bytes(bssid), rssi, channel
 
 
 class WifiConfigTests(unittest.TestCase):
@@ -83,3 +88,27 @@ class WifiConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ElegirAntenaTests(unittest.TestCase):
+    # Cancha 3-oct: la red de la U tiene varias antenas; el 10 quedó en el
+    # canal 11 y el 11 en el 1, y ESP-NOW no cruzó en toda la ronda.
+    A = bytes([1, 2, 3, 4, 5, 6])
+    B = bytes([9, 9, 9, 9, 9, 9])
+    C = bytes([5, 5, 5, 5, 5, 5])
+
+    def test_both_rovers_pick_the_same_antenna_even_if_they_hear_them_differently(self):
+        rover10 = [Red("U", self.A, -48, 11), Red("U", self.B, -66, 1), Red("Otra", self.C, -30, 6)]
+        rover11 = [Red("U", self.A, -61, 11), Red("U", self.B, -52, 1)]
+        self.assertEqual(elegir_ap(rover10, "U"), (self.B, 1))
+        self.assertEqual(elegir_ap(rover11, "U"), (self.B, 1))
+
+    def test_weak_antennas_are_ignored_and_strongest_wins_on_the_same_channel(self):
+        redes = [Red("U", self.A, -85, 1), Red("U", self.B, -60, 6), Red("U", self.C, -50, 6),
+                 Red("U", self.C, -70, 6)]                     # la misma vista dos veces
+        self.assertEqual(elegir_ap(redes, "U"), (self.C, 6))
+
+    def test_only_weak_antennas_takes_the_strongest_and_missing_network_gives_none(self):
+        self.assertEqual(elegir_ap([Red("U", self.A, -85, 1), Red("U", self.B, -78, 11)], "U"), (self.B, 11))
+        self.assertIsNone(elegir_ap([Red("Otra", self.A, -40, 1)], "U"))
+        self.assertIsNone(elegir_ap([], "U"))

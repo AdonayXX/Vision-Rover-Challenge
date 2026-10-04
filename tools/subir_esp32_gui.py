@@ -34,6 +34,7 @@ DEFAULT_FILES = [
     os.path.join(CODE_DIR, "autonomia.py"),
     os.path.join(CODE_DIR, "llevar_cubo.py"),
     os.path.join(CODE_DIR, "ronda.py"),
+    os.path.join(CODE_DIR, "enlace.py"),
     os.path.join(CODE_DIR, "rutas.py"),
     os.path.join(CODE_DIR, "rutas_placa.py"),
     os.path.join(CODE_DIR, "navegacion.py"),
@@ -324,11 +325,19 @@ class Esp32Uploader(tk.Tk):
         thread.start()
 
     def _version_placa(self):
-        """Version de CircuitPython de la placa, leida de boot_out.txt."""
+        """Version de CircuitPython de la placa, preguntada a la propia placa.
+
+        `ampy get` no sirve: usa ubinascii, que CircuitPython no trae.
+        """
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as script:
+            script.write("import sys\nprint('CircuitPython', '.'.join(str(n) for n in sys.implementation.version))\n")
         try:
-            texto = "".join(self.run_command(self.ampy_command("get", "boot_out.txt")))
+            texto = "".join(self.run_command(self.ampy_command("run", script.name)))
         except RuntimeError:
             texto = ""
+        finally:
+            os.remove(script.name)
         encontrada = re.search(r"CircuitPython (\d+\.\d+\.\d+)", texto)
         if encontrada:
             return encontrada.group(1)
