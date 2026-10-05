@@ -126,6 +126,19 @@ class ClienteVisionTests(unittest.TestCase):
         self.cliente.reiniciar_silencio()
         self.assertEqual(self.cliente.silencio_ms(), 0)
 
+    def test_reconnecting_without_data_is_still_silence(self):
+        # Red a medias: el socket vuelve a conectar pero no llega ni un byte.
+        # Antes cada conexión reiniciaba el silencio y la placa nunca llegaba
+        # a reiniciar el Wi-Fi (cancha 4-oct: cortes de más de un minuto).
+        self.sock.trozos = [linea(1)]
+        self.assertTrue(self.cliente.poll())
+        for _ in range(4):
+            self.now += 3500
+            self.assertFalse(self.cliente.poll())       # se cierra: sin datos
+            self.now += 1000
+            self.assertFalse(self.cliente.poll())       # vuelve a conectar, y nada
+        self.assertEqual(self.cliente.silencio_ms(), 18000)
+
     def test_invalid_message_is_counted_not_used(self):
         self.sock.trozos = [b'{"v": 3}\n']
         self.assertFalse(self.cliente.poll())

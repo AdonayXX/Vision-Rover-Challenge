@@ -121,8 +121,13 @@ def entregado(cubo, depot, mensaje):
 
 
 def corredor_bloqueado(mensaje, color, cubo, meta, rover, robot_id, contacto_mm,
-                       radio_rover_mm=85.0, holgura_mm=10.0):
-    """Lo que estorba el empuje recto: el tramo del cubo y el del cuerpo del rover."""
+                       radio_rover_mm=85.0, holgura_mm=10.0, ancho_mm=None):
+    """Lo que estorba el empuje recto: el tramo del cubo y el del cuerpo del rover.
+
+    Empujando el rover va recto: de costado ocupa su medio ancho (`ancho_mm`),
+    no el radio del círculo en que gira (cancha 3-oct y generador oficial: con
+    cubos a 5-6 casillas el radio trababa todo y nadie entregaba nada).
+    """
     cell = mensaje["grid"]["cell_mm"]
     medio_cubo = mensaje["cube_side"] * cell * 0.7072
     dc, dr = meta["col"] - cubo["col"], meta["row"] - cubo["row"]
@@ -131,8 +136,9 @@ def corredor_bloqueado(mensaje, color, cubo, meta, rover, robot_id, contacto_mm,
         return None
     fin_rover = (meta["col"] - dc / largo * contacto_mm / cell,
                  meta["row"] - dr / largo * contacto_mm / cell)
+    ancho = radio_rover_mm if ancho_mm is None else ancho_mm
     tramos = (((cubo["col"], cubo["row"]), (meta["col"], meta["row"]), medio_cubo),
-              ((rover["col"], rover["row"]), fin_rover, radio_rover_mm))
+              ((rover["col"], rover["row"]), fin_rover, ancho))
     for grupo, nombre in (("cubes", "cubo"), ("obstacles", "obstaculo"), ("rovers", "rover")):
         for item in mensaje.get(grupo, ()):
             if grupo == "cubes" and item["color"] == color:
@@ -141,6 +147,8 @@ def corredor_bloqueado(mensaje, color, cubo, meta, rover, robot_id, contacto_mm,
                 continue
             medio = radio_rover_mm if grupo == "rovers" else medio_cubo
             for a, b, tamano in tramos:
+                if grupo == "rovers" and tamano == ancho:
+                    tamano = radio_rover_mm       # contra el otro rover, círculo completo
                 if distancia_a_segmento((item["col"], item["row"]), a, b) * cell < tamano + holgura_mm + medio:
                     return nombre + " " + str(item.get("color", item.get("id", "")))
     return None
@@ -198,10 +206,11 @@ class LlevarCubo:
                  aproximacion_mm=160.0, contacto_mm=110.0, radio_mm=85.0, holgura_mm=10.0,
                  holgura_ruta_mm=25.0, paso_ruta=2, borde_mm=25.0, retroceso_mm=80.0, v_empuje=120.0, w_empuje=35.0, kp_empuje=2.0,
                  lateral_max_mm=40.0, linea_ok_mm=25.0, linea_max_mm=40.0, desvio_max_deg=30.0,
-                 alinear_deg=4.0, tolerancia_empuje_mm=6.0, sesgo_mm=5.0, cubo_ciego_ms=3500,
+                 alinear_deg=4.0, tolerancia_empuje_mm=6.0, sesgo_mm=30.0, cubo_ciego_ms=3500,
                  previo_mm=70.0, sensores=None, us_contacto_mm=45.0, us_libre_mm=None,
-                 espera_compa_ms=3000, max_cesiones=3,
-                 **control):
+                 espera_compa_ms=3000, max_cesiones=10, borde_arriba_mm=60.0,
+                 frente_mm=80.0, cola_mm=20.0, medio_ancho_mm=45.0, ceder_paso=True,
+                 retiro_mm=200.0, **control):
         self.vision, self.modelo, self.motores = vision, modelo, motores
         self.robot_id, self.reloj = robot_id, reloj
         self.max_edad_ms, self.espera_max_ms, self.max_ms = max_edad_ms, espera_max_ms, max_ms
@@ -216,8 +225,24 @@ class LlevarCubo:
         # marcador queda dentro aunque se pase ~30 mm al frenar (simulador:
         # 102/120 cubos con 25 mm, 103 con 10, 98 con 40).
         self.borde_mm = borde_mm
+        # El borde de arriba (lado 0-1, el de la zona verde) es el más lejano
+        # a la cámara: ahí el marcador deja de verse a ~40 mm de la línea. Tres
+        # rovers perdidos en la fila 1,7-1,8 (3-oct, 16:50, 19:25 y antes);
+        # con 60 mm el centro queda en la fila 3 y, aun pasándose, se ve.
+        self.borde_arriba_mm = borde_arriba_mm
+        # Forma real alrededor del centro de giro (paletas a 9 cm de la cola,
+        # 8 cm de rueda a rueda; tocando, el centro del cubo queda a 110 mm):
+        # las paletas a frente_mm delante, la cola a cola_mm detrás y
+        # medio_ancho_mm a cada lado. El radio (85 mm) es sólo para girar.
+        self.frente_mm, self.cola_mm, self.medio_ancho_mm = frente_mm, cola_mm, medio_ancho_mm
+        self.ceder_paso = ceder_paso          # el de ID mayor se aparta si los dos se estorban
         self.holgura_ruta_mm = holgura_ruta_mm
         self.retroceso_mm = retroceso_mm
+        # Tras entregar, marcha atrás hasta que el centro quede a retiro_mm del
+        # cubo, medido por la cámara, y recién ahí puede girar: con 80 mm fijos
+        # el 11 quedó a ~13-16 cm, giró y barrió el rojo fuera de la zona
+        # (cancha 4-oct 18:58). Girando, las paletas llegan a ~92 mm del centro.
+        self.retiro_mm = retiro_mm
         self.v_empuje, self.w_empuje, self.kp_empuje = v_empuje, w_empuje, kp_empuje
         self.lateral_max_mm, self.linea_max_mm = lateral_max_mm, linea_max_mm
         # Fuera de la línea de empuje: hasta linea_ok se alinea con la línea;
@@ -228,7 +253,9 @@ class LlevarCubo:
         self.desvio_max_deg, self.alinear_deg = desvio_max_deg, alinear_deg
         self.tolerancia_empuje_mm = tolerancia_empuje_mm
         # Pasarse de la zona no tiene arreglo (no se puede tirar del cubo) y
-        # quedarse corto sí: el empuje para un poco antes del centro.
+        # quedarse corto sí (VERIFICAR lo vuelve a empujar): el empuje para
+        # antes del centro. Con 5 mm el 11 dejó el azul 56 mm más allá del
+        # centro, fuera (cancha 4-oct 18:58, a ~170 mm/s); la zona da ±45 mm.
         self.sesgo_mm = sesgo_mm
         # Empujando, la cámara a veces pierde el cubo pegado al rover: se
         # sigue con el cubo estimado en el frente hasta este tiempo.
@@ -242,11 +269,16 @@ class LlevarCubo:
         # y la cámara lo perdió (sin el 11 entregaba en 7 s). Si no se va,
         # se suelta el cubo (la ronda espera 2 s y sigue con otro): reubicarlo
         # por culpa del compañero sacó el verde de la cancha (3-oct 17:18).
-        # Tras max_cesiones seguidas con el mismo cubo (el otro aparcado ahí
-        # para siempre) se vuelve a reubicar como antes.
+        # Tras max_cesiones seguidas con el mismo cubo (~50 s: el otro roto
+        # ahí) se vuelve a reubicar como antes. Con 3 (~15 s) bastó que el 10
+        # se quedara atascado 20 s para que el 11 reubicara el azul y lo
+        # paseara por media cancha (3-oct 19:01).
         self.espera_compa_ms = espera_compa_ms
         self.max_cesiones = max_cesiones
         self.cesiones = {}                    # color -> veces que se soltó por el compañero
+        # El compañero ya terminó y no lleva nada (lo dice la ronda, por radio):
+        # cederle el paso no sirve, no va a pasar; se lo espera mientras se aparta.
+        self.compa_quieto = False
         # Ultrasonido frontal (opcional, nunca bloquea): <= us_contacto_mm
         # confirma que toca el cubo. La alarma "el cubo se escapó" (lejos de
         # golpe, us_libre_mm) está APAGADA por defecto: en la cancha (1-oct)
@@ -292,6 +324,7 @@ class LlevarCubo:
         self.us_lejos = 0
         self.us_vio_cubo = False              # en este empuje lo vio pegado
         self.correccion = False               # [previo, detrás] sin A*: llegar por la línea
+        self.estrecho = False                 # último tramo de una entrada lateral (ancho real)
         self.espera_compa_desde = None        # esperando que el compañero despeje
         self._parar_y_pasar(PLANIFICAR)
 
@@ -395,8 +428,10 @@ class LlevarCubo:
         self.preparar()
         escena = _Escena(mensaje, self.robot_id, centro)
         estorbo = corredor_bloqueado(mensaje, self.color, cubo, meta, detras, self.robot_id,
-                                     self.contacto_mm, self.radio_mm, self.holgura_mm)
+                                     self.contacto_mm, self.radio_mm, self.holgura_mm,
+                                     self.medio_ancho_mm)
         self.correccion = False
+        self.estrecho = False
         cerca = _norma(detras["col"] - centro["col"], detras["row"] - centro["row"]) * cell
         if estorbo is None and cerca < 120:
             # Ya está junto al punto de ataque pero fuera de la línea: una
@@ -438,21 +473,38 @@ class LlevarCubo:
                     self.espera_compa_desde = None
                     return
             if ruta["motivo"] == "origen_sin_espacio":
-                # Pegado a un borde (la salida está a 75 mm) o a un objeto:
-                # primero despegarse en línea recta, sin acercarse a nada.
-                libre = self.planner.scene(escena)
-                for mm in (60, 100, 140, -60, -100, -140):
-                    p = desplazar(centro, mm, cell)
-                    q = (p["col"], p["row"])
-                    if self.planner.free_segment(libre, q, q) and salida_sin_acercarse(
-                            mensaje, centro, p, self.robot_id, self.radio_mm):
-                        self.puntos = [p]
-                        self.estado = SALIR
-                        return
-                return self._abortar("sin_ruta: origen_sin_espacio")
+                return self._salir(mensaje, escena, centro, cell)
             motivo = "sin_ruta: " + str(ruta["motivo"])
-        if self._esperar_compa(mensaje, escena, cubo, meta, detras, centro):
-            return
+            # El punto de ataque cabe con la forma real pero no con el círculo
+            # (otro cubo detrás o al lado): llegar de costado a un punto libre,
+            # recto hasta él y girar ahí donde las paletas no tocan nada. El
+            # A* se llama desde aquí y no desde un método aparte: en la placa
+            # la pila de Python es de ~1,5 KB (cancha 3-oct: "pystack exhausted").
+            for p in self._entradas(mensaje, escena, cubo, meta, detras, centro, cell):
+                self.planner.clearance = self.holgura_mm
+                ruta = self.planner.plan(escena, p)
+                if ruta["estado"] == "RUTA":
+                    self.ultimo["entrada"] = [round(p["col"], 1), round(p["row"], 1)]
+                    self.puntos = ruta["puntos"][1:] + [{"col": detras["col"], "row": detras["row"]}]
+                    self.estrecho = True
+                    self.estado = APROXIMAR
+                    self.espera_compa_desde = None
+                    return
+        # ¿Estorba sólo el otro rover? Sin él, ¿se llegaría? (A* desde aquí, ver arriba)
+        p = self._sin_compa(mensaje, cubo, meta, detras)
+        if p is not None:
+            p = _Escena(p, self.robot_id, centro)
+            self.planner.clearance = self.holgura_ruta_mm
+            ruta = self.planner.plan(p, punto_detras(cubo, meta, self.aproximacion_mm + self.previo_mm, cell))
+            # Pegado a algo al arrancar no es "no cabe": de ahí se sale (SALIR).
+            if ruta["estado"] != "RUTA" and ruta["motivo"] != "origen_sin_espacio":
+                # Cancha 3-oct 19:25: el previo caía junto a otro cubo y sólo el
+                # punto de ataque estaba libre (lo ocupaba el 10): reubicó en
+                # vez de esperar y terminó perdido en el borde de arriba.
+                self.planner.clearance = self.holgura_mm
+                ruta = self.planner.plan(p, detras)
+            if (ruta["estado"] == "RUTA" or ruta["motivo"] == "origen_sin_espacio") and self._esperar_compa(mensaje):
+                return
         # No cabe, no se llega o algo tapa el empuje recto (cubo pegado a la
         # pared opuesta a su zona, en un rincón o con otro cubo delante):
         # primero se lo empuja a un sitio desde donde sí se pueda. Si
@@ -476,8 +528,10 @@ class LlevarCubo:
                 self.puntos.pop(0)
         destino = self.puntos[0]
         if self.estado == APROXIMAR:
+            estrecho = self.estrecho and len(self.puntos) == 1
             estorbo = obstaculo_en_camino(mensaje, pred, destino, self.radio_mm, 0.0,
-                                          excluir=self.color, propio=self.robot_id)
+                                          excluir=self.color, propio=self.robot_id,
+                                          ancho_mm=self.medio_ancho_mm if estrecho else None)
             # Al cubo que se va a empujar se le llega de frente a 16 cm: sólo
             # estorba si de verdad se lo tocaría (el radio de 85 mm es el de
             # las esquinas; de frente toca a contacto_mm).
@@ -603,12 +657,15 @@ class LlevarCubo:
         self.ultimo["resto_mm"] = round(resto)
         if abs(error) > self.desvio_max_deg:
             return self._retroceder(pred, cell, "desalineado")
-        sesgo = 0.0 if self.submeta is not None else self.sesgo_mm
+        # El margen, sólo en el primer empuje (el largo, el que se pasa): si
+        # quedó corto, los siguientes son cortos y suaves y van al centro.
+        sesgo = 0.0 if self.submeta is not None or self.empujes else self.sesgo_mm
         if resto <= self.tolerancia_empuje_mm + sesgo:
             self.tras = EMPUJAR
             return self._parar_y_pasar(VERIFICAR)
         estorbo = obstaculo_en_camino(mensaje, pred, desplazar(pred, resto, cell), self.radio_mm,
-                                      0.0, excluir=self.color, propio=self.robot_id)
+                                      0.0, excluir=self.color, propio=self.robot_id,
+                                      ancho_mm=self.medio_ancho_mm)
         if estorbo is not None:
             self.ultimo["estorbo"] = estorbo
             return self._retroceder(pred, cell, "estorbo")
@@ -653,7 +710,8 @@ class LlevarCubo:
                 self.estado = ALINEAR
                 return
             estorbo = corredor_bloqueado(mensaje, self.color, cubo, meta, centro, self.robot_id,
-                                         self.contacto_mm, self.radio_mm, self.holgura_mm)
+                                         self.contacto_mm, self.radio_mm, self.holgura_mm,
+                                         self.medio_ancho_mm)
             if estorbo is not None:
                 self.ultimo["estorbo"] = estorbo  # algo se movió: buscar otro empuje
                 return self._parar_y_pasar(PLANIFICAR)
@@ -684,30 +742,161 @@ class LlevarCubo:
             from rutas import RoutePlanner
             self.planner = RoutePlanner(self.radio_mm, self.radio_mm, self.holgura_mm,
                                         step_cells=self.paso_ruta, required_colors=(),
-                                        edge_mm=self.borde_mm)
+                                        edge_mm=self._bordes())
             mensaje = self.vision.mensaje
             if mensaje is not None:
                 grid = mensaje["grid"]
                 self.planner._buffers((int(grid["cols"] // self.paso_ruta) + 1)
                                       * (int(grid["rows"] // self.paso_ruta) + 1))
 
-    def _esperar_compa(self, mensaje, escena, cubo, meta, detras, centro):
-        """True si espera o suelta el cubo porque estorba el otro rover (sin él cabría)."""
+    def _bordes(self):
+        """Margen del centro a cada orilla, mm: (izquierda, arriba, derecha, abajo)."""
+        return (self.borde_mm, max(self.borde_mm, self.borde_arriba_mm), self.borde_mm, self.borde_mm)
+
+    def _objetos(self, mensaje, excluir=None):
+        """(col, row, medio_mm, es_rover) de lo que el cuerpo no puede tocar."""
+        cell = mensaje["grid"]["cell_mm"]
+        medio_cubo = mensaje["cube_side"] * cell * 0.7072
+        for c in mensaje.get("cubes", ()):
+            if c["color"] != excluir:
+                yield c["col"], c["row"], medio_cubo, False
+        for o in mensaje.get("obstacles", ()):
+            yield o["col"], o["row"], medio_cubo, False
+        for r in mensaje.get("rovers", ()):
+            if r["id"] != self.robot_id:
+                yield r["col"], r["row"], self.radio_mm, True
+
+    def _dentro_de_bordes(self, p, mensaje):
+        g = mensaje["grid"]
+        cell = g["cell_mm"]
+        el, et, er, eb = (b / cell for b in self._bordes())
+        return el <= p["col"] <= g["cols"] - er and et <= p["row"] <= g["rows"] - eb
+
+    def _recto_libre(self, objetos, cell, a, b):
+        """Yendo recto de a a b (mirando hacia b), el cuerpo no toca nada."""
+        dc, dr = b["col"] - a["col"], b["row"] - a["row"]
+        largo = _norma(dc, dr)
+        if largo < 1e-6:
+            return True
+        uc, ur = dc / largo, dr / largo
+        ini = (a["col"] - uc * self.cola_mm / cell, a["row"] - ur * self.cola_mm / cell)
+        fin = (b["col"] + uc * self.frente_mm / cell, b["row"] + ur * self.frente_mm / cell)
+        for col, row, medio, es_rover in objetos:
+            propio = self.radio_mm if es_rover else self.medio_ancho_mm
+            if distancia_a_segmento((col, row), ini, fin) * cell < propio + self.holgura_mm + medio:
+                return False
+        return True
+
+    def _giro_libre(self, objetos, cell, punto, desde_deg, hasta_deg):
+        """Girando en `punto` por el lado corto, ni paletas ni cola tocan nada."""
+        error = giro_corto(hasta_deg - desde_deg)
+        pasos = int(abs(error) // 10) + 1
+        for i in range(pasos + 1):
+            th = math.radians(desde_deg + error * i / pasos)
+            c, s = math.cos(th) / cell, math.sin(th) / cell
+            for adelante, izquierda in ((self.frente_mm, self.medio_ancho_mm), (self.frente_mm, 0.0),
+                                        (self.frente_mm, -self.medio_ancho_mm), (30.0, self.medio_ancho_mm),
+                                        (30.0, -self.medio_ancho_mm), (-self.cola_mm, self.medio_ancho_mm),
+                                        (-self.cola_mm, -self.medio_ancho_mm)):
+                qc = punto["col"] + adelante * c - izquierda * s
+                qr = punto["row"] - adelante * s - izquierda * c
+                for col, row, medio, es_rover in objetos:
+                    if _norma(qc - col, qr - row) * cell < medio + self.holgura_mm:
+                        return False
+        return True
+
+    def _entradas(self, mensaje, escena, cubo, meta, detras, centro, cell):
+        """Hasta 4 puntos de entrada lateral al de ataque, del más cercano al rover.
+
+        Al costado (o en diagonal hacia atrás) del punto de ataque, donde el
+        círculo del rover cabe y puede girar; de ahí recto al de ataque (con
+        su ancho real) y girar para empujar sin tocar nada. Sin A*: lo llama
+        _planificar (pila de la placa).
+        """
+        if not self._dentro_de_bordes(detras, mensaje):
+            return []
+        empuje = rumbo(cubo, meta)
+        libre = self.planner.scene(escena)
+        todos = list(self._objetos(mensaje))
+        sin_propio = [o for o in todos if not (not o[3] and o[0] == cubo["col"] and o[1] == cubo["row"])]
+        candidatos = []
+        for lado in (90, -90, 135, -135, 180):
+            for mm in (100, 150, 200):
+                e = desplazar({"col": detras["col"], "row": detras["row"], "theta": empuje + lado}, mm, cell)
+                if (self.planner.free_segment(libre, (e["col"], e["row"]), (e["col"], e["row"]))
+                        and self._recto_libre(sin_propio, cell, e, detras)
+                        and self._giro_libre(todos, cell, detras, rumbo(e, detras), empuje)):
+                    candidatos.append((_norma(e["col"] - centro["col"], e["row"] - centro["row"]), e))
+        candidatos.sort(key=lambda c: c[0])
+        return [e for _, e in candidatos[:4]]
+
+    def _salir(self, mensaje, escena, centro, cell):
+        """Pegado a un borde (la salida está a 75 mm) o a un objeto: despegarse sin acercarse a nada.
+
+        Primero recto (sin girar pegado a nada); si no alcanza, en un abanico
+        alrededor del rumbo que aleja del objeto más cercano: pegado de costado
+        a un cubo, ni avanzando ni retrocediendo 14 cm salía de su margen, y
+        justo detrás estaba el otro rover (cancha 3-oct, rover 11).
+        """
+        libre = self.planner.scene(escena)
+        candidatos = [(mm, None) for mm in (60, 100, 140, -60, -100, -140)]
+        lejos = self._direccion_salida(mensaje, centro)
+        if lejos is not None:
+            candidatos += [(mm, lejos + giro) for giro in (0, 30, -30, 60, -60, 90, -90)
+                           for mm in (80, 120, 160, 200)]
+        for mm, rumbo_salida in candidatos:
+            if rumbo_salida is None:
+                p = desplazar(centro, mm, cell)
+            else:
+                p = desplazar({"col": centro["col"], "row": centro["row"], "theta": rumbo_salida}, mm, cell)
+                p["theta"] = centro["theta"]
+            q = (p["col"], p["row"])
+            if self.planner.free_segment(libre, q, q) and salida_sin_acercarse(
+                    mensaje, centro, p, self.robot_id, self.radio_mm):
+                self.puntos = [p]
+                self.estado = SALIR
+                return
+        self._abortar("sin_ruta: origen_sin_espacio")
+
+    def _direccion_salida(self, mensaje, centro):
+        """Rumbo (grados) que aleja del objeto más cercano, o None si no hay ninguno."""
+        mejor, rumbo_salida = None, None
+        for grupo in ("cubes", "obstacles", "rovers"):
+            for item in mensaje.get(grupo, ()):
+                if grupo == "rovers" and item["id"] == self.robot_id:
+                    continue
+                dc, dr = centro["col"] - item["col"], centro["row"] - item["row"]
+                d = _norma(dc, dr)
+                if d > 1e-6 and (mejor is None or d < mejor):
+                    mejor, rumbo_salida = d, math.degrees(math.atan2(-dr, dc))
+        return rumbo_salida
+
+    def _sin_compa(self, mensaje, cubo, meta, detras):
+        """El mensaje sin el otro rover si lo único que tapa el empuje es él; si no, None."""
         if self.cesiones.get(self.color, 0) >= self.max_cesiones:
-            return False                      # aparcado ahí: se reubica como antes
+            return None                       # aparcado ahí: se reubica como antes
         solo = dict(mensaje)
         solo["rovers"] = [r for r in mensaje["rovers"] if r["id"] == self.robot_id]
         if len(solo["rovers"]) == len(mensaje["rovers"]):
-            return False                      # no hay compañero: es otra cosa
+            return None                       # no hay compañero: es otra cosa
         if corredor_bloqueado(solo, self.color, cubo, meta, detras, self.robot_id,
-                              self.contacto_mm, self.radio_mm, self.holgura_mm) is not None:
-            return False
-        antes, self.planner.clearance = self.planner.clearance, self.holgura_ruta_mm
-        previo = punto_detras(cubo, meta, self.aproximacion_mm + self.previo_mm, mensaje["grid"]["cell_mm"])
-        cabe = self.planner.plan(_Escena(solo, self.robot_id, centro), previo)["estado"] == "RUTA"
-        self.planner.clearance = antes        # la reubicación usa la que había
-        if not cabe:
-            return False
+                              self.contacto_mm, self.radio_mm, self.holgura_mm,
+                              self.medio_ancho_mm) is not None:
+            return None
+        return solo
+
+    def _esperar_compa(self, mensaje):
+        """Sin el otro rover cabría: cederle el paso, esperarlo o soltar el cubo. True si hizo algo."""
+        otros = [r["id"] for r in mensaje["rovers"] if r["id"] != self.robot_id]
+        if self.ceder_paso and otros and self.robot_id > min(otros) and not self.compa_quieto:
+            # Cede el paso el de ID mayor: se aparta y deja empujar al otro.
+            # Esperando los dos a la vez (cada uno en el camino del otro) se
+            # trababan para siempre (generador oficial, dificultad 0,8). Es la
+            # misma regla con o sin radio. Al que ya terminó no se le cede
+            # (cancha 4-oct 15:54: 10 cesiones al 10 quieto, ~85 s perdidos).
+            self.cesiones[self.color] = self.cesiones.get(self.color, 0) + 1
+            self._abortar("cede_paso_rover")
+            return True
         ahora = self.reloj()
         if self.espera_compa_desde is None:
             self.espera_compa_desde = ahora
@@ -767,12 +956,13 @@ class LlevarCubo:
                 if despues is None:
                     continue
                 if corredor_bloqueado(mensaje, self.color, cubo, nuevo, atras, self.robot_id,
-                                      self.contacto_mm, self.radio_mm, self.holgura_mm) is not None:
+                                      self.contacto_mm, self.radio_mm, self.holgura_mm,
+                                      self.medio_ancho_mm) is not None:
                     continue
                 q = (despues["col"], despues["row"])
                 listo = self.planner.free_segment(despejado, q, q) and corredor_bloqueado(
                     mensaje, self.color, nuevo, deposito, despues, self.robot_id,
-                    self.contacto_mm, self.radio_mm, self.holgura_mm) is None
+                    self.contacto_mm, self.radio_mm, self.holgura_mm, self.medio_ancho_mm) is None
                 if listo:
                     self.angulo_submeta = angulo
                     return {"col": nuevo["col"], "row": nuevo["row"]}
@@ -798,18 +988,20 @@ class LlevarCubo:
         mensaje = self.vision.mensaje
         if mensaje is None:
             return desplazar(pose, mm, cell)
-        g, b = mensaje["grid"], self.borde_mm / cell
+        g = mensaje["grid"]
+        el, et, er, eb = (b / cell for b in self._bordes())
         for parte in (1.0, 0.75, 0.5, 0.25, 0.0):
             p = desplazar(pose, mm * parte, cell)
-            if b <= p["col"] <= g["cols"] - b and b <= p["row"] <= g["rows"] - b:
+            if el <= p["col"] <= g["cols"] - er and et <= p["row"] <= g["rows"] - eb:
                 return p
         return desplazar(pose, 0.0, cell)
 
     def _retirar(self, centro, cubo, cell):
         cerca = _norma(cubo["col"] - centro["col"], cubo["row"] - centro["row"]) * cell
-        if cerca >= self.aproximacion_mm:
+        if cerca >= self.retiro_mm:
             return self._parar_y_pasar(ENTREGADO)
-        self.puntos = [self._dentro(centro, -self.retroceso_mm, cell)]
+        # +25: el control da por llegado a 25 mm del punto.
+        self.puntos = [self._dentro(centro, -(self.retiro_mm + 25.0 - cerca), cell)]
         self.estado = RETIRAR
 
     def _ultrasonido(self):

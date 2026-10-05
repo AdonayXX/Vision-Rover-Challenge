@@ -41,6 +41,10 @@ class ClienteVision:
         # muerta aunque el socket no dé error (Wi-Fi caído sin aviso).
         self.sin_datos_ms = int(sin_datos_s * 1000)
         self.ultimo_dato_ms = None       # último byte recibido (o conexión abierta)
+        # Último byte de verdad: el silencio que decide reiniciar el Wi-Fi.
+        # Con ultimo_dato_ms, cada reconexión sin datos lo ponía en cero y la
+        # placa nunca reiniciaba el Wi-Fi (cancha 4-oct: cortes de 1 minuto).
+        self.ultimo_byte_ms = None
         self.alguna_vez = False          # ya recibió algo: la visión existe
         self.sock = None
         self.buffer = b""
@@ -118,7 +122,7 @@ class ClienteVision:
                 self._cerrar("vision_cerro_conexion")
                 return False
             self.bytes += n
-            self.ultimo_dato_ms = self.reloj()
+            self.ultimo_dato_ms = self.ultimo_byte_ms = self.reloj()
             self.alguna_vez = True
             self.buffer += bytes(self.rx[:n])
             fin = self.buffer.rfind(b"\n")
@@ -173,12 +177,12 @@ class ClienteVision:
 
     def silencio_ms(self):
         """Hace cuánto no llega nada de la visión (None si nunca llegó nada)."""
-        if not self.alguna_vez or self.ultimo_dato_ms is None:
+        if not self.alguna_vez or self.ultimo_byte_ms is None:
             return None
-        return self.reloj() - self.ultimo_dato_ms
+        return self.reloj() - self.ultimo_byte_ms
 
     def reiniciar_silencio(self):
-        self.ultimo_dato_ms = self.reloj()
+        self.ultimo_dato_ms = self.ultimo_byte_ms = self.reloj()
         if self.sock is not None:
             self._cerrar("wifi_reconectado")     # ese socket era de la red anterior
 
@@ -203,7 +207,9 @@ class ClienteVision:
         segundos = max(.001, (self.reloj() - self.desde_ms) / 1000)
         n = max(1, self.decodificados)
         datos = {
-            "estado": self.estado, "conexiones": self.conexiones,
+            # Con host: un vision_host viejo en la config se ve en ver_ronda
+            # (cancha 4-oct: fase=None dos rondas, sin saber por qué).
+            "host": self.host, "estado": self.estado, "conexiones": self.conexiones,
             "segundos": round(segundos, 1),
             "hz_decodificados": round(self.decodificados / segundos, 1),
             "descartadas": self.descartadas, "saltos_seq": self.saltos_seq,

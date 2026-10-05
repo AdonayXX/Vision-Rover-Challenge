@@ -156,6 +156,25 @@ class RondaTests(unittest.TestCase):
         correr(sim, ronda, misiones, 7000)
         self.assertEqual(ronda.estado, ESPERANDO)                     # lista para otra ronda
 
+    def test_board_asks_for_a_reset_only_between_rounds(self):
+        # Rondas seguidas sin apagar dejaban la placa sin RAM ni red (3-oct):
+        # tras una ronda jugada, al volver la visión a IDLE/READY, la placa
+        # se reinicia. Al encenderla (IDLE de entrada) no.
+        sim = simulador((5.0, 21.5, 0.0), TRES)
+        sim.fase = "IDLE"
+        ronda, misiones, motores = armar(sim)
+        correr(sim, ronda, misiones, 1000)
+        self.assertFalse(ronda.pedir_reinicio)
+        sim.fase = "RUNNING"
+        correr(sim, ronda, misiones, 4000)
+        sim.fase = "FINISHED"
+        correr(sim, ronda, misiones, 4500)
+        self.assertEqual(ronda.estado, TERMINADA)
+        self.assertFalse(ronda.pedir_reinicio)
+        sim.fase = "READY"
+        correr(sim, ronda, misiones, 5000)
+        self.assertTrue(ronda.pedir_reinicio)
+
     def test_pc_watching_does_not_disturb_but_stop_does(self):
         sim = simulador((5.0, 21.5, 0.0), TRES)
         ronda, misiones, motores = armar(sim)
@@ -212,6 +231,25 @@ class RondaTests(unittest.TestCase):
         correr(sim, ronda, misiones, 600000, True)
         self.assertEqual(ronda.estado, COMPLETA)
         self.assertEqual(ronda.intentos, {primero[0]: 1})
+        self.assertEqual(sorted(ronda.hechos), ["blue", "green", "red"])
+
+    def test_network_cuts_are_not_failed_attempts(self):
+        # Cancha 4-oct: un corte de Wi-Fi o de la visión aborta la misión
+        # (wifi_perdido, vision_vieja). No falló el cubo: con dos cortes en el
+        # mismo cubo la ronda lo daba por perdido.
+        sim = simulador((5.0, 21.5, 0.0), TRES)
+        ronda, misiones, motores = armar(sim, estrategia="todos")
+        cortes = ["wifi_perdido", "vision_vieja", "rover_no_visible"]
+        original = misiones.llevar_en_ronda
+
+        def se_corta_la_red(color):
+            original(color)
+            if cortes:
+                misiones.cubo.detener(cortes.pop(0))
+        misiones.llevar_en_ronda = se_corta_la_red
+        correr(sim, ronda, misiones, 600000, True)
+        self.assertEqual(ronda.estado, COMPLETA)
+        self.assertEqual(ronda.intentos, {})
         self.assertEqual(sorted(ronda.hechos), ["blue", "green", "red"])
 
 

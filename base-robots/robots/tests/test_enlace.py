@@ -91,6 +91,25 @@ TRES = [{"color": "red", "col": 27.0, "row": 21.5},
         {"color": "blue", "col": 17.0, "row": 30.0}]
 
 
+class GeneradorOficialTests(unittest.TestCase):
+    def test_rovers_blocking_each_other_take_turns(self):
+        # Cancha del generador oficial (dificultad 0,8): el punto de ataque de
+        # cada uno caía en el camino del otro y los dos esperaban para siempre
+        # (0 entregas). Ahora cede el paso el de ID mayor y se aparta.
+        cubos = [{"color": "red", "col": 11.0, "row": 19.0}, {"color": "blue", "col": 26.0, "row": 12.0},
+                 {"color": "green", "col": 21.0, "row": 33.0}]
+        aire, rovers = duo([dict(c) for c in cubos])
+        t, minimo = correr_duo(rovers, 240000)
+        # Ya no se esperan para siempre: los dos entregan y nunca se tocan.
+        # Con el margen de empuje de 30 mm (4-oct) esta cancha termina con 2:
+        # un rover arrastra el verde de costado al pasar y queda tapado por el
+        # rojo. En la batería oficial el cambio suma (35/36 rondas contra
+        # 34/36). Pendiente: no arrastrar cubos ajenos al pasar.
+        entregados = sum(entregado(rovers[0][0], c)[0] for c in COLORES)
+        self.assertGreaterEqual(entregados, 2, [r.informe() for _, r, _ in rovers])
+        self.assertGreaterEqual(minimo, 120)
+
+
 class EnlaceTests(unittest.TestCase):
     def setUp(self):
         self.t = 0
@@ -121,6 +140,36 @@ class EnlaceTests(unittest.TestCase):
         otro.send(('{"t": "%s", "id": 10, "a": "green"}' % ETIQUETA).encode())
         self.b.recibir()
         self.assertEqual(self.b.compa["a"], "blue")
+
+    def test_corrupted_espnow_buffer_is_reopened(self):
+        # Cancha 3-oct: read() empezó a dar "ValueError: Invalid buffer" en
+        # cada vuelta y la radio quedó muda el resto de la ronda.
+        class Trabada(RadioFalsa):
+            trabada, aperturas = True, 0
+
+            def read(self):
+                if self.trabada:
+                    raise ValueError("Invalid buffer")
+                return RadioFalsa.read(self)
+
+            def reabrir(self):
+                self.trabada, self.cola = False, []
+                self.aperturas += 1
+        radio = Trabada(self.aire, bytes([3] * 6))
+        c = Enlace(11, lambda: self.t, radio=radio)
+        c.recibir()
+        self.assertEqual((radio.aperturas, c.reaperturas), (1, 1))
+        self.a.enviar({"a": "red"})
+        c.recibir()
+        self.assertEqual(c.companero()["a"], "red")             # vuelve a oír
+        radio.trabada = True
+        c.recibir()
+        c.recibir()
+        self.assertEqual(c.reaperturas, 1)                       # no más de una cada 2 s
+        self.t += 2000
+        c.recibir()
+        self.assertEqual(c.reaperturas, 2)
+        self.assertIn("Invalid buffer", c.informe()["ultimo_error"])
 
     def test_own_echo_is_ignored(self):
         self.a.enviar({"a": "red"})
@@ -158,6 +207,99 @@ class RondaPorRadioTests(unittest.TestCase):
         aire, rovers = duo(TRES)
         t, minimo = correr_duo(rovers, 250000, cortar_en=8000, aire=aire)
         self.assertIsNotNone(t)
+
+
+class TurnosTests(unittest.TestCase):
+    # Cancha 4-oct 15:54, desde la salida real: a la vez, el 10 terminaba y se
+    # quedaba en el camino del 11, que le cedía el rojo 10 veces (130 s).
+    CUBOS = [{"color": "blue", "col": 26.3, "row": 33.5}, {"color": "green", "col": 18.9, "row": 10.5},
+             {"color": "red", "col": 31.1, "row": 24.3}]
+    POSES = ((2.0, 26.1, 2.0), (2.2, 17.9, 0.0))
+
+    def correr(self, radio=True):
+        aire, rovers = duo([dict(c) for c in self.CUBOS], radio=radio, poses=self.POSES)
+        (a, r10, _), (b, r11, m11) = rovers
+        al_empezar_11 = []                     # estado del 10 cuando el 11 lanza su primer cubo
+        termino_10 = []                        # dónde quedó el 10 al terminar lo suyo
+        fin = None
+        while a.t < 150000:
+            a.companeros = [{"id": b.id, "col": b.col, "row": b.row, "theta": b.theta}]
+            b.companeros = [{"id": a.id, "col": a.col, "row": a.row, "theta": a.theta}]
+            a.paso()
+            b.paso()
+            for _, ronda, misiones in rovers:
+                ronda.tick()
+                misiones.tick()
+            if r11.actual is not None and not al_empezar_11:
+                al_empezar_11.append((a.t, r10.estado))
+            if r10.estado == COMPLETA and not termino_10:
+                termino_10.append((a.col, a.row))
+            if all(entregado(a, c)[0] for c in COLORES):
+                fin = a.t
+                break
+        return fin, al_empezar_11, termino_10, (a.col, a.row), r10, r11, m11
+
+    def test_second_rover_waits_its_turn_and_both_deliver(self):
+        fin, al_empezar_11, termino_10, final_10, r10, r11, m11 = self.correr()
+        self.assertIsNotNone(fin, [r10.informe(), r11.informe()])
+        # A la vez tardaba 130 s. Por turnos, 106 s: el 11 se estaciona en la
+        # esquina de arriba a la derecha y tapa el único paso del 10 (por
+        # encima del rojo); el 10 termina reubicando el azul. Pendiente: que
+        # el que espera sepa por dónde necesita pasar el otro.
+        self.assertLess(fin, 120000)
+        self.assertEqual(al_empezar_11[0][1], COMPLETA)        # empezó cuando el 10 terminó
+        self.assertGreaterEqual(r10.propios, 1)                 # 12.2.13
+        self.assertGreaterEqual(r11.propios, 1)
+        self.assertEqual(sum(m11.cubo.cesiones.values()), 0)    # nadie le cede el paso a nadie
+        # El 10 se apartó al terminar (antes: camino_bloqueado por su propio cubo)
+        self.assertGreater(math.hypot(final_10[0] - termino_10[0][0], final_10[1] - termino_10[0][1]), 5)
+
+    def test_without_radio_there_are_no_turns(self):
+        fin, al_empezar_11, termino_10, final_10, r10, r11, m11 = self.correr(radio=False)
+        self.assertIsNotNone(fin)
+        self.assertLess(al_empezar_11[0][0], 10000)             # no esperó a nadie
+
+
+class PilaDeLaPlacaTests(unittest.TestCase):
+    def test_parking_fits_in_the_board_python_stack(self):
+        # Cancha 4-oct 15:54: el 10 terminó y nunca se estacionó, y el 11
+        # "cedía el paso" sin moverse. Estacionarse llamaba al A* desde
+        # Ronda.tick > _avanzar > _aparcar > _ruta: peso 201, y en la placa
+        # (pila de ~1,5 KB) eso falla; tick() atrapaba el error en silencio.
+        # Mismo peso que test_planning_fits_in_the_board_python_stack (173),
+        # pero midiendo desde Ronda.tick. Esa ronda desde la salida real: al
+        # terminar, los dos planifican dónde estacionarse con búsqueda A*.
+        cubos = [{"color": "blue", "col": 26.3, "row": 33.5}, {"color": "green", "col": 18.9, "row": 10.5},
+                 {"color": "red", "col": 31.1, "row": 24.3}]
+        pila, peor, planes = [], [0, []], [0]
+
+        def perfil(frame, evento, arg):
+            nombre = frame.f_code.co_filename.replace("\\", "/")
+            if "codigos" not in nombre:
+                return
+            if evento == "call":
+                if frame.f_code.co_name == "tick" and nombre.endswith("ronda.py"):
+                    pila.clear()
+                pila.append(frame.f_code)
+                if pila[0].co_name != "tick" or not pila[0].co_filename.endswith("ronda.py"):
+                    return
+                if frame.f_code.co_name == "plan":
+                    planes[0] += 1
+                if all(c.co_name != "<module>" for c in pila):
+                    total = sum(c.co_nlocals + c.co_stacksize + 4 for c in pila)
+                    if total > peor[0]:
+                        peor[0], peor[1] = total, [c.co_name for c in pila]
+            elif evento == "return" and pila:
+                pila.pop()
+
+        aire, rovers = duo(cubos, poses=((2.0, 26.1, 2.0), (2.2, 17.9, 0.0)))
+        sys.setprofile(perfil)
+        try:
+            correr_duo(rovers, 40000)
+        finally:
+            sys.setprofile(None)
+        self.assertGreater(planes[0], 0, "la ronda no llegó a planificar dónde estacionarse")
+        self.assertLessEqual(peor[0], 173, " > ".join(peor[1]))
 
 
 if __name__ == "__main__":

@@ -32,17 +32,23 @@ def distancia_a_segmento(p, a, b):
     dx, dy = b[0] - a[0], b[1] - a[1]
     largo = dx * dx + dy * dy
     t = 0.0 if largo == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / largo))
-    return _norma(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
+    dx, dy = p[0] - a[0] - t * dx, p[1] - a[1] - t * dy
+    # La raíz aquí y no con _norma: un marco menos en la pila de la placa,
+    # que se llena en lo más hondo de la planificación (cancha 3-oct).
+    return math.sqrt(dx * dx + dy * dy)
 
 
 def obstaculo_en_camino(mensaje, desde, hasta, radio_rover_mm=85.0, holgura_mm=10.0,
-                        excluir=None, propio=None):
+                        excluir=None, propio=None, ancho_mm=None):
     """Primer cubo u obstaculo que el CUERPO del rover tocaria en el tramo recto.
 
     Es la red de seguridad: si algo estorba, el rover se detiene en vez de
     empujarlo. `excluir`: color del cubo que se empuja a proposito. Con
-    `propio` (id de este rover) tambien cuenta el otro rover.
+    `propio` (id de este rover) tambien cuenta el otro rover. `ancho_mm`:
+    medio ancho de ESTE rover yendo recto (sin girar) contra cubos y
+    obstáculos; contra el otro rover vale siempre el radio completo de los dos.
     """
+    propio_mm = radio_rover_mm if ancho_mm is None else ancho_mm
     cell = mensaje["grid"]["cell_mm"]
     a, b = (desde["col"], desde["row"]), (hasta["col"], hasta["row"])
     medio_cubo = mensaje["cube_side"] * cell * 0.7072
@@ -55,13 +61,15 @@ def obstaculo_en_camino(mensaje, desde, hasta, radio_rover_mm=85.0, holgura_mm=1
                 continue
             if grupo == "rovers" and item["id"] == propio:
                 continue
-            libre = radio_rover_mm + holgura_mm + medio
+            libre = (radio_rover_mm if grupo == "rovers" else propio_mm) + holgura_mm + medio
             punto = (item["col"], item["row"])
             cerca = distancia_a_segmento(punto, a, b) * cell
             if cerca < libre:
-                # El otro rover ya estaba así de cerca (salen juntos de la
-                # salida) y el tramo no lo acerca más: alejarse no estorba.
-                if grupo == "rovers" and cerca >= distancia_a_segmento(punto, a, a) * cell - 5:
+                # Ya estaba así de cerca (salen juntos de la salida, o quedó
+                # pegado a un cubo) y el tramo no lo acerca más: alejarse no
+                # estorba. Con los cubos también: el 11 cedía el paso pero no
+                # podía apartarse de su propio cubo (generador oficial, 0,8).
+                if cerca >= distancia_a_segmento(punto, a, a) * cell - 5:
                     continue
                 return nombre + (" " + item["color"] if "color" in item else "")
     return None

@@ -18,8 +18,13 @@ _DIFUSION = bytes([255] * 6)
 
 
 class Enlace:
-    def __init__(self, robot_id, reloj, radio=None):
+    def __init__(self, robot_id, reloj, radio=None, buffer=1536):
         self.robot_id, self.reloj = robot_id, reloj
+        # El de fábrica (526 bytes) son tres mensajes nuestros: con el bucle
+        # ocupado un rato (A*, red) se llenaba.
+        self.buffer = buffer
+        self.reaperturas = 0            # veces que se reabrió por "Invalid buffer"
+        self._reabierta_ms = None
         self.tx = self.rx = self.errores = 0
         self.ajenos = 0                 # paquetes ESP-NOW que no son nuestros (otro equipo)
         self.ultimo_error = None        # para saber QUÉ falla, no sólo cuántas veces
@@ -36,7 +41,7 @@ class Enlace:
     def _abrir(self):
         try:
             import espnow
-            self._esp = espnow.ESPNow()
+            self._esp = espnow.ESPNow(buffer_size=self.buffer)
             # Canal 0 = el actual: el del router al que está conectado el Wi-Fi.
             self._peer = espnow.Peer(mac=_DIFUSION, channel=0)
             self._esp.peers.append(self._peer)
@@ -48,7 +53,10 @@ class Enlace:
     def reiniciar(self):
         """Tras apagar y prender la radio Wi-Fi, ESP-NOW se vuelve a abrir."""
         if self._esp is not None and self._peer is None:
-            return                      # radio simulada: nada que reabrir
+            reabrir = getattr(self._esp, "reabrir", None)   # radio simulada
+            if reabrir is not None:
+                reabrir()
+            return
         if self._esp is not None:
             try:
                 self._esp.deinit()
@@ -82,6 +90,16 @@ class Enlace:
             except Exception as error:
                 self.errores += 1
                 self.ultimo_error = "{}: {}".format(type(error).__name__, error)
+                if isinstance(error, ValueError):
+                    # CircuitPython 9: el búfer circular de ESP-NOW queda
+                    # desalineado ("Invalid buffer") y desde ahí casi todo
+                    # read() falla: radio muda el resto de la ronda (cancha
+                    # 3-oct, los dos rovers). Reabrirlo lo vacía.
+                    ahora = self.reloj()
+                    if self._reabierta_ms is None or ahora - self._reabierta_ms >= 2000:
+                        self._reabierta_ms = ahora
+                        self.reaperturas += 1
+                        self.reiniciar()
                 return
             if paquete is None:
                 return
@@ -119,6 +137,8 @@ class Enlace:
             datos["ultimo_error"] = self.ultimo_error
         if self.ajenos:
             datos["ajenos"] = self.ajenos
+        if self.reaperturas:
+            datos["reaperturas"] = self.reaperturas
         if self.error:
             datos["error"] = self.error
         # ESP-NOW sólo cruza si los dos están en el mismo canal: en una red

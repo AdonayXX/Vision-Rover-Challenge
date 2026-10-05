@@ -43,22 +43,36 @@ def _sin_memoria(mision):
     mision.detener_mision("sin_memoria")
 
 
-def _buscar_ap(wifi, ssid, alimentar):
+# Lo que vio y eligió la última búsqueda de antenas; la PC lo lee en SENSORS.
+ANTENA = {}
+
+
+class _Red:
+    def __init__(self, ssid, bssid, rssi, channel):
+        self.ssid, self.bssid, self.rssi, self.channel = ssid, bssid, rssi, channel
+
+
+def _buscar_ap(wifi, ssid, alimentar, canal=None):
     """(bssid, canal) elegido con elegir_ap, o None si no se pudo buscar."""
     from wifi_config import elegir_ap
     alimentar()
     try:
-        redes = wifi.radio.start_scanning_networks()
         try:
-            return elegir_ap(redes, ssid)
+            redes = [_Red(r.ssid, bytes(r.bssid), r.rssi, r.channel)
+                     for r in wifi.radio.start_scanning_networks()]
         finally:
             wifi.radio.stop_scanning_networks()
     except Exception as error:
         print("AVISO: no se pudo buscar antenas:", error)
         return None
+    elegida = elegir_ap(redes, ssid, canal=canal)
+    ANTENA.clear()
+    ANTENA["vistas"] = sorted([r.channel, r.rssi] for r in redes if r.ssid == ssid)   # [canal, dBm]
+    ANTENA["canal"] = elegida[1] if elegida else None
+    return elegida
 
 
-def conectar_wifi(ssid, password, alimentar=_nada, forzar=False, elegir=True):
+def conectar_wifi(ssid, password, alimentar=_nada, forzar=False, elegir=True, canal=None):
     import wifi
 
     if forzar:
@@ -84,7 +98,7 @@ def conectar_wifi(ssid, password, alimentar=_nada, forzar=False, elegir=True):
             # Los dos rovers en la misma antena (canal) para que ESP-NOW cruce.
             # Los dos últimos intentos, sin elegir: mejor conectado a
             # cualquiera que sin red.
-            ap = _buscar_ap(wifi, ssid, alimentar) if elegir and intento < 3 else None
+            ap = _buscar_ap(wifi, ssid, alimentar, canal) if elegir and intento < 3 else None
             if ap is None:
                 wifi.radio.connect(ssid, password)
             else:
@@ -115,10 +129,14 @@ def conectar_wifi(ssid, password, alimentar=_nada, forzar=False, elegir=True):
 
 def _sin_ahorro_energia(wifi):
     # El ahorro de energia del Wi-Fi mete retrasos de cientos de ms en los ACK.
+    # Se informa en SENSORS (ver_ronda): con el hotspot del celular los rovers
+    # se cortaban (4-oct) y no sabíamos si esto se aplicaba en la placa.
     try:
         wifi.radio.power_management = wifi.PowerManagement.NONE
+        ANTENA["ahorro"] = "quitado"
         print("Wi-Fi sin ahorro de energia")
     except (AttributeError, NotImplementedError, ValueError) as error:
+        ANTENA["ahorro"] = "no se pudo: {}: {}".format(type(error).__name__, error)
         print("AVISO: no se pudo quitar el ahorro de energia del Wi-Fi:", error)
 
 
@@ -242,7 +260,10 @@ def serve_client(
                     break
             if red_ok is not None and clock() - revisado >= 1:
                 revisado = clock()
-                if not red_ok():
+                # Una PC que pregunta seguido (ver_ronda: cada 1 s) prueba que
+                # hay red. Si calla, la sesión quedó colgada (la PC se fue sin
+                # poder cerrar) y no debe tapar un Wi-Fi caído.
+                if not red_ok(clock() - session.ultimo_rx < 5):
                     raise ConnectionError("Wi-Fi perdido durante la sesion")
             sleep(0.01)
 
@@ -304,6 +325,8 @@ def main(config_path="config_robot.json"):
                  "fallos": dict(fallos_previos, **registro_fallos.leer())}
         if vision:
             datos["vision"] = vision[0].estadisticas(memoria_libre())
+        if ANTENA:
+            datos["antena"] = ANTENA
         return datos
 
     controller = MotionController(robot)
@@ -391,7 +414,8 @@ def main(config_path="config_robot.json"):
         conectado = conectar_wifi(
             ssid,
             password,
-            elegir=config.get("wifi_elegir_antena", True)
+            elegir=config.get("wifi_elegir_antena", True),
+            canal=config.get("wifi_canal")
         )
 
         if not conectado:
@@ -408,8 +432,10 @@ def main(config_path="config_robot.json"):
         pool = socketpool.SocketPool(wifi.radio)
 
         motivo_red = [None]
+        fallos_wifi = [0]           # conectar_wifi() fallidos seguidos (5 intentos cada uno)
+        reconectar_ms = int(config.get("wifi_reconectar_s", 8) * 1000)
 
-        def red_ok():
+        def red_ok(pc_activa=False):
             if wifi.radio.ipv4_address is None:
                 motivo_red[0] = "sin_ip"
                 return False
@@ -420,12 +446,16 @@ def main(config_path="config_robot.json"):
                     return False
             except (AttributeError, NotImplementedError):
                 pass
-            # La visión calla 20 s sin que ninguna PC esté conectada: lo más
-            # probable es que el Wi-Fi se haya caído sin avisar (cancha 2-oct:
-            # la placa quedó muda hasta apagarla y prenderla).
-            if vision and not en_sesion[0]:
+            # La visión calla (ni un byte) y ninguna PC le habla al rover: lo
+            # más probable es que el Wi-Fi se haya caído sin avisar (cancha
+            # 2-oct: la placa quedó muda hasta apagarla y prenderla). Antes
+            # bastaba una sesión abierta para no revisarlo: con ver_ronda
+            # colgado los dos rovers esperaron más de un minuto (4-oct). La
+            # visión publica a 20 Hz: 8 s sin nada es una red caída, y cada
+            # segundo esperando es un segundo de ronda perdido (antes, 20 s).
+            if vision and not pc_activa:
                 silencio = vision[0].silencio_ms()
-                if silencio is not None and silencio > 20000:
+                if silencio is not None and silencio > reconectar_ms:
                     motivo_red[0] = "vision_callada"
                     return False
             return True
@@ -454,7 +484,8 @@ def main(config_path="config_robot.json"):
                 import gc
                 gc.collect()
                 from llevar_cubo import LlevarCubo
-                return LlevarCubo(vision[0], modelo, controller, robot_id, sensores=sensors)
+                return LlevarCubo(vision[0], modelo, controller, robot_id, sensores=sensors,
+                                  borde_arriba_mm=config.get("borde_arriba_mm", 60.0))
 
             mision = Misiones(IrAPunto(vision[0], modelo, controller, robot_id),
                               fabrica_llevar=fabrica_llevar)
@@ -463,7 +494,8 @@ def main(config_path="config_robot.json"):
                           fase_inicio=config.get("fase_inicio", "RUNNING"),
                           estrategia=config.get("estrategia", "reparto"),
                           companero=config.get("companero_id"),
-                          robar=config.get("robar", False))
+                          robar=config.get("robar", False),
+                          turnos=config.get("turnos", True))
             mision.ronda = ronda
             print("Ronda: arranca en fase", ronda.fase_inicio, "estrategia", ronda.estrategia)
 
@@ -490,7 +522,18 @@ def main(config_path="config_robot.json"):
                 _sin_memoria(mision)
             except Exception as error:
                 mision.detener_mision("error_ronda: {}".format(error))
+                ronda.error = "{}: {}".format(type(error).__name__, error)
+                ronda.errores += 1
                 print("Error ronda:", error)
+            if ronda.pedir_reinicio and config.get("reiniciar_entre_rondas", True):
+                # Entre rondas (la visión volvió a IDLE o READY): empezar la
+                # siguiente con la placa recién encendida. Arranca en ~10 s y
+                # READY dura 60.
+                controller.stop("reinicio_entre_rondas")
+                registro_fallos.guardar("reinicio", "entre rondas (a propósito)")
+                print("Ronda terminada: reiniciando la placa para la siguiente")
+                import microcontroller
+                microcontroller.reset()
             try:
                 mision.tick()
             except MemoryError:
@@ -523,25 +566,34 @@ def main(config_path="config_robot.json"):
                         if server is None or not red_ok():
                             caida = server is not None
                             if server is not None:
-                                print("Wi-Fi perdido; reconectando...", motivo_red[0])
-                                try:
-                                    registro_fallos.guardar("wifi", "perdido: {} a los {} s".format(
-                                        motivo_red[0], round(time.monotonic() - arranque)))
-                                except Exception:
-                                    pass
-                                # Sin red no hay vision: que nada se mueva a ciegas
-                                # mientras se reconecta (la ronda sigue despues).
+                                # Se perdió la red: reiniciar la placa entera. Apagar y
+                                # prender la radio la dejaba trabada ("Authentication
+                                # failure" para siempre con el hotspot; cancha 4-oct,
+                                # los dos rovers) y recién arrancada se conecta al
+                                # primer intento. Arranca en ~10 s y vuelve a jugar
+                                # la ronda sola (cancha 3-oct).
+                                print("Wi-Fi perdido; reiniciando la placa...", motivo_red[0])
+                                registro_fallos.guardar("wifi", "perdido: {} a los {} s; reinicio".format(
+                                    motivo_red[0], round(time.monotonic() - arranque)))
                                 controller.stop("wifi_perdido")
                                 if mision is not None:
                                     mision.detener_mision("wifi_perdido")
-                                server.close()
-                                server = None
+                                import microcontroller
+                                microcontroller.reset()
                             if not conectar_wifi(ssid, password, alimentar, forzar=caida,
-                                                 elegir=config.get("wifi_elegir_antena", True)):
+                                                 elegir=config.get("wifi_elegir_antena", True),
+                                                 canal=config.get("wifi_canal")):
+                                fallos_wifi[0] += 1
+                                if fallos_wifi[0] >= 3:
+                                    # Al arrancar tampoco conecta: desde cero otra vez.
+                                    registro_fallos.guardar("wifi", "sin conexion al arrancar; reinicio")
+                                    import microcontroller
+                                    microcontroller.reset()
                                 time.sleep(2)
                                 continue
+                            fallos_wifi[0] = 0
                             if vision:
-                                vision[0].reiniciar_silencio()    # 20 s más antes de volver a sospechar
+                                vision[0].reiniciar_silencio()    # otros 8 s antes de volver a sospechar
                             if ronda is not None and config.get("espnow", True):
                                 # ESP-NOW con el compañero, en el canal de este router.
                                 if ronda.enlace is None:

@@ -23,5 +23,14 @@
     "slow_speed": 0.15
   },
   "vision_host": "",
-  "vision_port": 2026
+  "vision_port": 2026,
+  "wifi_elegir_antena": true,
+  "wifi_canal": null,
+  "_nota_wifi_canal": "Canal preferido (p. ej. 11) si la red tiene varias antenas; null = elegir solo. Si no hay antena en ese canal se ignora.",
+  "borde_arriba_mm": 60,
+  "_nota_borde_arriba": "Cuánto se aleja el centro del rover del borde de arriba (lado 0-1, zona verde), el más lejano a la cámara: ahí la visión lo pierde. Los otros bordes usan 25 mm.",
+  "turnos": true,
+  "_nota_turnos": "true: primero lleva sus cubos el de ID menor y el otro espera apartado; después va el otro (más seguro, unos segundos más lento). false: los dos a la vez. Va igual en los dos rovers.",
+  "wifi_reconectar_s": 8,
+  "_nota_wifi_reconectar": "Segundos sin un byte de la visión (y sin PC hablándole) para reiniciar el Wi-Fi."
 }

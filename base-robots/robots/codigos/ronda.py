@@ -127,7 +127,8 @@ class Ronda:
     def __init__(self, vision, misiones, robot_id, fase_inicio="RUNNING", estrategia="reparto",
                  companero=None, intentos_por_cubo=2, ayuda_ms=300000, max_edad_ms=1500,
                  companero_cerca_mm=200, sin_dueno_ms=30000, reintento_ms=15000, reloj=ahora_ms,
-                 enlace=None, latido_ms=200, plan_espera_ms=600, robar=False):
+                 enlace=None, latido_ms=200, plan_espera_ms=600, robar=False, apartarse_ms=8000,
+                 turnos=True, turno_max_ms=120000):
         self.vision, self.misiones, self.robot_id = vision, misiones, robot_id
         self.fase_inicio, self.estrategia, self.companero = fase_inicio, estrategia, companero
         self.intentos_por_cubo, self.ayuda_ms, self.max_edad_ms = intentos_por_cubo, ayuda_ms, max_edad_ms
@@ -142,10 +143,18 @@ class Ronda:
         # simulador estorbaba más de lo que ayudaba (dos rovers en la misma
         # zona): 57/90 cubos con robos, 63/90 sin ellos (3-oct).
         self.robar = robar
+        self.apartarse_ms = apartarse_ms      # cuánto se aparta al cederle el paso al otro
+        # Por turnos: el de ID mayor espera, apartado, a que el otro termine
+        # sus cubos (ver _esperar_turno). turno_max_ms: si el otro no termina
+        # nunca (roto en la cancha), igual sale.
+        self.turnos, self.turno_max_ms = turnos, turno_max_ms
         self.proximo_latido = 0
         self.estado, self.motivo, self.fase = ESPERANDO, None, None
         self.preparada = False                # LLEVAR y el planificador ya cargados
         self.error_preparar = None
+        # Último error que tick() lanzó y la placa atrapó (lo anota quien la
+        # maneja). Antes sólo se imprimía por USB: en la cancha era invisible.
+        self.error, self.errores = None, 0
         self._reiniciar()
 
     def _reiniciar(self):
@@ -153,6 +162,7 @@ class Ronda:
         self.actual = None
         self.inicio_ms = None
         self.pausa_hasta = 0
+        self.pedir_reinicio = getattr(self, "pedir_reinicio", False)
         self.atendido = {}                    # color -> último momento con un rover cerca
         self.mem = None                       # bytes libres al lanzar el último cubo
         self.reintentar_en = None             # cuándo volver a probar los que fallaron
@@ -163,6 +173,14 @@ class Ronda:
         self.propios = 0                      # cubos entregados por este rover
         self.aparcado = False                 # ya se estacionó fuera del camino
         self.ruta_aparcar = []                # puntos que faltan para estacionarse
+        self.sitios, self.sitios_desde = [], None   # dónde estacionarse; el A* lo hace tick
+        self.reaparcar_en = 0                 # cuándo volver a mirar si estorba donde está
+        self.apartandose = False              # cedió el paso: estacionado un rato
+        self.turno_mio = False                # ya le tocó (o no hay turnos): lleva lo suyo
+        self.esperando_turno = False
+        cubo = getattr(self.misiones, "cubo", None)
+        if cubo is not None and hasattr(cubo, "cesiones"):
+            cubo.cesiones = {}                # lo cedido al compañero era de la ronda anterior
 
     @property
     def autonoma(self):
@@ -195,6 +213,13 @@ class Ronda:
                 self.actual = None
                 self.misiones.detener_mision(self.motivo)
             elif self.fase in ("IDLE", "READY") and self.estado != ESPERANDO:
+                if self.estado == TERMINADA:
+                    # Ya jugó una ronda: la placa pide reiniciarse antes de la
+                    # siguiente (cancha 3-oct: en rondas seguidas sin apagar el
+                    # 10 quedó con ~10 KB menos de RAM y sin red, y los dos se
+                    # quedaron 34 s quietos al arrancar). Lo hace quien maneja
+                    # la placa; en la PC no pasa nada.
+                    self.pedir_reinicio = True
                 self.estado, self.motivo = ESPERANDO, None   # lista para otra ronda
                 self._reiniciar()
             return
@@ -204,6 +229,8 @@ class Ronda:
             self._comenzar(mensaje)
         if self.estado in (CORRIENDO, COMPLETA):
             self._avanzar(mensaje)
+            if self.sitios:
+                self._ir_a_aparcar(mensaje)
 
     # ------------------------------------------------------------ radio
     def _radio(self):
@@ -300,9 +327,46 @@ class Ronda:
         self.proximo_latido = 0               # que el compañero sepa ya
         print("Ronda: mis cubos", self.mis_cubos)
 
+    def _esperar_turno(self, mensaje, ahora):
+        """True mientras le toque esperar: por turnos, el de ID mayor espera a
+        que el otro termine sus cubos (radio: COMPLETA) y después lleva los
+        suyos. Cada uno sigue llevando al menos uno (12.2.13).
+
+        Moviéndose los dos a la vez se estorbaban: uno cedía el paso, el otro
+        lo esperaba y quedaban los dos quietos (cancha 4-oct 15:01, 15:54 y
+        17:06). Simulador, canchas oficiales: 106/108 cubos y 34/36 rondas
+        por turnos, 97/108 y 29/36 a la vez; tarda unos 5-15 s más cuando
+        todo sale bien. Sin radio no hay turnos: cada uno va por lo suyo.
+        """
+        if self.turno_mio or not self.turnos or self.enlace is None:
+            return False
+        otros = [r["id"] for r in mensaje["rovers"] if r["id"] != self.robot_id]
+        if not otros or self.robot_id < min(otros):
+            self.turno_mio = True                 # va primero, o está solo en la cancha
+            return False
+        compa = self.enlace.companero()
+        estado = compa.get("e") if compa is not None else None
+        if estado == CORRIENDO and ahora - self.inicio_ms < self.turno_max_ms:
+            return True                           # el otro todavía lleva lo suyo
+        if estado in (None, ESPERANDO) and ahora - self.inicio_ms < 3000:
+            return True                           # todavía no se lo oyó empezar
+        self.turno_mio = True                     # terminó, se calló o se trabó: me toca
+        return False
+
     def _avanzar(self, mensaje):
         ahora = self.reloj()
         compa = self._compa()
+        cubo = getattr(self.misiones, "cubo", None)
+        if cubo is not None:
+            # Al que ya terminó no se le cede el paso: no va a pasar nunca
+            # (cancha 4-oct 15:54: el 11 le cedió el rojo 10 veces al 10 quieto).
+            cubo.compa_quieto = compa is not None and compa.get("e") == COMPLETA and not compa.get("a")
+        self.esperando_turno = (self.estado == CORRIENDO and self.actual is None
+                                and not self.misiones.activa and self._esperar_turno(mensaje, ahora))
+        if self.esperando_turno:
+            if self._fresca(mensaje):
+                self._aparcar(mensaje, pendientes(mensaje))   # mientras, fuera de los caminos
+            return
         if self.misiones.activa:
             # Los dos tomaron el mismo cubo a la vez: cede el de mayor ID.
             if compa is not None and self.actual is not None and compa.get("a") == self.actual \
@@ -320,18 +384,35 @@ class Ronda:
             elif resultado.get("estado") == "ENTREGADO":
                 self.hechos.append(self.actual)
                 self.propios += 1                 # los que llevó ESTE rover (12.2.13)
+            elif motivo in ("wifi_perdido", "vision_vieja", "rover_no_visible"):
+                # Se cortó la red o la visión, no falló el cubo: no cuenta como
+                # intento (cancha 4-oct: con dos cortes en el mismo cubo la
+                # ronda lo daba por perdido). Se vuelve a probar al volver.
+                self.fallos[self.actual] = motivo
+                pausa = 1000
             elif "rover" in motivo:
                 # El compañero se cruzó (en el corredor o en el camino): no es
                 # un fallo del cubo. Se espera a que pase y se vuelve a probar.
                 self.fallos[self.actual] = motivo
                 pausa = 2000
+                if "cede_paso" in motivo:
+                    # Le cedió el paso: apartarse unos segundos (estacionarse
+                    # lejos de los caminos) para que el otro pueda empujar.
+                    pausa = self.apartarse_ms
+                    self.apartandose = True
+                    self.aparcado = False
             else:
                 self.intentos[self.actual] = self.intentos.get(self.actual, 0) + 1
                 self.fallos[self.actual] = motivo
             self.actual = None
             self.pausa_hasta = ahora + pausa
         if ahora < self.pausa_hasta or not self._fresca(mensaje):
+            if self.apartandose and ahora < self.pausa_hasta and self._fresca(mensaje):
+                self._aparcar(mensaje, pendientes(mensaje))
             return
+        if self.apartandose:
+            self.apartandose = False
+            self.misiones.detener_mision("aparcar")
         afuera = pendientes(mensaje)
         for color in self.mis_cubos:              # entregados por el compañero, o empujados dentro
             if color not in afuera and color not in self.hechos:
@@ -396,20 +477,26 @@ class Ronda:
         self.misiones.llevar_en_ronda(self.actual)
         self.proximo_latido = 0                   # anunciarlo ya: evita que el otro lo tome
         self.aparcado = False                     # al terminar, volver a estacionarse
+        self.ruta_aparcar = []                    # la de antes (esperando turno) ya no vale
 
     def _aparcar(self, mensaje, afuera):
-        """Sin nada que hacer, no estorbar: ir a un sitio lejos de los cubos que
-        faltan, de su camino a la zona y del compañero (simulador: el que
-        terminaba se quedaba parado en el corredor del cubo del otro).
+        """Sin nada que hacer (o esperando su turno), no estorbar: ir a un
+        sitio lejos de los cubos que faltan, de por dónde se los empuja y del
+        compañero (simulador: el que terminaba se quedaba parado en el
+        corredor del cubo del otro).
 
         Va por una ruta del planificador, punto a punto: en línea recta casi
         siempre había un cubo en medio y se quedaba donde estaba (cancha 3-oct).
+        Cada 5 s vuelve a mirar si sigue bien puesto; si algo cortó el camino,
+        lo reintenta en 3 s (antes se quedaba ahí para siempre).
         """
         if not afuera or not hasattr(self.misiones, "ir_en_ronda"):
             return
+        ahora = self.reloj()
         if self.ruta_aparcar:
             if self.misiones.informe().get("estado") == "ABORTADO":
-                self.ruta_aparcar = []            # algo se cruzó: quedarse ahí
+                self.ruta_aparcar = []            # algo se cruzó: volver a mirar en un rato
+                self.reaparcar_en = ahora + 3000
                 return
             siguiente = self.ruta_aparcar.pop(0)
             try:
@@ -417,37 +504,83 @@ class Ronda:
             except ValueError:
                 self.ruta_aparcar = []
             return
-        if self.aparcado:
+        if self.aparcado and ahora < self.reaparcar_en:
             return
         self.aparcado = True
+        self.reaparcar_en = ahora + 5000
         yo = _buscar(mensaje["rovers"], "id", self.robot_id)
         if yo is None:
             return
         grid = mensaje["grid"]
+        cell = grid["cell_mm"]
+        modelo = getattr(getattr(self.misiones, "ir", None), "modelo", None)
+        if modelo is not None:
+            # El centro de giro, como la misión que va a moverlo: desde el
+            # marcador (3 cm adelante) la ruta pasaba demasiado cerca del cubo
+            # recién entregado y la red de seguridad la cortaba en el acto
+            # (camino_bloqueado: el 10 se quedaba en el medio, cancha 4-oct).
+            yo = modelo.centro_desde_marcador(yo, cell)
         borde = 7.0                               # celdas: sin tapar marcadores de esquina
         puntos = [{"col": c, "row": r} for c in (borde, grid["cols"] - borde)
                   for r in (borde, grid["rows"] - borde)]
         if mensaje.get("start"):
             puntos.append(mensaje["start"])
-        estorbos = []                             # segmentos (cubo -> su zona) y el compañero
+        from llevar_cubo import punto_detras
+        llevar = getattr(self.misiones, "cubo", None)
+        # Desde el punto previo de ataque (detrás del cubo, donde se pone el
+        # rover para empujar) hasta la zona: no sólo de cubo a zona.
+        atras = getattr(llevar, "aproximacion_mm", 160.0) + getattr(llevar, "previo_mm", 70.0)
+        estorbos = []                             # segmentos (ataque -> zona) y el compañero
         for color in afuera:
             cubo = _buscar(mensaje["cubes"], "color", color)
             zona = _buscar(mensaje["depots"], "color", color)
             if cubo is not None and zona is not None:
-                estorbos.append((cubo, zona))
+                estorbos.append((punto_detras(cubo, zona, atras, cell) or cubo, zona))
+        compa = self._compa()
+        lleva = compa.get("a") if compa is not None else None
         for r in mensaje["rovers"]:
             if r["id"] != self.robot_id:
                 estorbos.append((r, r))
+                cubo = _buscar(mensaje["cubes"], "color", lleva) if lleva in afuera else None
+                zona = _buscar(mensaje["depots"], "color", lleva) if cubo is not None else None
+                if zona is not None:              # y su camino hasta el punto de ataque
+                    estorbos.append((r, punto_detras(cubo, zona, atras, cell) or cubo))
 
         def holgura(p):
             return min([_dist_segmento(p, a, b) for a, b in estorbos] or [99.0])
 
         actual = holgura(yo)
+        # Los sitios bastante más apartados que donde está, del mejor al peor.
+        # La ruta la busca _ir_a_aparcar en este mismo tick (ver ahí por qué).
+        self.sitios = [p for p in sorted(puntos, key=holgura, reverse=True) if holgura(p) - actual >= 3.0]
+        self.sitios_desde = yo
+
+    def _ir_a_aparcar(self, mensaje):
+        """Va al primer sitio de `sitios` al que haya ruta.
+
+        El A* se llama desde aquí, que lo llama tick, y no desde _aparcar: en
+        la placa la pila de Python es de ~1,5 KB y por tick > _avanzar >
+        _aparcar > _ruta > A* pesaba 201 (la misión, 169). tick() en la placa
+        atrapaba el error sin avisar y el rover nunca se apartaba (cancha
+        4-oct 15:54: el 10 terminó y quedó en el camino del 11, que le cedió
+        el paso una y otra vez sin moverse).
+        """
+        sitios, self.sitios = self.sitios, []
+        yo = self.sitios_desde
         planner = getattr(getattr(self.misiones, "cubo", None), "planner", None)
-        for p in sorted(puntos, key=holgura, reverse=True):
-            if holgura(p) - actual < 3.0:         # ya está bastante apartado
-                return
-            ruta = self._ruta(mensaje, yo, p, planner)
+        for p in sitios:
+            if planner is None:
+                from autonomia import obstaculo_en_camino
+                ruta = None if obstaculo_en_camino(mensaje, yo, p, propio=self.robot_id) else [p]
+            else:
+                from llevar_cubo import _Escena
+                planner.clearance = 25.0          # holgado: el rover recorta las esquinas
+                planner.escapar = True            # recién retirado de un cubo: alejarse vale
+                try:
+                    ruta = planner.plan(_Escena(mensaje, self.robot_id, yo), p)
+                finally:
+                    planner.escapar = False
+                ruta = (ruta["puntos"][1:] or [p]) if ruta["estado"] == "RUTA" else None
             if ruta:
                 self.ruta_aparcar = ruta[1:]
                 try:
@@ -456,24 +589,6 @@ class Ronda:
                     self.ruta_aparcar = []
                     continue
                 return
-
-    def _ruta(self, mensaje, yo, destino, planner):
-        """Puntos hasta `destino` sin tocar nada, o None."""
-        if planner is None:
-            from autonomia import obstaculo_en_camino
-            if obstaculo_en_camino(mensaje, yo, destino, propio=self.robot_id) is None:
-                return [destino]
-            return None
-        from llevar_cubo import _Escena
-        planner.clearance = 25.0                  # holgado: el rover recorta las esquinas
-        planner.escapar = True                    # recién retirado de un cubo: alejarse vale
-        try:
-            resultado = planner.plan(_Escena(mensaje, self.robot_id, yo), destino)
-        finally:
-            planner.escapar = False
-        if resultado["estado"] != "RUTA":
-            return None
-        return resultado["puntos"][1:] or [destino]
 
     def _ayudar(self, mensaje, afuera, ahora):
         """Con lo suyo hecho, toma lo que quede sin dueño.
@@ -514,6 +629,10 @@ class Ronda:
             datos["mem"] = self.mem
         if self.error_preparar:
             datos["error_preparar"] = self.error_preparar
+        if self.error:
+            datos["error"], datos["errores"] = self.error, self.errores
+        if self.esperando_turno:
+            datos["turno"] = "esperando"
         if self.enlace is not None:
             radio = self.enlace.informe()
             if self.plan_del_lider:

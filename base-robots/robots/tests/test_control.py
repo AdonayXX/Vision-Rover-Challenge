@@ -274,9 +274,27 @@ class ControlTests(unittest.TestCase):
         sock = Socket([b"MOTOR|.5|.5\n"])
         with self.assertRaises(ConnectionError):
             serve_client(sock, self.control, clock=self.clock,
-                         sleep=lambda s: self.clock.advance(.5), red_ok=lambda: False)
+                         sleep=lambda s: self.clock.advance(.5), red_ok=lambda pc_activa: False)
         self.assertTrue(sock.closed)
         self.assert_stopped()
+
+    def test_silent_pc_does_not_hide_a_dead_wifi(self):
+        # Cancha 4-oct: ver_ronda se cayó sin poder cerrar la sesión; con una
+        # sesión abierta la placa no revisaba si la visión callaba y los dos
+        # rovers esperaron más de un minuto sin reconectar el Wi-Fi.
+        vistos = []
+
+        def red_ok(pc_activa):
+            vistos.append(pc_activa)
+            return self.clock() < 8          # la visión calla: a los 8 s, red caída
+
+        sock = Socket([b"PING\n"])            # la PC habla una vez y se calla
+        with self.assertRaises(ConnectionError):
+            serve_client(sock, self.control, clock=self.clock,
+                         sleep=lambda s: self.clock.advance(.5), red_ok=red_ok)
+        self.assertTrue(vistos[0])            # recién habló: eso prueba que hay red
+        self.assertFalse(vistos[-1])          # 5 s callada: ya no prueba nada
+        self.assertTrue(sock.closed)
 
     def test_sensors_reply_includes_reset_reason(self):
         session = CommandSession(self.control, clock=self.clock,

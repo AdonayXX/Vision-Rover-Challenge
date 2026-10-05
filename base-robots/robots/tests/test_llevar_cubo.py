@@ -313,8 +313,8 @@ class LlevarCuboTests(unittest.TestCase):
         # cancha. Ahora lo suelta ("rover": la ronda espera y sigue con otro);
         # sólo si el otro sigue ahí después de max_cesiones vuelve a reubicar.
         cubos = [{"color": "green", "col": 20.5, "row": 10.5}]
-        sim = simulador((18.9, 19.0, 90.0), cubos)
-        sim.companeros = [{"id": 11, "col": 19.0, "row": 26.0, "theta": 0.0}]   # aparcado ahí
+        sim = simulador((10.0, 19.0, 0.0), cubos)
+        sim.companeros = [{"id": 11, "col": 19.5, "row": 19.5, "theta": 90.0}]   # aparcado en su punto de ataque
         mision = llevar(sim, "green")
         for vez in range(mision.max_cesiones):
             if vez:
@@ -330,6 +330,71 @@ class LlevarCuboTests(unittest.TestCase):
             sim.paso()
             mision.tick()
         self.assertIsNotNone(mision.submeta)
+
+    def test_sideways_against_its_cube_backs_away_from_it(self):
+        # Cancha 3-oct 18:44: el 11 quedó de costado pegado al verde (111 mm,
+        # el margen pide 152). Ni avanzar ni retroceder 14 cm lo sacaba de ahí
+        # y abortó "origen_sin_espacio" con sus dos cubos.
+        cubos = [{"color": "green", "col": 20.5, "row": 8.5}, {"color": "red", "col": 31.4, "row": 20.9},
+                 {"color": "blue", "col": 21.3, "row": 31.7}]
+        sim = simulador((22.7, 13.6, 63.0), cubos)
+        # El otro rover tapa la marcha atrás pero no el camino de empuje: sólo
+        # sale por el abanico (avanzar lo acerca al cubo).
+        sim.companeros = [{"id": 11, "col": 27.0, "row": 21.0, "theta": 310.0}]
+        mision = llevar(sim, "green")
+        salidas = []
+        original = mision._direccion_salida
+        mision._direccion_salida = lambda *a: salidas.append(1) or original(*a)
+        correr(mision, sim, 90000)
+        self.assert_entregado(mision, sim, "green")
+        self.assertTrue(salidas)                                # salió por el abanico
+
+    def test_cubes_in_a_row_are_pushed_without_touching_the_others(self):
+        # Cancha 3-oct 20:02 (difícil): azul justo debajo del verde a 24 cm y
+        # el rojo al lado. Con el rover como círculo de 17 cm no cabía en
+        # ningún punto de ataque y los dos rovers se trabaron 3 minutos.
+        cubos = [{"color": "blue", "col": 20.0, "row": 27.3}, {"color": "green", "col": 20.2, "row": 15.3},
+                 {"color": "red", "col": 26.7, "row": 21.5}]
+        for color in ("green", "blue"):
+            sim = simulador((3.7, 15.7, 0.0), cubos)
+            mision = llevar(sim, color)
+            correr(mision, sim, 120000)
+            self.assert_entregado(mision, sim, color)
+            self.assertEqual(sim.empujados, {color})
+
+    def test_planning_fits_in_the_board_python_stack(self):
+        # Cancha 3-oct 21:24: "pystack exhausted" al planificar (la pila de
+        # Python de la placa es de ~1,5 KB). Peso de cada marco ~ variables +
+        # pila de la función (como n_state de MicroPython); 173 es el máximo
+        # de la versión que corría bien en la placa (commit 2fb9928).
+        pila, peor = [], [0, []]
+
+        def perfil(frame, evento, arg):
+            if "codigos" not in frame.f_code.co_filename.replace("\\", "/"):
+                return
+            if evento == "call":
+                if frame.f_code.co_name == "tick" and frame.f_code.co_filename.endswith("llevar_cubo.py"):
+                    pila.clear()
+                pila.append(frame.f_code)
+                if all(c.co_name != "<module>" for c in pila):
+                    total = sum(c.co_nlocals + c.co_stacksize + 4 for c in pila)
+                    if total > peor[0]:
+                        peor[0], peor[1] = total, [c.co_name for c in pila]
+            elif evento == "return" and pila:
+                pila.pop()
+
+        cubos = [{"color": "blue", "col": 20.0, "row": 27.3}, {"color": "green", "col": 20.2, "row": 15.3},
+                 {"color": "red", "col": 26.7, "row": 21.5}]
+        sys.setprofile(perfil)
+        try:
+            for color in ("green", "blue"):
+                sim = simulador((3.7, 15.7, 0.0), cubos)
+                sim.companeros = [{"id": 11, "col": 12.0, "row": 30.0, "theta": 0.0}]
+                mision = llevar(sim, color)
+                correr(mision, sim, 60000)
+        finally:
+            sys.setprofile(None)
+        self.assertLessEqual(peor[0], 173, " > ".join(peor[1]))
 
     def test_backing_off_never_leaves_the_camera_view(self):
         # Cancha 3-oct: el rover 11 se salió y la visión lo perdió. Marcha

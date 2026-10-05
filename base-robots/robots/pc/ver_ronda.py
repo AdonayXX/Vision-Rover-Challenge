@@ -31,7 +31,7 @@ def _radio(radio):
         return ""
     texto = "  radio: tx={} rx={} hace={}ms canal={}".format(
         radio.get("tx"), radio.get("rx"), radio.get("edad_ms", "-"), radio.get("canal", "?"))
-    for clave in ("plan", "robados", "cedidos", "ajenos", "errores", "ultimo_error", "error"):
+    for clave in ("plan", "robados", "cedidos", "ajenos", "errores", "reaperturas", "ultimo_error", "error"):
         if radio.get(clave):
             texto += " {}={}".format(clave, radio[clave])
     return texto
@@ -59,20 +59,52 @@ def main():
                 print("  placa: encendida hace {} s, ultimo reinicio={}{}".format(
                     estado.get("uptime_s"), estado.get("reset_reason"),
                     ", fallos={}".format(estado["fallos"]) if estado.get("fallos") else ""), flush=True)
+                antena = estado.get("antena")
+                if antena:
+                    # [canal, señal dBm] de cada antena de la red que vio al conectarse;
+                    # ahorro: si la placa pudo quitar el ahorro de energía del Wi-Fi.
+                    print("  wifi: canal elegido={} antenas vistas={} ahorro={}".format(
+                        antena.get("canal"), antena.get("vistas"), antena.get("ahorro", "?")), flush=True)
+                vista = estado.get("vision")
+                if vista:
+                    # fase=None con estado "conexion_fallida: ..." = no llega a la visión
+                    # (IP vieja en la config, visión apagada, firewall).
+                    print("  vision: {} estado={} conexiones={}".format(
+                        vista.get("host", "?"), vista.get("estado"), vista.get("conexiones")), flush=True)
+                else:
+                    print("  vision: el rover no tiene vision_host en su config", flush=True)
+                conexiones = (vista or {}).get("conexiones") or 0
                 inicio = time.monotonic()
                 while True:
                     estado = preguntar(sock, buffer)
                     mision = estado.get("mision") or {}
                     ronda = mision.get("ronda") or {}
-                    mem = (estado.get("vision") or {}).get("mem_libre")
+                    vista = estado.get("vision") or {}
+                    mem = vista.get("mem_libre")
                     clave = (ronda.get("estado"), ronda.get("fase"), ronda.get("actual"),
-                             tuple(ronda.get("hechos") or ()), mision.get("estado"), mision.get("motivo"))
+                             tuple(ronda.get("hechos") or ()), mision.get("estado"), mision.get("motivo"),
+                             vista.get("estado"), vista.get("conexiones"), ronda.get("errores"), ronda.get("turno"))
                     if clave != anterior or time.monotonic() - ultimo_print > 5:
-                        print("{:6.1f}s fase={} ronda={} cubos={} hechos={} actual={} | mision={} {}{}{}{}".format(
+                        # Por qué hace lo que hace: reubicando, último retroceso, qué estorbó.
+                        detalle = "".join(" {}={}".format(k, mision[k])
+                                          for k in ("submeta", "retroceso", "estorbo", "espera") if mision.get(k))
+                        # La conexión del ROVER con la visión: si no está ok, o si se
+                        # reconectó desde que empezó a mirar (el rover perdió la red).
+                        red = ""
+                        if vista and vista.get("estado") != "ok":
+                            red += "  vision={}".format(vista.get("estado"))
+                        if (vista.get("conexiones") or 0) > conexiones:
+                            red += "  vision_reconexiones={}".format(vista["conexiones"] - conexiones)
+                        if ronda.get("turno"):
+                            red += "  turno={}".format(ronda["turno"])     # espera a que el otro termine
+                        if ronda.get("error"):
+                            red += "  ERROR_RONDA={} (x{})".format(ronda["error"], ronda.get("errores"))
+                        print("{:6.1f}s fase={} ronda={} cubos={} hechos={} actual={} | mision={} {}{}{}{}{}{}".format(
                             time.monotonic() - inicio, ronda.get("fase"), ronda.get("estado"),
                             ronda.get("mis_cubos"), ronda.get("hechos"), ronda.get("actual"),
-                            mision.get("estado"), mision.get("motivo") or "",
+                            mision.get("estado"), mision.get("motivo") or "", detalle,
                             "  fallos={}".format(ronda["fallos"]) if ronda.get("fallos") else "",
+                            red,
                             "  ram={}".format(mem) if mem else "",
                             _radio(ronda.get("radio"))), flush=True)
                         anterior, ultimo_print = clave, time.monotonic()

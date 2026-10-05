@@ -5,6 +5,7 @@
     "right_sign": -1,
     "left_gain": 1.0,
     "right_gain": 1.0,
-    "ramp_seconds": 0.05
-  }
+    "ramp_seconds": 0.25
+  },
+  "_nota_rampa": "Arranque suave de 0.25 s: el rover 11 se reinicio por bajo voltaje (BROWNOUT) 6 veces el 3-oct, siempre al arrancar o girar. Con 0.05 el pico de corriente era casi instantaneo."
 }

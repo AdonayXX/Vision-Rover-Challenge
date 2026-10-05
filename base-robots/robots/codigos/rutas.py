@@ -82,7 +82,8 @@ class RoutePlanner:
         # edge_mm: cuánto tiene que quedar el CENTRO del rover dentro de la
         # cancha. None = el radio más el margen, como con cualquier objeto.
         # La orilla no es una pared: con un valor chico el cuerpo puede
-        # asomarse fuera para empujar un cubo pegado al borde.
+        # asomarse fuera para empujar un cubo pegado al borde. Un número vale
+        # para los cuatro lados; (izquierda, arriba, derecha, abajo) los separa.
         self.edge = edge_mm
         # True: también alejarse de un cubo que ya está demasiado cerca (lo usa
         # la ronda para estacionarse; las misiones lo resuelven con SALIR).
@@ -125,12 +126,13 @@ class RoutePlanner:
                         continue
                 circles.append((item["col"], item["row"], radius + margin))
         cols, rows = msg["grid"]["cols"], msg["grid"]["rows"]
-        edge = margin
+        edges = (margin, margin, margin, margin)
         if self.edge is not None:
             # Puede tapar un marcador de esquina: la visión de la U aguanta uno
             # menos sin perder precisión (AnclajeCancha conserva la homografía).
-            edge = self.edge / scale
-        return {"cols": cols, "rows": rows, "margin": margin, "edge": edge,
+            lados = self.edge if isinstance(self.edge, (tuple, list)) else (self.edge,) * 4
+            edges = tuple(e / scale for e in lados)
+        return {"cols": cols, "rows": rows, "margin": margin, "edge": min(edges), "edges": edges,
                 "circles": circles, "cell_mm": scale}
 
     @staticmethod
@@ -138,9 +140,11 @@ class RoutePlanner:
         # Sin llamadas a funciones Python: en la placa la pila (pystack) es de
         # ~1,5 KB y el A* llama a esto desde lo más hondo. Es la misma cuenta
         # que point_segment_distance, comparada al cuadrado.
-        margin = scene.get("edge", scene["margin"])
+        # Bordes (izq, arriba, der, abajo) en una sola variable: cada variable
+        # local pesa en la pila de la placa (cancha 3-oct: "pystack exhausted").
+        e = scene.get("edges") or (scene["margin"],) * 4
         for x, y in (start, end):
-            if not (margin <= x <= scene["cols"] - margin and margin <= y <= scene["rows"] - margin):
+            if not (e[0] <= x <= scene["cols"] - e[2] and e[1] <= y <= scene["rows"] - e[3]):
                 return False
         sx, sy = start
         dx, dy = end[0] - sx, end[1] - sy
@@ -209,9 +213,10 @@ class RoutePlanner:
         return self._estado, self._costo, self._padre, self._cola
 
     def _search(self, scene, start, end):
-        step, margin = self.step, scene.get("edge", scene["margin"])
-        xmin, xmax = math.ceil(margin / step), math.floor((scene["cols"] - margin) / step)
-        ymin, ymax = math.ceil(margin / step), math.floor((scene["rows"] - margin) / step)
+        step = self.step
+        e = scene.get("edges") or (scene["margin"],) * 4
+        xmin, xmax = math.ceil(e[0] / step), math.floor((scene["cols"] - e[2]) / step)
+        ymin, ymax = math.ceil(e[1] / step), math.floor((scene["rows"] - e[3]) / step)
         ancho = max(0, ymax - ymin + 1)
         count = max(0, xmax - xmin + 1) * ancho
         if count > self.max_nodes:

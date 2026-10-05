@@ -112,3 +112,8 @@ class ElegirAntenaTests(unittest.TestCase):
         self.assertEqual(elegir_ap([Red("U", self.A, -85, 1), Red("U", self.B, -78, 11)], "U"), (self.B, 11))
         self.assertIsNone(elegir_ap([Red("Otra", self.A, -40, 1)], "U"))
         self.assertIsNone(elegir_ap([], "U"))
+
+    def test_preferred_channel_wins_if_present(self):
+        redes = [Red("U", self.A, -48, 11), Red("U", self.B, -66, 1), Red("U", self.C, -60, 11)]
+        self.assertEqual(elegir_ap(redes, "U", canal=11), (self.A, 11))
+        self.assertEqual(elegir_ap(redes, "U", canal=6), (self.B, 1))      # no está: la regla de siempre

@@ -24,6 +24,7 @@ class CommandSession:
         self.buffer = b""
         self.pending = b""
         self.rx = bytearray(128)
+        self.ultimo_rx = clock()  # la PC habló por última vez (o se conectó)
         # Durante una ronda autonoma la PC solo puede mirar: conectarse no
         # para el rover (un STOP explicito si).
         if not getattr(mission, "autonoma", False):
@@ -140,6 +141,7 @@ class CommandSession:
             self.controller.stop("desconexion")
             return False
         if count:
+            self.ultimo_rx = self.clock()
             self.buffer += bytes(self.rx[:count])
             while b"\n" in self.buffer:
                 raw, self.buffer = self.buffer.split(b"\n", 1)
