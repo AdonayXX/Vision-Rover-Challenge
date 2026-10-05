@@ -19,8 +19,8 @@ no se usa aquí.
 """
 import math
 
-from autonomia import (Adaptador, _norma, distancia_a_segmento, giro_corto,
-                       hacia_punto, obstaculo_en_camino)
+from autonomia import (ALCANCE_GIRO_MM, Adaptador, _norma, _sentido_para_girar, distancia_a_segmento,
+                       giro_corto, hacia_punto, obstaculo_en_camino)
 from cliente_vision_rover import ahora_ms
 from modelo_rover import Predictor
 
@@ -120,6 +120,17 @@ def entregado(cubo, depot, mensaje):
     return cubo_en_su_zona(cubo, depot, mensaje["depot_size"], mensaje["grid"], mensaje["cube_side"])[0]
 
 
+def entregados(mensaje, excluir=None):
+    """Colores de los cubos que ya están dentro de su zona (menos `excluir`)."""
+    salida = []
+    for cubo in mensaje.get("cubes", ()):
+        if cubo["color"] != excluir:
+            zona = buscar(mensaje.get("depots", ()), "color", cubo["color"])
+            if zona is not None and entregado(cubo, zona, mensaje):
+                salida.append(cubo["color"])
+    return salida
+
+
 def corredor_bloqueado(mensaje, color, cubo, meta, rover, robot_id, contacto_mm,
                        radio_rover_mm=85.0, holgura_mm=10.0, ancho_mm=None):
     """Lo que estorba el empuje recto: el tramo del cubo y el del cuerpo del rover.
@@ -178,9 +189,13 @@ class _Escena:
     """
     max_age_ms = 10 ** 9
 
-    def __init__(self, mensaje, robot_id, centro):
+    def __init__(self, mensaje, robot_id, centro, hechos=()):
         self.message, self.robot_id, self.centro = mensaje, robot_id, centro
         self.seq = mensaje["seq"]
+        # Los ya entregados (menos el que se lleva): el planificador les deja
+        # el alcance de las horquillas (RoutePlanner.entregado_mm). Los calcula
+        # quien la crea: aquí dentro la pila de la placa pasaba de 173 a 181.
+        self.entregados = hechos
 
     def reason(self, color=None):
         return None
@@ -210,7 +225,7 @@ class LlevarCubo:
                  previo_mm=70.0, sensores=None, us_contacto_mm=45.0, us_libre_mm=None,
                  espera_compa_ms=3000, max_cesiones=10, borde_arriba_mm=60.0,
                  frente_mm=80.0, cola_mm=20.0, medio_ancho_mm=45.0, ceder_paso=True,
-                 retiro_mm=200.0, **control):
+                 retiro_mm=200.0, alcance_giro_mm=ALCANCE_GIRO_MM, **control):
         self.vision, self.modelo, self.motores = vision, modelo, motores
         self.robot_id, self.reloj = robot_id, reloj
         self.max_edad_ms, self.espera_max_ms, self.max_ms = max_edad_ms, espera_max_ms, max_ms
@@ -242,7 +257,11 @@ class LlevarCubo:
         # cubo, medido por la cámara, y recién ahí puede girar: con 80 mm fijos
         # el 11 quedó a ~13-16 cm, giró y barrió el rojo fuera de la zona
         # (cancha 4-oct 18:58). Girando, las paletas llegan a ~92 mm del centro.
-        self.retiro_mm = retiro_mm
+        # Girando, las horquillas llegan a alcance_giro_mm del centro (no los
+        # ~92 mm de la cara del frente): el retiro deja al cubo fuera de ese
+        # círculo, y las rutas, a los ya entregados (cancha 5-oct).
+        self.alcance_giro_mm = alcance_giro_mm
+        self.retiro_mm = max(retiro_mm, alcance_giro_mm + 42.4 + 10.0)   # + media diagonal del cubo
         self.v_empuje, self.w_empuje, self.kp_empuje = v_empuje, w_empuje, kp_empuje
         self.lateral_max_mm, self.linea_max_mm = lateral_max_mm, linea_max_mm
         # Fuera de la línea de empuje: hasta linea_ok se alinea con la línea;
@@ -493,7 +512,7 @@ class LlevarCubo:
         # ¿Estorba sólo el otro rover? Sin él, ¿se llegaría? (A* desde aquí, ver arriba)
         p = self._sin_compa(mensaje, cubo, meta, detras)
         if p is not None:
-            p = _Escena(p, self.robot_id, centro)
+            p = _Escena(p, self.robot_id, centro, escena.entregados)
             self.planner.clearance = self.holgura_ruta_mm
             ruta = self.planner.plan(p, punto_detras(cubo, meta, self.aproximacion_mm + self.previo_mm, cell))
             # Pegado a algo al arrancar no es "no cabe": de ahí se sale (SALIR).
@@ -567,6 +586,17 @@ class LlevarCubo:
             control["cerca_mm"] = 200.0       # punto detrás: marcha atrás, sin dar la vuelta
         llego, izquierda, derecha, distancia, error = hacia_punto(
             pred, destino, cell, self.modelo, **control)
+        if not llego and abs(error) > control.get("giro_en_sitio", 40.0):
+            # Va a girar en el sitio: si las horquillas alcanzan un cubo ya
+            # entregado, primero alejarse en recto. Simulador con horquillas:
+            # el retiro se cortaba (otro cubo detrás) y la misión siguiente
+            # giraba a 10 cm del rojo y lo sacaba de la zona (cancha 5-oct, igual).
+            hechos = entregados(mensaje, self.color)
+            sentido = _sentido_para_girar(mensaje, pred, hechos, self.alcance_giro_mm) if hechos else 0
+            if sentido:
+                izquierda, derecha = self.modelo.potencias(sentido * control.get("v_min", 90.0), 0.0,
+                                                           control.get("limite", 0.35))
+                self.ultimo["despeje"] = sentido
         self._informar(distancia, error, izquierda, derecha)
         if not llego:
             return self._mover(ahora, izquierda, derecha)
@@ -743,6 +773,7 @@ class LlevarCubo:
             self.planner = RoutePlanner(self.radio_mm, self.radio_mm, self.holgura_mm,
                                         step_cells=self.paso_ruta, required_colors=(),
                                         edge_mm=self._bordes())
+            self.planner.entregado_mm = self.alcance_giro_mm - self.radio_mm
             mensaje = self.vision.mensaje
             if mensaje is not None:
                 grid = mensaje["grid"]
@@ -925,7 +956,7 @@ class LlevarCubo:
         # Para el "después" el cubo ya no está donde está ahora.
         sin_cubo = dict(mensaje)
         sin_cubo["cubes"] = [c for c in mensaje["cubes"] if c["color"] != self.color]
-        despejado = self.planner.scene(_Escena(sin_cubo, self.robot_id, escena.centro))
+        despejado = self.planner.scene(_Escena(sin_cubo, self.robot_id, escena.centro, escena.entregados))
         grid = mensaje["grid"]
         borde = mensaje["cube_side"] * 0.7072 + 10.0 / cell
 

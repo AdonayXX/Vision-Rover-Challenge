@@ -45,6 +45,13 @@ class ClienteVision:
         # Con ultimo_dato_ms, cada reconexión sin datos lo ponía en cero y la
         # placa nunca reiniciaba el Wi-Fi (cancha 4-oct: cortes de 1 minuto).
         self.ultimo_byte_ms = None
+        # Cortes del flujo (sin datos o error) de los últimos segundos. Cancha
+        # 5-oct, router y pilas nuevas: en plena ronda la placa deja de recibir
+        # el flujo de la visión; cada conexión nueva trae unos pocos mensajes y
+        # se vuelve a trabar (el 10 encadenó 10 conexiones en 55 s sin
+        # reiniciarse, porque cada ráfaga reiniciaba el silencio). Sólo un
+        # reinicio de la placa lo destraba: dos cortes seguidos bastan.
+        self.cortes = []
         self.alguna_vez = False          # ya recibió algo: la visión existe
         self.sock = None
         self.buffer = b""
@@ -71,6 +78,9 @@ class ClienteVision:
         self.mensaje = None
         self.desfase_reloj = None
         self.estado = motivo
+        if motivo != "wifi_reconectado":
+            ahora = self.reloj()
+            self.cortes = [t for t in self.cortes if ahora - t < 60000] + [ahora]
         self.proximo_intento = self.reloj() + self.reconectar_ms
 
     def _conectar(self):
@@ -137,8 +147,38 @@ class ClienteVision:
                 self.buffer = b""
                 self.errores_mensaje += 1
         if ultima is None:
-            return False
+            # Líneas que drenar() dejó guardadas mientras calculaba el A*.
+            fin = self.buffer.rfind(b"\n")
+            if fin < 0:
+                return False
+            completas, self.buffer = self.buffer[:fin], self.buffer[fin + 1:]
+            inicio = completas.rfind(b"\n")
+            self.descartadas += completas.count(b"\n")
+            ultima = completas[inicio + 1:] if inicio >= 0 else completas
         return self._decodificar(ultima)
+
+    def drenar(self):
+        """Sólo vacía el socket, sin decodificar: lo llama el A* (rutas.ESPERA)
+        en los cálculos largos para que el flujo de la visión no se trabe.
+        Guarda la última línea completa y lo que venga después; poll() la usa."""
+        if self.sock is None:
+            return
+        try:
+            n = self.sock.recv_into(self.rx)
+        except OSError:
+            return                                # nada nuevo o error: lo ve poll()
+        if not n:
+            return
+        self.bytes += n
+        self.ultimo_dato_ms = self.ultimo_byte_ms = self.reloj()
+        self.alguna_vez = True
+        self.buffer += bytes(self.rx[:n])
+        if len(self.buffer) > 3000:
+            fin = self.buffer.rfind(b"\n")
+            antes = self.buffer.rfind(b"\n", 0, fin) if fin > 0 else -1
+            if antes >= 0:
+                self.descartadas += self.buffer.count(b"\n", 0, antes + 1)
+                self.buffer = self.buffer[antes + 1:]
 
     # ------------------------------------------------------------ datos
     def _decodificar(self, linea):
@@ -181,8 +221,14 @@ class ClienteVision:
             return None
         return self.reloj() - self.ultimo_byte_ms
 
+    def cortes_recientes(self, ventana_ms):
+        """Cuántas veces se cortó el flujo en los últimos ventana_ms."""
+        ahora = self.reloj()
+        return sum(1 for t in self.cortes if ahora - t < ventana_ms)
+
     def reiniciar_silencio(self):
         self.ultimo_dato_ms = self.ultimo_byte_ms = self.reloj()
+        self.cortes = []
         if self.sock is not None:
             self._cerrar("wifi_reconectado")     # ese socket era de la red anterior
 

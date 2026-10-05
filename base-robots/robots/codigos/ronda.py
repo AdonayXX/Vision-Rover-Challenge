@@ -155,6 +155,11 @@ class Ronda:
         # Último error que tick() lanzó y la placa atrapó (lo anota quien la
         # maneja). Antes sólo se imprimía por USB: en la cancha era invisible.
         self.error, self.errores = None, 0
+        # Registro de la ronda: qué hizo y por qué, con el segundo desde RUNNING.
+        # Se entrega en SENSORS sólo con la ronda terminada (ver informe): en
+        # competencia no hay ver_ronda en vivo (cancha 4-oct: el 11 quieto 13 s
+        # sin saber por qué). ~50 bytes cada uno; los más viejos se descartan.
+        self.max_eventos = 60
         self._reiniciar()
 
     def _reiniciar(self):
@@ -178,6 +183,10 @@ class Ronda:
         self.apartandose = False              # cedió el paso: estacionado un rato
         self.turno_mio = False                # ya le tocó (o no hay turnos): lleva lo suyo
         self.esperando_turno = False
+        self.eventos = []
+        # Lo último anotado, para anotar sólo los cambios (ver _vigilar).
+        self._v_mision = self._v_estado = self._v_vision = self._v_turno = self._v_compa = None
+        self._v_conexiones = getattr(self.vision, "conexiones", 0)
         cubo = getattr(self.misiones, "cubo", None)
         if cubo is not None and hasattr(cubo, "cesiones"):
             cubo.cesiones = {}                # lo cedido al compañero era de la ronda anterior
@@ -193,7 +202,44 @@ class Ronda:
             self.actual = None
             self.misiones.detener_mision(motivo)
 
+    def _anotar(self, texto):
+        """Una línea al registro: segundos desde RUNNING ("pre" antes) y qué pasó."""
+        t = "pre" if self.inicio_ms is None else "{:.1f}".format((self.reloj() - self.inicio_ms) / 1000)
+        self.eventos.append(t + " " + texto)
+        if len(self.eventos) > self.max_eventos:
+            self.eventos.pop(0)
+
+    def _vigilar(self):
+        """Anota lo que cambió: la misión (estado, motivo, por qué espera o
+        retrocede), la conexión con la visión y el estado de la ronda."""
+        m = getattr(self.misiones, "actual", None)
+        if m is not None:
+            u = getattr(m, "ultimo", None) or {}
+            extra = u.get("espera") or u.get("atasco") or u.get("retroceso") or u.get("estorbo")
+            v = self._v_mision
+            # Se compara campo a campo: armar el texto en cada vuelta sería
+            # basura de memoria en la placa (el bucle corre decenas de veces/s).
+            if v is None or v[0] is not m or v[1] != m.estado or v[2] != m.motivo or v[3] != extra:
+                self._v_mision = (m, m.estado, m.motivo, extra)
+                self._anotar("{} {}{}{}".format(getattr(m, "color", None) or "ir", m.estado,
+                                                " " + str(m.motivo) if m.motivo else "",
+                                                " [" + str(extra) + "]" if extra else ""))
+        conexiones = getattr(self.vision, "conexiones", 0)
+        if conexiones != self._v_conexiones:
+            if self._v_conexiones:
+                self._anotar("vision reconectada ({})".format(conexiones))
+            self._v_conexiones = conexiones
+        vision = getattr(self.vision, "estado", None)
+        if vision != self._v_vision:
+            self._v_vision = vision
+            if vision not in (None, "ok", "conectado"):
+                self._anotar("vision: " + str(vision))
+        if self.estado != self._v_estado:
+            self._v_estado = self.estado
+            self._anotar("ronda " + self.estado + (" " + str(self.motivo) if self.motivo else ""))
+
     def tick(self):
+        self._vigilar()
         if self.enlace is not None:
             self._radio()
         mensaje = self.vision.mensaje
@@ -210,6 +256,8 @@ class Ronda:
         if self.fase != self.fase_inicio:
             if self.autonoma:
                 self.estado, self.motivo = TERMINADA, "fase_" + str(self.fase)
+                self._v_estado = TERMINADA
+                self._anotar("fin de la ronda: " + self.motivo)
                 self.actual = None
                 self.misiones.detener_mision(self.motivo)
             elif self.fase in ("IDLE", "READY") and self.estado != ESPERANDO:
@@ -324,6 +372,7 @@ class Ronda:
             self.mis_cubos = repartir(mensaje, self.robot_id, self.companero)
         self.estado, self.motivo = CORRIENDO, None
         self.inicio_ms = self.reloj()
+        self._anotar("RUNNING: mis cubos " + str(self.mis_cubos))
         self.proximo_latido = 0               # que el compañero sepa ya
         print("Ronda: mis cubos", self.mis_cubos)
 
@@ -361,8 +410,14 @@ class Ronda:
             # Al que ya terminó no se le cede el paso: no va a pasar nunca
             # (cancha 4-oct 15:54: el 11 le cedió el rojo 10 veces al 10 quieto).
             cubo.compa_quieto = compa is not None and compa.get("e") == COMPLETA and not compa.get("a")
+        if self.enlace is not None and (compa is None) != (self._v_compa is None):
+            self._anotar("radio: companero " + ("visto" if compa is not None else "callado"))
+        self._v_compa = compa
         self.esperando_turno = (self.estado == CORRIENDO and self.actual is None
                                 and not self.misiones.activa and self._esperar_turno(mensaje, ahora))
+        if self.turnos and self.enlace is not None and self.turno_mio != self._v_turno:
+            self._v_turno = self.turno_mio
+            self._anotar("turno: me toca" if self.turno_mio else "turno: espero al companero")
         if self.esperando_turno:
             if self._fresca(mensaje):
                 self._aparcar(mensaje, pendientes(mensaje))   # mientras, fuera de los caminos
@@ -474,6 +529,7 @@ class Ronda:
                                                      _carga(yo, (c,), cubos, zonas), c))
         from llevar_cubo import memoria_libre
         self.mem = memoria_libre()
+        self._anotar("lleva {} (ram {})".format(self.actual, self.mem))
         self.misiones.llevar_en_ronda(self.actual)
         self.proximo_latido = 0                   # anunciarlo ya: evita que el otro lo tome
         self.aparcado = False                     # al terminar, volver a estacionarse
@@ -568,6 +624,8 @@ class Ronda:
         sitios, self.sitios = self.sitios, []
         yo = self.sitios_desde
         planner = getattr(getattr(self.misiones, "cubo", None), "planner", None)
+        from llevar_cubo import entregados
+        hechos = entregados(mensaje)              # el planificador les deja más margen
         for p in sitios:
             if planner is None:
                 from autonomia import obstaculo_en_camino
@@ -577,12 +635,13 @@ class Ronda:
                 planner.clearance = 25.0          # holgado: el rover recorta las esquinas
                 planner.escapar = True            # recién retirado de un cubo: alejarse vale
                 try:
-                    ruta = planner.plan(_Escena(mensaje, self.robot_id, yo), p)
+                    ruta = planner.plan(_Escena(mensaje, self.robot_id, yo, hechos), p)
                 finally:
                     planner.escapar = False
                 ruta = (ruta["puntos"][1:] or [p]) if ruta["estado"] == "RUTA" else None
             if ruta:
                 self.ruta_aparcar = ruta[1:]
+                self._anotar("se estaciona en ({:.0f}, {:.0f})".format(p["col"], p["row"]))
                 try:
                     self.misiones.ir_en_ronda(ruta[0]["col"], ruta[0]["row"])
                 except ValueError:
@@ -633,6 +692,8 @@ class Ronda:
             datos["error"], datos["errores"] = self.error, self.errores
         if self.esperando_turno:
             datos["turno"] = "esperando"
+        if self.eventos and self.estado not in (CORRIENDO, COMPLETA):
+            datos["eventos"] = self.eventos      # sólo con la ronda terminada: es grande
         if self.enlace is not None:
             radio = self.enlace.informe()
             if self.plan_del_lider:

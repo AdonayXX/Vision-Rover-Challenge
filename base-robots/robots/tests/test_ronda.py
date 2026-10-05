@@ -156,6 +156,27 @@ class RondaTests(unittest.TestCase):
         correr(sim, ronda, misiones, 7000)
         self.assertEqual(ronda.estado, ESPERANDO)                     # lista para otra ronda
 
+    def test_event_log_is_kept_and_shown_only_after_the_round(self):
+        # Cancha 4-oct: rondas sin ver_ronda (como en competencia) y el rover
+        # quieto 13 s sin saber por qué. Anota lo que hace y lo entrega al
+        # terminar la ronda, no durante (cada SENSORS gasta RAM de red).
+        sim = simulador((5.0, 21.5, 0.0), TRES)
+        ronda, misiones, motores = armar(sim)
+        correr(sim, ronda, misiones, 120000, True)
+        correr(sim, ronda, misiones, sim.t + 200)                   # una vuelta más: se anota
+        self.assertEqual(ronda.estado, COMPLETA)
+        self.assertNotIn("eventos", ronda.informe())                 # en plena ronda, no
+        texto = "\n".join(ronda.eventos)
+        for esperado in ("RUNNING", "lleva", "ENTREGADO", "COMPLETA"):
+            self.assertIn(esperado, texto)
+        self.assertTrue(ronda.eventos[0].split()[0] in ("pre", "0.0"), ronda.eventos[0])
+        sim.fase = "FINISHED"
+        correr(sim, ronda, misiones, sim.t + 500)
+        self.assertEqual(ronda.estado, TERMINADA)
+        self.assertEqual(ronda.informe()["eventos"], ronda.eventos)  # terminada, sí
+        self.assertTrue(any("fin de la ronda" in e for e in ronda.eventos[-3:]), ronda.eventos[-3:])
+        self.assertLessEqual(len(ronda.eventos), ronda.max_eventos)
+
     def test_board_asks_for_a_reset_only_between_rounds(self):
         # Rondas seguidas sin apagar dejaban la placa sin RAM ni red (3-oct):
         # tras una ronda jugada, al volver la visión a IDLE/READY, la placa

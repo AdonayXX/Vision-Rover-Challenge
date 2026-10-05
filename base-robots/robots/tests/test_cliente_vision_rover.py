@@ -139,6 +139,39 @@ class ClienteVisionTests(unittest.TestCase):
             self.assertFalse(self.cliente.poll())       # vuelve a conectar, y nada
         self.assertEqual(self.cliente.silencio_ms(), 18000)
 
+    def test_stream_that_stalls_after_each_reconnect_is_counted(self):
+        # Cancha 5-oct: cada conexión nueva trae una ráfaga y se vuelve a
+        # trabar. Las ráfagas reinician el silencio, pero los cortes se cuentan
+        # y la placa se reinicia con dos en 20 s.
+        self.sock.trozos = [linea(1)]
+        self.assertTrue(self.cliente.poll())
+        seq = 2
+        for _ in range(2):
+            self.now += 3500
+            self.assertFalse(self.cliente.poll())       # trabada: se cierra
+            self.now += 1000
+            self.sock.trozos = [linea(seq)]
+            self.assertTrue(self.cliente.poll())        # reconecta: llega una ráfaga
+            seq += 1
+        self.assertLess(self.cliente.silencio_ms(), 1000)
+        self.assertEqual(self.cliente.cortes_recientes(20000), 2)
+        self.now += 30000
+        self.assertEqual(self.cliente.cortes_recientes(20000), 0)
+        self.cliente.reiniciar_silencio()
+        self.assertEqual(self.cliente.cortes, [])
+
+    def test_draining_during_route_keeps_only_the_latest_message(self):
+        # El A* llama a drenar (rutas.ESPERA): vacía el socket sin decodificar
+        # y poll() después usa sólo el último mensaje.
+        self.sock.trozos = [linea(1)]
+        self.assertTrue(self.cliente.poll())
+        for seq in range(2, 12):
+            self.sock.trozos = [linea(seq)]
+            self.cliente.drenar()
+        self.assertLess(len(self.cliente.buffer), 3000 + len(linea(11)))
+        self.assertTrue(self.cliente.poll())
+        self.assertEqual(self.cliente.mensaje["seq"], 11)
+
     def test_invalid_message_is_counted_not_used(self):
         self.sock.trozos = [b'{"v": 3}\n']
         self.assertFalse(self.cliente.poll())

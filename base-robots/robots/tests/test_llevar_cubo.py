@@ -481,6 +481,42 @@ class LlevarCuboTests(unittest.TestCase):
         self.assertIsNone(mision.motores.mode)
 
 
+class HorquillasTests(unittest.TestCase):
+    """Cancha 5-oct: girando cerca de un cubo ya entregado, las horquillas del
+    rover (salen del frente) lo barrían fuera de la zona: el verde girando a
+    11 cm, el rojo al pasar al lado. El simulador lleva horquillas de 110 mm
+    hacia adelante y 65 mm de lado; el rojo, recién entregado a 10 cm."""
+    CUBOS = [{"color": "red", "col": 39.1, "row": 21.5}, {"color": "green", "col": 19.0, "row": 24.0},
+             {"color": "blue", "col": 24.0, "row": 24.0}]
+
+    def cancha(self):
+        sim = simulador((34.0, 20.4, 349.0), self.CUBOS)
+        sim.puntas = (110.0, 65.0)
+        self.assertTrue(entregado(sim, "red")[0])
+        return sim
+
+    def correr_vigilando(self, mision, sim, hasta_ms):
+        sacado = None
+        while sim.t < hasta_ms and mision.activa:
+            sim.paso()
+            mision.tick()
+            if sacado is None and not entregado(sim, "red")[0]:
+                sacado = sim.t
+        return sacado
+
+    def test_next_mission_backs_off_before_turning(self):
+        sim = self.cancha()
+        mision = llevar(sim, "green")
+        self.assertIsNone(self.correr_vigilando(mision, sim, 20000))
+
+    def test_parking_backs_off_before_turning(self):
+        sim = self.cancha()
+        mision = IrAPunto(sim.vision, ModeloRover(), Motores(sim), 10, reloj=sim.reloj_placa)
+        mision.iniciar(28.0, 10.0)                # atrás y arriba: gira mucho junto al rojo
+        self.assertIsNone(self.correr_vigilando(mision, sim, 20000))
+        self.assertEqual(mision.estado, "LLEGO")
+
+
 class SesionLlevarTests(unittest.TestCase):
     def setUp(self):
         self.sim = simulador((10.0, 21.0, 0.0), [{"color": "red", "col": 24.0, "row": 21.5}])

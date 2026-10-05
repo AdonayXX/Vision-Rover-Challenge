@@ -11,6 +11,14 @@ from navegacion import _finite
 # Cola de prioridad de ENTEROS sobre una lista que se reserva una vez: en la
 # placa ni las tuplas ni los float por entrada, ni la lista que crece y se
 # achica, dejan memoria suelta. `tam` es cuántos hay; lo demás es basura.
+# Se llama cada tanto DURANTE el A* (en la placa: vaciar el socket de la
+# visión). Cancha 5-oct: en canchas con cubos juntos (D=0,5) el rover calcula
+# ~2,5 veces más rutas que en D=0,2, cada una de décimas de segundo a segundos
+# en la placa; mientras tanto nadie leía la red, el flujo de la visión se
+# trababa y el rover quedaba ciego (en D=0,2 nunca pasó). None en la PC.
+ESPERA = None
+
+
 def _meter(cola, tam, valor):
     if tam == len(cola):
         cola.append(valor)
@@ -88,6 +96,9 @@ class RoutePlanner:
         # True: también alejarse de un cubo que ya está demasiado cerca (lo usa
         # la ronda para estacionarse; las misiones lo resuelven con SALIR).
         self.escapar = False
+        # Cubos ya entregados (state.entregados): se les deja esto más, el
+        # alcance de las horquillas al girar (cancha 5-oct: rozarlos los sacaba).
+        self.entregado_mm = 0.0
         self._n = None                     # tamaño de los búferes del A*
 
     def scene(self, state):
@@ -102,6 +113,8 @@ class RoutePlanner:
         scale = msg["grid"]["cell_mm"]
         margin = (self.radius + self.clearance) / scale
         own = state.rover(state.robot_id)
+        entregados = getattr(state, "entregados", ())
+        extra = self.entregado_mm / scale
         circles = []
         for group in ("rovers", "cubes", "obstacles"):
             for item in msg[group]:
@@ -113,6 +126,8 @@ class RoutePlanner:
                     radius = self.peer_radius / scale
                 elif group == "cubes":
                     radius = msg["cube_side"] * math.sqrt(2) / 2
+                    if item["color"] in entregados:
+                        radius += extra
                 else:
                     radius = self.obstacle_side * math.sqrt(2) / (2 * scale)
                 if own is not None and (group == "rovers" or self.escapar):
@@ -236,6 +251,9 @@ class RoutePlanner:
                 estado[i] = 1 if self.free_segment(scene, p, p) else 0
                 costo[i] = 1e30
                 i += 1
+        espera = ESPERA
+        if espera is not None:
+            espera()
         tam = 0
         # Enlaces verificados desde la pose exacta: no redondear al rover
         # a una celda que podría estar del otro lado de un objeto.
@@ -246,7 +264,13 @@ class RoutePlanner:
                     cost = hypot(p[0] - start[0], p[1] - start[1])
                     costo[i], padre[i] = cost, -1
                     tam = _meter(cola, tam, int((cost + hypot(p[0] - end[0], p[1] - end[1])) * 64) * n + i)
+        if espera is not None:
+            espera()
+        vueltas = 0
         while tam:
+            vueltas += 1
+            if espera is not None and vueltas % 32 == 0:
+                espera()
             i = _sacar(cola, tam) % n
             tam -= 1
             if estado[i] != 1:

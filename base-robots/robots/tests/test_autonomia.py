@@ -67,6 +67,9 @@ class Simulador:
         # al tocarlo con el frente; None = los cubos no se mueven.
         self.frente_mm = None
         self.deriva = 0.0                 # mm laterales que resbala el cubo por mm empujado
+        # Horquillas (foto del rover): dos puntas que salen del frente hasta
+        # (adelante_mm, lado_mm) del centro de giro. None = sólo el frente.
+        self.puntas = None
         self.empujados = set()
         # Como el 1-oct en la cancha: la camara deja de ver un cubo y el
         # mensaje trae su ULTIMA posicion con la edad creciendo (contrato §6).
@@ -155,6 +158,26 @@ class Simulador:
                 cubo["col"] = self.col + (self.frente_mm * ux - lateral * uy) / CELL
                 cubo["row"] = self.row + (self.frente_mm * uy + lateral * ux) / CELL
                 self.empujados.add(cubo["color"])
+        if self.puntas is None:
+            return
+        # Cada horquilla, de la cara del frente a la punta: si entra en el
+        # cubo (cuadrado de 60 mm, 4 mm de grosor de la horquilla) lo saca por
+        # el lado más corto. Así el giro y el paso de costado barren cubos.
+        largo, lado = self.puntas
+        medio = 30.0 + 4.0
+        for signo in (1.0, -1.0):
+            for k in range(6):
+                adelante = self.frente_mm - 30.0 + (largo - self.frente_mm + 30.0) * k / 5
+                pc = self.col + (adelante * ux - signo * lado * uy) / CELL
+                pr = self.row + (adelante * uy + signo * lado * ux) / CELL
+                for cubo in self.cubos:
+                    dc, dr = (cubo["col"] - pc) * CELL, (cubo["row"] - pr) * CELL
+                    if abs(dc) < medio and abs(dr) < medio:
+                        if medio - abs(dc) < medio - abs(dr):
+                            cubo["col"] = pc + math.copysign(medio, dc) / CELL
+                        else:
+                            cubo["row"] = pr + math.copysign(medio, dr) / CELL
+                        self.empujados.add(cubo["color"])
 
 
 DEPOSITOS = ({"color": "green", "col": 21.5, "row": 3.75}, {"color": "blue", "col": 21.5, "row": 39.25},

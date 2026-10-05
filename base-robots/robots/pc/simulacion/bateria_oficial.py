@@ -115,10 +115,20 @@ llevar_cubo.LlevarCubo.__init__ = _ini
 import test_autonomia
 paso_orig = test_autonomia.Simulador.paso
 PERDIDOS = set()
+# PUNTAS="130,70": horquillas del rover (adelante, lado en mm) en el simulador.
+PUNTAS = tuple(float(x) for x in os.environ["PUNTAS"].split(",")) if os.environ.get("PUNTAS") else None
+DENTRO, SACADOS = set(), []                  # cubos que llegaron a entrar / que después salieron
 
 
 def paso(self, *a, **k):
     r = paso_orig(self, *a, **k)
+    if self.id == 10 and self.t % 200 == 0:
+        for color in ("red", "green", "blue"):
+            if entregado(self, color)[0]:
+                DENTRO.add(color)
+            elif color in DENTRO:
+                DENTRO.discard(color)
+                SACADOS.append(color)
     if self.row < 2.2 and self.sin_vision_desde is None:
         self.sin_vision_desde = self.t
         PERDIDOS.add(self.id)
@@ -135,7 +145,11 @@ for n in range(N):
     lay = cancha(D)
     cubos = a_vision(lay)
     PERDIDOS.clear()
+    DENTRO.clear()
+    sacados_antes = len(SACADOS)
     aire, rovers = duo([dict(c) for c in cubos])
+    for s_, _, _ in rovers:
+        s_.puntas = PUNTAS
     with contextlib.redirect_stdout(io.StringIO()):
         t, minimo = correr_duo(rovers, 240000)
     sim = rovers[0][0]
@@ -152,6 +166,6 @@ for n in range(N):
     if os.environ.get("DETALLE"):
         print(n, [(c["color"], round(c["col"], 1), round(c["row"], 1)) for c in cubos], "->", k,
               "t=%s" % (None if t is None else round(t / 1000)), sorted(PERDIDOS),
-              [(r.robot_id, r.fallos) for _, r, _ in rovers])
-print("D={} | cubos {}/{} | completas {}/{} | t medio {:.1f}s | rondas con rover perdido {} | fallos {}".format(
-    D, cubos_ok, 3 * N, completas, N, sum(tiempos) / max(1, len(tiempos)), perdidas, dict(motivos)))
+              [(r.robot_id, r.fallos) for _, r, _ in rovers], "sacados", SACADOS[sacados_antes:])
+print("D={} | cubos {}/{} | completas {}/{} | t medio {:.1f}s | rondas con rover perdido {} | sacados {} | fallos {}".format(
+    D, cubos_ok, 3 * N, completas, N, sum(tiempos) / max(1, len(tiempos)), perdidas, len(SACADOS), dict(motivos)))

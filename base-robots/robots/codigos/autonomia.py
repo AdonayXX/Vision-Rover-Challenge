@@ -22,6 +22,13 @@ VERIFICANDO = "VERIFICANDO"
 LLEGO = "LLEGO"
 ABORTADO = "ABORTADO"
 
+# Horquillas: dos puntas que salen del frente (foto del rover), en mm desde el
+# centro de giro: hacia adelante y a cada lado. Girando barren un círculo de
+# ~137 mm, no los ~92 mm de la cara del frente: el 11 sacó de su zona el verde
+# (girando a 11 cm) y el rojo (pasando al lado) ya entregados (cancha 5-oct).
+PUNTAS_MM, PUNTAS_LADO_MM = 120.0, 65.0
+ALCANCE_GIRO_MM = math.sqrt(PUNTAS_MM * PUNTAS_MM + PUNTAS_LADO_MM * PUNTAS_LADO_MM)
+
 
 def _norma(x, y):
     # math.hypot no esta garantizado en CircuitPython.
@@ -73,6 +80,24 @@ def obstaculo_en_camino(mensaje, desde, hasta, radio_rover_mm=85.0, holgura_mm=1
                     continue
                 return nombre + (" " + item["color"] if "color" in item else "")
     return None
+
+
+def _sentido_para_girar(mensaje, pose, colores, alcance_mm):
+    """0 si girando en `pose` las horquillas no tocan ninguno de esos cubos;
+    si no, -1 (marcha atrás) o 1 (adelante): hacia donde se aleja del más cercano."""
+    cell = mensaje["grid"]["cell_mm"]
+    limite = alcance_mm + mensaje["cube_side"] * cell * 0.7072 + 10.0
+    th = math.radians(pose["theta"])
+    mejor, sentido = None, 0
+    for item in mensaje["cubes"]:
+        if item["color"] not in colores:
+            continue
+        dc, dr = (item["col"] - pose["col"]) * cell, (item["row"] - pose["row"]) * cell
+        d = _norma(dc, dr)
+        if d < limite and (mejor is None or d < mejor):
+            mejor = d
+            sentido = -1 if dc * math.cos(th) - dr * math.sin(th) > 0 else 1
+    return sentido
 
 
 def giro_corto(grados):
@@ -163,11 +188,14 @@ class IrAPunto:
     PERIODO_MS = 50
 
     def __init__(self, vision, modelo, motores, robot_id, reloj=ahora_ms,
-                 max_edad_ms=800, espera_max_ms=3000, reintentos=3, **control):
+                 max_edad_ms=800, espera_max_ms=3000, reintentos=3,
+                 alcance_giro_mm=ALCANCE_GIRO_MM, **control):
         self.vision, self.modelo, self.motores = vision, modelo, motores
         self.robot_id, self.reloj = robot_id, reloj
         self.max_edad_ms, self.espera_max_ms = max_edad_ms, espera_max_ms
         self.reintentos_max = reintentos
+        # Hasta dónde llegan las horquillas girando (cubos ya entregados).
+        self.alcance_giro_mm = alcance_giro_mm
         self.control = control
         self.predictor = Predictor(modelo)
         self.adaptador = Adaptador(modelo)
@@ -263,6 +291,19 @@ class IrAPunto:
             self.estado = VERIFICANDO
             return
         self.estado = EN_CAMINO
+        if abs(error) > self.control.get("giro_en_sitio", 40.0):
+            # Va a girar en el sitio: si las horquillas alcanzan un cubo ya
+            # entregado, primero alejarse en recto (cancha 5-oct: el 11 giró a
+            # 11 cm del verde y lo barrió fuera de la zona). La ruta ya les deja
+            # ese margen (RoutePlanner.entregado_mm); frenar aquí también con
+            # él cortaba rutas por nada (simulador: +6 s por ronda).
+            from llevar_cubo import entregados
+            hechos = entregados(mensaje)
+            sentido = _sentido_para_girar(mensaje, prediccion, hechos, self.alcance_giro_mm) if hechos else 0
+            if sentido:
+                izquierda, derecha = self.modelo.potencias(sentido * self.control.get("v_min", 90.0), 0.0,
+                                                           self.control.get("limite", 0.35))
+                self.ultimo["despeje"] = sentido
         try:
             self.motores.set_motor(izquierda, derecha)
         except ValueError as error:

@@ -200,6 +200,18 @@ def memoria_libre():
         return None
 
 
+def memoria_idf():
+    """[libre, bloque mayor] en KB de la memoria del ESP-IDF, la que usa el
+    Wi-Fi para recibir. None fuera de la placa. Si baja en plena ronda, el
+    flujo de la visión se traba aunque la red esté bien (cancha 5-oct)."""
+    try:
+        import espidf
+        return [espidf.heap_caps_get_free_size() // 1024,
+                espidf.heap_caps_get_largest_free_block() // 1024]
+    except Exception:
+        return None
+
+
 def motivo_reinicio():
     try:
         import microcontroller
@@ -315,6 +327,11 @@ def main(config_path="config_robot.json"):
     # un BROWNOUT viejo no aparezca en todas las pruebas siguientes.
     fallos_previos = registro_fallos.leer()
     registro_fallos.borrar()
+    if fallos_previos:
+        # Un arranque más a la vista: el reinicio de fin de ronda (visión
+        # cerrada) borraba el de la traba antes de poder leerlo (cancha 5-oct).
+        registro_fallos.guardar("anterior", " ; ".join(
+            "{}={}".format(k, v) for k, v in fallos_previos.items() if k != "anterior")[:120])
 
     vision = []  # se rellena al tener red; info() lo lee por referencia
     identidad = {}  # robot_id, al leer la config; la PC comprueba que es el rover que cree
@@ -322,7 +339,8 @@ def main(config_path="config_robot.json"):
     def info():
         datos = {"reset_reason": reinicio, "robot_id": identidad.get("robot_id"),
                  "uptime_s": round(time.monotonic() - arranque, 1),
-                 "fallos": dict(fallos_previos, **registro_fallos.leer())}
+                 "fallos": dict(fallos_previos, **registro_fallos.leer()),
+                 "idf_kb": memoria_idf()}
         if vision:
             datos["vision"] = vision[0].estadisticas(memoria_libre())
         if ANTENA:
@@ -455,8 +473,20 @@ def main(config_path="config_robot.json"):
             # segundo esperando es un segundo de ronda perdido (antes, 20 s).
             if vision and not pc_activa:
                 silencio = vision[0].silencio_ms()
-                if silencio is not None and silencio > reconectar_ms:
+                # Con la ronda terminada se espera más: cerrar la visión al
+                # final no es una red caída, y reiniciar borraría el registro
+                # de la ronda antes de leerlo con ver_ronda.
+                limite = 60000 if ronda is not None and ronda.estado == "TERMINADA" else reconectar_ms
+                if silencio is not None and silencio > limite:
                     motivo_red[0] = "vision_callada"
+                    return False
+                # El flujo se trabó: reconectar no lo arregla, sólo reiniciar la
+                # placa (cancha 5-oct: en las 4 rondas de D=0,5 cada traba
+                # terminó en reinicio). En plena ronda se reinicia al primer
+                # corte (unos 5 s menos parado); fuera de ella, al segundo.
+                en_juego = ronda is not None and ronda.estado in ("CORRIENDO", "COMPLETA")
+                if limite == reconectar_ms and vision[0].cortes_recientes(20000) >= (1 if en_juego else 2):
+                    motivo_red[0] = "vision_trabada"
                     return False
             return True
 
@@ -469,6 +499,9 @@ def main(config_path="config_robot.json"):
         if config.get("vision_host"):
             vision.append(ClienteVision(pool, config["vision_host"],
                                         config.get("vision_port", 2026)))
+            # Mientras el A* calcula, seguir leyendo la red (ver rutas.ESPERA).
+            import rutas
+            rutas.ESPERA = vision[0].drenar
             print("Vision:", config["vision_host"], config.get("vision_port", 2026))
         informe = [time.monotonic() + 10]
         mision = None
@@ -524,6 +557,7 @@ def main(config_path="config_robot.json"):
                 mision.detener_mision("error_ronda: {}".format(error))
                 ronda.error = "{}: {}".format(type(error).__name__, error)
                 ronda.errores += 1
+                ronda._anotar("ERROR " + ronda.error)
                 print("Error ronda:", error)
             if ronda.pedir_reinicio and config.get("reiniciar_entre_rondas", True):
                 # Entre rondas (la visión volvió a IDLE o READY): empezar la
@@ -573,8 +607,14 @@ def main(config_path="config_robot.json"):
                                 # primer intento. Arranca en ~10 s y vuelve a jugar
                                 # la ronda sola (cancha 3-oct).
                                 print("Wi-Fi perdido; reiniciando la placa...", motivo_red[0])
-                                registro_fallos.guardar("wifi", "perdido: {} a los {} s; reinicio".format(
-                                    motivo_red[0], round(time.monotonic() - arranque)))
+                                # Con lo último que hacía: el registro de la ronda se
+                                # pierde al reiniciar (queda en la línea placa: de ver_ronda).
+                                controller.stop("wifi_perdido")
+                                import gc
+                                gc.collect()
+                                ultimos = " | ".join(ronda.eventos[-2:]) if ronda is not None else ""
+                                registro_fallos.guardar("wifi", "{} a los {} s; idf {}; {}".format(
+                                    motivo_red[0], round(time.monotonic() - arranque), memoria_idf(), ultimos))
                                 controller.stop("wifi_perdido")
                                 if mision is not None:
                                     mision.detener_mision("wifi_perdido")

@@ -59,6 +59,9 @@ def main():
                 print("  placa: encendida hace {} s, ultimo reinicio={}{}".format(
                     estado.get("uptime_s"), estado.get("reset_reason"),
                     ", fallos={}".format(estado["fallos"]) if estado.get("fallos") else ""), flush=True)
+                if estado.get("idf_kb"):
+                    # [libre, bloque mayor] KB de la memoria que usa el Wi-Fi para recibir.
+                    print("  memoria wifi (KB): libre={} bloque={}".format(*estado["idf_kb"]), flush=True)
                 antena = estado.get("antena")
                 if antena:
                     # [canal, señal dBm] de cada antena de la red que vio al conectarse;
@@ -74,6 +77,7 @@ def main():
                 else:
                     print("  vision: el rover no tiene vision_host en su config", flush=True)
                 conexiones = (vista or {}).get("conexiones") or 0
+                mostrados = None
                 inicio = time.monotonic()
                 while True:
                     estado = preguntar(sock, buffer)
@@ -108,6 +112,14 @@ def main():
                             "  ram={}".format(mem) if mem else "",
                             _radio(ronda.get("radio"))), flush=True)
                         anterior, ultimo_print = clave, time.monotonic()
+                    eventos = ronda.get("eventos") or []
+                    if eventos and eventos != mostrados:
+                        # La placa lo entrega sólo con la ronda terminada: qué hizo y por
+                        # qué, segundo a segundo (s desde RUNNING; "pre" = antes).
+                        print("  --- registro de la ronda ({} eventos) ---".format(len(eventos)), flush=True)
+                        for linea in eventos:
+                            print("    " + linea, flush=True)
+                        mostrados = eventos
                     time.sleep(1.0)        # cada informe gasta RAM de red en la placa (cancha 2-oct)
         except KeyboardInterrupt:
             print("Fin (el rover sigue solo).")
