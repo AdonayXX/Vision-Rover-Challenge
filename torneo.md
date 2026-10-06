@@ -48,35 +48,35 @@
 
 3.3. Todos los equipos competirán bajo las mismas condiciones oficiales establecidas para la ronda.
 
-3.4. Una vez preparado el escenario, el sistema oficial de visión establecerá el estado `IDLE` durante **1 minuto**.
+3.4. La colocación de los rovers y la preparación del escenario se realizarán en estado `IDLE`. Una vez completadas, el sistema oficial de visión cambiará a `READY` durante **1 minuto**.
 
-3.5. Durante el estado `IDLE`, los rovers deberán estar encendidos, programados, conectados al sistema de visión y preparados para ejecutar la prueba.
+3.5. Antes del cambio a `READY`, los rovers deberán estar colocados en sus posiciones iniciales, encendidos, programados y conectados al sistema oficial de visión.
 
-3.6. Durante este período los equipos podrán realizar únicamente las acciones de preparación permitidas por el reglamento general de la competencia.
+3.6. Las acciones humanas de preparación permitidas por el reglamento general deberán completarse en `IDLE`. Durante `READY` no se permitirá intervención humana; los rovers podrán recibir y procesar telemetría, analizar el escenario, distribuir tareas, coordinarse y planificar su estrategia, pero deberán permanecer inmóviles.
 
-3.7. El período de 1 minuto en estado `IDLE` no forma parte del tiempo oficial del intento.
+3.7. El período de 1 minuto en estado `READY` no forma parte del tiempo oficial del intento.
 
 ---
 
 ## 4. Inicio del intento
 
-4.1. Finalizado el período de 1 minuto en estado `IDLE`, el sistema oficial de visión cambiará al estado `READY`.
+4.1. Finalizado el período de 1 minuto en estado `READY`, el sistema oficial de visión cambiará al estado `RUNNING`.
 
-4.2. Los rovers deberán detectar el estado `READY` a través de la telemetría oficial.
+4.2. Los rovers deberán detectar el estado `RUNNING` a través de la telemetría oficial.
 
-4.3. La detección del estado `READY` deberá provocar automáticamente el inicio de la estrategia desarrollada por el equipo.
+4.3. La detección del estado `RUNNING` deberá provocar automáticamente el inicio del movimiento y de la ejecución física de la estrategia preparada por los rovers.
 
-4.4. El cambio del sistema de visión al estado `READY` marca el **inicio oficial del intento y del cronometraje**.
+4.4. El cambio del sistema de visión al estado `RUNNING` marca el **inicio oficial del intento y del cronometraje**.
 
-4.5. No se permitirá intervención humana para iniciar los rovers después del cambio a `READY`.
+4.5. Desde el cambio a `READY` y hasta la finalización del intento no se permitirá intervención humana para iniciar los rovers.
 
-4.6. No se permitirá presionar botones para iniciar la estrategia después del cambio a `READY`.
+4.6. Desde el cambio a `READY` no se permitirá presionar botones para iniciar la estrategia o el movimiento.
 
-4.7. La detección de `READY` y el inicio de la ejecución deberán formar parte del software desarrollado por el equipo.
+4.7. La detección de los estados `IDLE`, `READY`, `RUNNING` y `FINNISHED`, la planificación autónoma en `READY`, el inicio del movimiento en `RUNNING` y la detención en `FINNISHED` deberán formar parte del software desarrollado por el equipo.
 
 4.8. La secuencia general de inicio será:
 
-**Preparación → `IDLE` durante 1 minuto → `READY` → inicio automático de los rovers**
+**`IDLE` (colocación y preparación) → `READY` (1 minuto de planificación autónoma, sin movimiento) → `RUNNING` (movimiento y cronometraje) → `FINNISHED` (finalización y detención)**
 
 ---
 
@@ -84,9 +84,9 @@
 
 5.1. Cada intento tendrá una duración máxima de **10 minutos**.
 
-5.2. Los 10 minutos se medirán a partir del cambio del sistema oficial de visión al estado `READY`.
+5.2. Los 10 minutos se medirán a partir del cambio del sistema oficial de visión al estado `RUNNING`.
 
-5.3. El intento finalizará cuando ocurra alguna de las siguientes condiciones:
+5.3. El intento finalizará cuando el sistema indique `FINNISHED`, que será cuando ocurra alguna de las siguientes condiciones:
 
 5.3.1. Los tres cubos se encuentren correctamente depositados en sus respectivas zonas de acopio.
 
@@ -98,15 +98,19 @@
 
 5.3.5. Ocurra una falla de infraestructura que, a criterio del juez, haga imposible continuar el intento en condiciones válidas.
 
-5.4. Si el equipo completa correctamente los tres cubos antes de los 10 minutos, se registrará el tiempo transcurrido desde el cambio a `READY` hasta que el tercer cubo quede correctamente depositado.
+5.4. Cuando los tres cubos queden correctamente depositados, el sistema cambiará a `FINNISHED`. El tiempo del tercer depósito válido, medido desde el cambio a `RUNNING`, constituirá el tiempo oficial de finalización.
+
+5.5. Al cambiar a `FINNISHED`, terminará el cronometraje y los rovers deberán detener su movimiento. No se contabilizarán depósitos posteriores a la finalización.
+
+5.6. Para completar válidamente los tres cubos deberá cumplirse también la participación de ambos rovers en el transporte de objetos, según el reglamento general.
 
 ---
 
 ## 6. Autonomía durante el intento
 
-6.1. La ejecución autónoma comienza formalmente cuando el sistema oficial de visión cambia del estado `IDLE` al estado `READY`.
+6.1. La operación autónoma sin intervención humana comienza cuando el sistema oficial de visión cambia de `IDLE` a `READY`.
 
-6.2. A partir de ese momento los rovers deberán ejecutar automáticamente la estrategia desarrollada por el equipo.
+6.2. Durante el minuto en `READY`, los rovers podrán utilizar la telemetría para percibir el escenario, decidir, coordinarse y planificar sin desplazarse. El movimiento y la ejecución física de la estrategia comenzarán únicamente en `RUNNING`.
 
 6.3. No se permitirá tocar los robots.
 
@@ -126,7 +130,7 @@
 
 6.11. No se permitirá mover manualmente los cubos ni ningún otro elemento del escenario.
 
-6.12. Los rovers deberán detectar el estado `READY`, iniciar su estrategia y ejecutar la tarea de manera autónoma.
+6.12. Los rovers deberán detectar los estados `IDLE`, `READY`, `RUNNING` y `FINNISHED` y actuar según la secuencia definida en 4.8. Las prohibiciones de intervención humana de esta sección se aplicarán desde el cambio a `READY` y hasta la finalización del intento.
 
 ---
 
@@ -134,7 +138,7 @@
 
 7.1. Un cubo se considerará correctamente depositado cuando se encuentre **completamente dentro de su zona de acopio correspondiente**.
 
-7.2. El tiempo de depósito de un cubo corresponderá al momento, medido desde el cambio a `READY`, en que el cubo quede correctamente depositado.
+7.2. El tiempo de depósito de un cubo corresponderá al momento, medido desde el cambio a `RUNNING`, en que el cubo quede correctamente depositado.
 
 7.3. Un cubo correctamente depositado deberá permanecer en una condición válida durante el resto del intento.
 
@@ -166,7 +170,7 @@
 
 8.5. Si los tres cubos son completados, el tiempo del tercer cubo constituirá el tiempo total de finalización.
 
-8.6. Todos los tiempos se medirán a partir del momento en que el sistema oficial de visión cambie al estado `READY`.
+8.6. Todos los tiempos se medirán a partir del momento en que el sistema oficial de visión cambie al estado `RUNNING`.
 
 8.7. Solamente se utilizarán para la clasificación los tiempos correspondientes a cubos que permanezcan válidamente depositados al finalizar el intento.
 
