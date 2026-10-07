@@ -6,7 +6,15 @@ No predice movimiento del compañero ni produce comandos de motores.
 """
 import math
 from array import array
-from navegacion import _finite
+
+
+def _finite(value):
+    # Copia de navegacion._finite: importar navegacion sólo por esto cargaba
+    # 1,5 KB de código en la placa, y la RAM de Python le quita memoria al
+    # Wi-Fi (cancha 6-oct).
+    if type(value) not in (int, float) or not math.isfinite(value):
+        raise ValueError("Se requiere un numero finito")
+    return value
 
 # Cola de prioridad de ENTEROS sobre una lista que se reserva una vez: en la
 # placa ni las tuplas ni los float por entrada, ni la lista que crece y se

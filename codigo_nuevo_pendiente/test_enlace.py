@@ -12,7 +12,7 @@ from autonomia import IrAPunto, Misiones
 from enlace import ETIQUETA, Enlace
 from llevar_cubo import LlevarCubo
 from modelo_rover import ModeloRover
-from ronda import COMPLETA, Ronda
+from ronda import COMPLETA, CORRIENDO, Ronda
 
 COLORES = ("red", "green", "blue")
 
@@ -302,12 +302,13 @@ class TurnosTests(unittest.TestCase):
              {"color": "red", "col": 31.1, "row": 24.3}]
     POSES = ((2.0, 26.1, 2.0), (2.2, 17.9, 0.0))
 
-    def correr(self, radio=True):
-        aire, rovers = duo([dict(c) for c in self.CUBOS], radio=radio, poses=self.POSES)
+    def correr(self, radio=True, opciones=({"cruce_mm": 0}, {"cruce_mm": 0})):
+        aire, rovers = duo([dict(c) for c in self.CUBOS], radio=radio, poses=self.POSES, opciones=opciones)
         (a, r10, _), (b, r11, m11) = rovers
         al_empezar_11 = []                     # estado del 10 cuando el 11 lanza su primer cubo
         termino_10 = []                        # dónde quedó el 10 al terminar lo suyo
         fin = None
+        self.minimo = float("inf")
         while a.t < 150000:
             a.companeros = [{"id": b.id, "col": b.col, "row": b.row, "theta": b.theta}]
             b.companeros = [{"id": a.id, "col": a.col, "row": a.row, "theta": a.theta}]
@@ -316,6 +317,7 @@ class TurnosTests(unittest.TestCase):
             for _, ronda, misiones in rovers:
                 ronda.tick()
                 misiones.tick()
+            self.minimo = min(self.minimo, math.hypot(a.col - b.col, a.row - b.row) * CELL)
             if r11.actual is not None and not al_empezar_11:
                 al_empezar_11.append((a.t, r10.estado))
             if r10.estado == COMPLETA and not termino_10:
@@ -339,6 +341,22 @@ class TurnosTests(unittest.TestCase):
         self.assertEqual(sum(m11.cubo.cesiones.values()), 0)    # nadie le cede el paso a nadie
         # El 10 se apartó al terminar (antes: camino_bloqueado por su propio cubo)
         self.assertGreater(math.hypot(final_10[0] - termino_10[0][0], final_10[1] - termino_10[0][1]), 5)
+
+    def test_per_cube_turns_both_work_when_paths_do_not_cross(self):
+        # La misma cancha con turnos por cubo (cruce_mm, lo de fábrica): el 11
+        # no espera a que el 10 termine todo, sólo a que su camino no se cruce
+        # con el del cubo que lleva el 10. Por turnos enteros, 106 s.
+        fin, al_empezar_11, termino_10, final_10, r10, r11, m11 = self.correr(opciones=({}, {}))
+        self.assertIsNotNone(fin, [r10.informe(), r11.informe()])
+        self.assertLess(fin, 75000)
+        self.assertEqual(al_empezar_11[0][1], CORRIENDO)       # salió con el 10 todavía trabajando
+        self.assertGreaterEqual(r10.propios, 1)                 # 12.2.13
+        self.assertGreaterEqual(r11.propios, 1)
+        self.assertEqual(sum(m11.cubo.cesiones.values()), 0)    # nadie le cede el paso a nadie
+        self.assertGreaterEqual(self.minimo, 150)               # nunca más cerca que por turnos
+        self.assertTrue(any("se cruza" in e for e in r11.eventos), r11.eventos)
+        lanzados = [e for e in r11.eventos if " lleva " in e]
+        self.assertLessEqual(len(lanzados), 3, lanzados)        # sin relanzar el mismo cubo
 
     def test_without_radio_there_are_no_turns(self):
         fin, al_empezar_11, termino_10, final_10, r10, r11, m11 = self.correr(radio=False)

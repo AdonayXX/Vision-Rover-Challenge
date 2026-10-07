@@ -31,7 +31,8 @@ def _radio(radio):
         return ""
     texto = "  radio: tx={} rx={} hace={}ms canal={}".format(
         radio.get("tx"), radio.get("rx"), radio.get("edad_ms", "-"), radio.get("canal", "?"))
-    for clave in ("plan", "robados", "cedidos", "ajenos", "errores", "reaperturas", "ultimo_error", "error"):
+    for clave in ("plan", "robados", "cedidos", "ajenos", "errores", "reaperturas", "envio_max_ms", "lentos",
+                  "ultimo_error", "error"):
         if radio.get(clave):
             texto += " {}={}".format(clave, radio[clave])
     return texto
@@ -85,6 +86,10 @@ def main():
                     ronda = mision.get("ronda") or {}
                     vista = estado.get("vision") or {}
                     mem = vista.get("mem_libre")
+                    # Memoria del Wi-Fi [libre, bloque mayor] KB: si baja en plena
+                    # ronda, la placa deja de recibir la visión (hipótesis 6-oct).
+                    idf = estado.get("idf_kb")
+                    py = estado.get("py_kb")          # [usado, total] KB del montón de Python
                     clave = (ronda.get("estado"), ronda.get("fase"), ronda.get("actual"),
                              tuple(ronda.get("hechos") or ()), mision.get("estado"), mision.get("motivo"),
                              vista.get("estado"), vista.get("conexiones"), ronda.get("errores"), ronda.get("turno"))
@@ -103,13 +108,15 @@ def main():
                             red += "  turno={}".format(ronda["turno"])     # espera a que el otro termine
                         if ronda.get("error"):
                             red += "  ERROR_RONDA={} (x{})".format(ronda["error"], ronda.get("errores"))
-                        print("{:6.1f}s fase={} ronda={} cubos={} hechos={} actual={} | mision={} {}{}{}{}{}{}".format(
+                        print("{:6.1f}s fase={} ronda={} cubos={} hechos={} actual={} | mision={} {}{}{}{}{}{}{}{}".format(
                             time.monotonic() - inicio, ronda.get("fase"), ronda.get("estado"),
                             ronda.get("mis_cubos"), ronda.get("hechos"), ronda.get("actual"),
                             mision.get("estado"), mision.get("motivo") or "", detalle,
                             "  fallos={}".format(ronda["fallos"]) if ronda.get("fallos") else "",
                             red,
                             "  ram={}".format(mem) if mem else "",
+                            "  wifi_mem={}/{}KB".format(*idf) if idf else "",
+                            "  py={}/{}KB".format(*py) if py else "",
                             _radio(ronda.get("radio"))), flush=True)
                         anterior, ultimo_print = clave, time.monotonic()
                     eventos = ronda.get("eventos") or []

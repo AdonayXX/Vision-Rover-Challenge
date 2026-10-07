@@ -379,7 +379,11 @@ class Esp32Uploader(tk.Tk):
                     continue
                 base = os.path.splitext(nombre)[0]
                 mpy = os.path.join(salida, base + ".mpy")
-                self.run_command([exe, "-o", mpy, origen])
+                # -O3 quita los números de línea (y los assert) y -s el nombre
+                # con la ruta de la PC: unos 6 KB menos de RAM de Python, que
+                # crece quitándole memoria al Wi-Fi (cancha 6-oct). Los errores
+                # en la placa ya no dicen la línea, sólo el archivo y la función.
+                self.run_command([exe, "-O3", "-s", nombre, "-o", mpy, origen])
                 comandos.append((mpy, "/" + base + ".mpy"))
                 borrar.append("/" + base + ".py")      # si queda el .py, la placa carga ese
             self.log_queue.put(("log", f"Compilados {sum(r.endswith('.mpy') for _, r in comandos)} modulos.\n"))

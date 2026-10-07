@@ -1,4 +1,5 @@
 """Regresiones de seguridad con reloj, IMU, motores y socket simulados."""
+import json
 import math
 from pathlib import Path
 import sys
@@ -301,7 +302,7 @@ class ControlTests(unittest.TestCase):
                                  info=lambda: {"reset_reason": "BROWNOUT", "uptime_s": 4.2})
         sock = Socket([b"SENSORS\n"])
         session.poll(sock)
-        self.assertIn(b'"reset_reason": "BROWNOUT"', sock.sent)
+        self.assertEqual(json.loads(sock.sent)["reset_reason"], "BROWNOUT")
 
     def test_failure_log_survives_in_nvm(self):
         import registro_fallos

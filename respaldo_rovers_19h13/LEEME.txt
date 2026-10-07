@@ -1,0 +1,6 @@
+Código que tenían los rovers el 6-oct a las 19:13 (la ronda 0.2 de 48,6 s).
+Verificado: compila byte a byte igual a lo que se subió.
+
+Si los cambios nuevos salen peor: subir estos tres archivos a los dos rovers
+con tools/subir_esp32_gui.py (en lugar de los de base-robots/robots/codigos).
+Esta carpeta no está en git; se puede borrar cuando ya no haga falta.

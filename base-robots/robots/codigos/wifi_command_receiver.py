@@ -135,8 +135,18 @@ def _sin_ahorro_energia(wifi):
         wifi.radio.power_management = wifi.PowerManagement.NONE
         ANTENA["ahorro"] = "quitado"
         print("Wi-Fi sin ahorro de energia")
+        return
     except (AttributeError, NotImplementedError, ValueError) as error:
-        ANTENA["ahorro"] = "no se pudo: {}: {}".format(type(error).__name__, error)
+        primero = error
+    # CircuitPython 9.2 no tiene PowerManagement (cancha 6-oct: "no se pudo",
+    # el ahorro seguía puesto). listen_interval = 0 hace lo mismo por dentro:
+    # esp_wifi_set_ps(WIFI_PS_NONE).
+    try:
+        wifi.radio.listen_interval = 0
+        ANTENA["ahorro"] = "quitado (listen_interval=0)"
+        print("Wi-Fi sin ahorro de energia (listen_interval=0)")
+    except (AttributeError, NotImplementedError, ValueError) as error:
+        ANTENA["ahorro"] = "no se pudo: {} / {}".format(primero, error)
         print("AVISO: no se pudo quitar el ahorro de energia del Wi-Fi:", error)
 
 
@@ -208,6 +218,26 @@ def memoria_idf():
         import espidf
         return [espidf.heap_caps_get_free_size() // 1024,
                 espidf.heap_caps_get_largest_free_block() // 1024]
+    except Exception:
+        return None
+
+
+def memoria_python():
+    """[usado, total] KB del montón de Python, o None fuera de la placa.
+
+    gc.mem_free() de CircuitPython 9 SUMA el bloque libre mayor del IDF (lo
+    que el montón podría tomar al crecer): el "ram=" de ver_ronda no es lo
+    libre de Python. Al crecer, el montón se queda con ESE bloque entero
+    (cancha 6-oct: al llegar la primera telemetría la memoria del Wi-Fi bajó
+    de 57 a 8 KB, y en el corte estaba en 0). Con usado y total se elige
+    CIRCUITPY_HEAP_START_SIZE (settings.toml) para que no tenga que crecer.
+    Llamar después de un gc.collect() (lo hace memoria_libre)."""
+    try:
+        import gc
+        import espidf
+        usado = gc.mem_alloc()
+        libre = max(0, gc.mem_free() - espidf.heap_caps_get_largest_free_block())
+        return [usado // 1024, (usado + libre) // 1024]
     except Exception:
         return None
 
@@ -343,6 +373,7 @@ def main(config_path="config_robot.json"):
                  "idf_kb": memoria_idf()}
         if vision:
             datos["vision"] = vision[0].estadisticas(memoria_libre())
+        datos["py_kb"] = memoria_python()
         if ANTENA:
             datos["antena"] = ANTENA
         return datos
@@ -497,8 +528,11 @@ def main(config_path="config_robot.json"):
         # Paso 1 del rover autonomo: leer la vision oficial desde la placa.
         # Solo mide; todavia no decide movimiento con lo que lee.
         if config.get("vision_host"):
+            # Sin validar por defecto: la visión oficial cumple el contrato y
+            # telemetria.py pesa 4 KB de RAM que el Wi-Fi necesita (cancha 6-oct).
             vision.append(ClienteVision(pool, config["vision_host"],
-                                        config.get("vision_port", 2026)))
+                                        config.get("vision_port", 2026),
+                                        validar=config.get("validar_telemetria", False)))
             # Mientras el A* calcula, seguir leyendo la red (ver rutas.ESPERA).
             import rutas
             rutas.ESPERA = vision[0].drenar
@@ -578,7 +612,12 @@ def main(config_path="config_robot.json"):
                 print("Error mision:", error)
             if time.monotonic() >= informe[0]:
                 informe[0] = time.monotonic() + 10
+                # Memoria del Wi-Fi ANTES de juntar basura: si Python creció
+                # tomando su bloque, se ve aquí (después del gc.collect ya lo
+                # devolvió). Por USB, sin ver_ronda, que también ensucia.
+                idf = memoria_idf()
                 print("Vision:", vision[0].estadisticas(memoria_libre()))
+                print("Memoria: wifi", idf, "py", memoria_python())
                 vision[0].reiniciar_estadisticas()
 
         # ---------------------------------
@@ -613,8 +652,9 @@ def main(config_path="config_robot.json"):
                                 import gc
                                 gc.collect()
                                 ultimos = " | ".join(ronda.eventos[-2:]) if ronda is not None else ""
-                                registro_fallos.guardar("wifi", "{} a los {} s; idf {}; {}".format(
-                                    motivo_red[0], round(time.monotonic() - arranque), memoria_idf(), ultimos))
+                                registro_fallos.guardar("wifi", "{} a los {} s; idf {}; py {}; {}".format(
+                                    motivo_red[0], round(time.monotonic() - arranque), memoria_idf(),
+                                    memoria_python(), ultimos))
                                 controller.stop("wifi_perdido")
                                 if mision is not None:
                                     mision.detener_mision("wifi_perdido")

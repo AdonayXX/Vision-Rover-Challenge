@@ -104,6 +104,56 @@ def giro_corto(grados):
     return (grados + 180) % 360 - 180
 
 
+# Girando en el sitio, las horquillas (de la cara del frente a la punta) barren
+# el anillo entre _R_BASE y ALCANCE_GIRO_MM, a ±28-41° del frente.
+_R_BASE = math.sqrt(75.0 * 75.0 + PUNTAS_LADO_MM * PUNTAS_LADO_MM)
+_ANG_PUNTA = math.degrees(math.atan2(PUNTAS_LADO_MM, PUNTAS_MM))
+_ANG_BASE = math.degrees(math.atan2(PUNTAS_LADO_MM, 75.0))
+GIRO_POR_EL_OTRO_LADO = True
+
+
+def barre_girando(mensaje, pose, giro, excluir=None):
+    """Color del primer cubo que las horquillas tocarían girando `giro` grados
+    en el sitio (positivo: theta crece) desde `pose` (centro de giro), o None."""
+    cell = mensaje["grid"]["cell_mm"]
+    rho = mensaje["cube_side"] * cell * 0.7072 + 4.0  # media diagonal + grosor de la horquilla
+    for cubo in mensaje["cubes"]:
+        if cubo["color"] == excluir:
+            continue
+        dc, dr = (cubo["col"] - pose["col"]) * cell, (cubo["row"] - pose["row"]) * cell
+        d = math.sqrt(dc * dc + dr * dr)
+        if d - rho > ALCANCE_GIRO_MM or d + rho < _R_BASE:
+            continue                                  # fuera del anillo que barren
+        ancho = math.degrees(math.asin(rho / d)) if d > rho else 180.0
+        rel = giro_corto(math.degrees(math.atan2(-dr, dc)) - pose["theta"])
+        for lo, hi in ((_ANG_PUNTA, _ANG_BASE), (-_ANG_BASE, -_ANG_PUNTA)):
+            if giro >= 0:
+                hi += giro
+            else:
+                lo += giro
+            for k in (-360.0, 0.0, 360.0):
+                if lo - ancho <= rel + k <= hi + ancho:
+                    return cubo["color"]
+    return None
+
+
+def girar_por_el_otro_lado(mensaje, pose, error, modelo, control, excluir=None):
+    """Potencias para girar en el sitio por el lado largo si por el corto las
+    horquillas barren un cubo y por el largo no; si no, None (gira como siempre).
+
+    Simulador con horquillas (D=0,5): más de la mitad de las rondas fallidas
+    empezaba con un giro en el sitio que corría un cubo 2-13 cm y lo dejaba en
+    el camino de otro; en la cancha (6-oct 19:59) el 11 corrió así el rojo
+    hasta pegarlo al verde ya entregado. Retroceder cuando los dos lados
+    barren, o cuidar también la alineación final, salía peor (simulador)."""
+    if not GIRO_POR_EL_OTRO_LADO or barre_girando(mensaje, pose, error, excluir) is None:
+        return None
+    otro = error - 360.0 if error > 0 else error + 360.0
+    if barre_girando(mensaje, pose, otro, excluir) is not None:
+        return None
+    w = control.get("w_max", 120.0)
+    return modelo.potencias(0.0, w if otro > 0 else -w, control.get("limite", 0.35))
+
 
 def hacia_punto(pose, objetivo, cell_mm, modelo, v_max=170.0, v_min=90.0, w_max=120.0,
                 kp_giro=2.5, k_distancia=1.6, giro_en_sitio=40.0, tolerancia_mm=25.0,
@@ -315,6 +365,11 @@ class IrAPunto:
                 izquierda, derecha = self.modelo.potencias(sentido * self.control.get("v_min", 90.0), 0.0,
                                                            self.control.get("limite", 0.35))
                 self.ultimo["despeje"] = sentido
+            else:
+                otro_lado = girar_por_el_otro_lado(mensaje, prediccion, error, self.modelo, self.control)
+                if otro_lado is not None:
+                    izquierda, derecha = otro_lado
+                    self.ultimo["giro"] = "otro_lado"
         try:
             self.motores.set_motor(izquierda, derecha)
         except ValueError as error:

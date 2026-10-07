@@ -17,10 +17,11 @@ El pool se inyecta; no importa nada de CircuitPython y se prueba en la PC.
 import json
 import time
 
-from telemetria import validate
-
 _EAGAIN = (11, 35, 10035)
-_BUFFER_MAX = 8192
+# Búfer fijo de recepción: la última línea completa (un mensaje compacto son
+# ~770 bytes), la que viene a medias y una lectura de _TROZO encima.
+_TAMANO = 3072
+_TROZO = 1024
 
 
 def ahora_ms():
@@ -30,6 +31,14 @@ def ahora_ms():
         return int(time.monotonic() * 1000)
 
 
+def _cargar(vista):
+    """json.loads sin copiar la línea (CircuitPython acepta memoryview)."""
+    try:
+        return json.loads(vista)
+    except TypeError:
+        return json.loads(bytes(vista))       # CPython (pruebas en la PC)
+
+
 class ClienteVision:
     def __init__(self, pool, host, port=2026, reconectar_s=1.0, conexion_s=0.5,
                  validar=True, reloj=ahora_ms, sin_datos_s=3.0):
@@ -37,6 +46,12 @@ class ClienteVision:
         self.reconectar_ms = int(reconectar_s * 1000)
         self.conexion_s = conexion_s
         self.validar, self.reloj = validar, reloj
+        # telemetria.py son 4 KB de código en la RAM de Python, que crece
+        # quitándole memoria al Wi-Fi (cancha 6-oct): sólo se carga si se pide.
+        self._validate = None
+        if validar:
+            from telemetria import validate
+            self._validate = validate
         # La visión publica a 20 Hz: varios segundos callada es una conexión
         # muerta aunque el socket no dé error (Wi-Fi caído sin aviso).
         self.sin_datos_ms = int(sin_datos_s * 1000)
@@ -54,8 +69,16 @@ class ClienteVision:
         self.cortes = []
         self.alguna_vez = False          # ya recibió algo: la visión existe
         self.sock = None
-        self.buffer = b""
-        self.rx = bytearray(1024)
+        # Búfer reservado una sola vez: [última línea completa][línea a medias].
+        # Antes cada lectura armaba bytes nuevos (copia, concatenación, cortes
+        # y decode): varios bloques de 1-3 KB por mensaje, 20 por segundo. Con
+        # el montón fragmentado alguno no entraba, Python crecía y le quitaba
+        # al Wi-Fi la memoria con la que recibe (cancha 6-oct: 8 KB libres).
+        self.buf = bytearray(_TAMANO)
+        self.vista = memoryview(self.buf)
+        self.lleno = 0                   # bytes válidos en buf
+        self.linea = None                # largo de la línea completa en buf[0:linea], sin usar
+        self.cola = 0                    # dónde empieza la línea a medias
         self.proximo_intento = 0
         self.mensaje = None
         self.recibido_ms = None
@@ -74,7 +97,7 @@ class ClienteVision:
             except Exception:
                 pass
         self.sock = None
-        self.buffer = b""
+        self.lleno, self.linea, self.cola = 0, None, 0
         self.mensaje = None
         self.desfase_reloj = None
         self.estado = motivo
@@ -116,10 +139,9 @@ class ClienteVision:
                 return False
             if not self._conectar():
                 return False
-        ultima = None
         for _ in range(8):
             try:
-                n = self.sock.recv_into(self.rx)
+                n = self._recibir()
             except OSError as error:
                 if error.args and error.args[0] in _EAGAIN:
                     if self.reloj() - self.ultimo_dato_ms > self.sin_datos_ms:
@@ -131,31 +153,11 @@ class ClienteVision:
             if n == 0:
                 self._cerrar("vision_cerro_conexion")
                 return False
-            self.bytes += n
-            self.ultimo_dato_ms = self.ultimo_byte_ms = self.reloj()
-            self.alguna_vez = True
-            self.buffer += bytes(self.rx[:n])
-            fin = self.buffer.rfind(b"\n")
-            if fin >= 0:
-                completas = self.buffer[:fin]
-                self.buffer = self.buffer[fin + 1:]
-                inicio = completas.rfind(b"\n")
-                # Las lineas anteriores a la ultima se descartan sin decodificar.
-                self.descartadas += completas.count(b"\n") + (ultima is not None)
-                ultima = completas[inicio + 1:] if inicio >= 0 else completas
-            if len(self.buffer) > _BUFFER_MAX:
-                self.buffer = b""
-                self.errores_mensaje += 1
-        if ultima is None:
-            # Líneas que drenar() dejó guardadas mientras calculaba el A*.
-            fin = self.buffer.rfind(b"\n")
-            if fin < 0:
-                return False
-            completas, self.buffer = self.buffer[:fin], self.buffer[fin + 1:]
-            inicio = completas.rfind(b"\n")
-            self.descartadas += completas.count(b"\n")
-            ultima = completas[inicio + 1:] if inicio >= 0 else completas
-        return self._decodificar(ultima)
+        if self.linea is None:
+            return False
+        # Sólo la línea completa más nueva (también la que dejó drenar()
+        # mientras calculaba el A*); las anteriores ya se descartaron.
+        return self._decodificar()
 
     def drenar(self):
         """Sólo vacía el socket, sin decodificar: lo llama el A* (rutas.ESPERA)
@@ -164,34 +166,69 @@ class ClienteVision:
         if self.sock is None:
             return
         try:
-            n = self.sock.recv_into(self.rx)
+            self._recibir()
         except OSError:
             return                                # nada nuevo o error: lo ve poll()
-        if not n:
+
+    def _recibir(self):
+        """Lee un trozo directo al búfer fijo. Devuelve los bytes (0 = cerró)."""
+        if _TAMANO - self.lleno < _TROZO:
+            self._hacer_lugar()
+        n = self.sock.recv_into(self.vista[self.lleno:self.lleno + _TROZO])
+        if n:
+            self.bytes += n
+            self.ultimo_dato_ms = self.ultimo_byte_ms = self.reloj()
+            self.alguna_vez = True
+            self._agregar(n)
+        return n
+
+    def _agregar(self, n):
+        """Llegaron n bytes al final: si cierran líneas, queda sólo la más nueva."""
+        inicio = self.lleno
+        self.lleno += n
+        fin = self.buf.rfind(b"\n", inicio, self.lleno)
+        if fin < 0:
             return
-        self.bytes += n
-        self.ultimo_dato_ms = self.ultimo_byte_ms = self.reloj()
-        self.alguna_vez = True
-        self.buffer += bytes(self.rx[:n])
-        if len(self.buffer) > 3000:
-            fin = self.buffer.rfind(b"\n")
-            antes = self.buffer.rfind(b"\n", 0, fin) if fin > 0 else -1
-            if antes >= 0:
-                self.descartadas += self.buffer.count(b"\n", 0, antes + 1)
-                self.buffer = self.buffer[antes + 1:]
+        previo = self.buf.rfind(b"\n", self.cola, fin)
+        comienzo = previo + 1 if previo >= 0 else self.cola
+        # Las completas anteriores a la más nueva se descartan sin decodificar.
+        self.descartadas += self.buf.count(b"\n", self.cola, comienzo) + (self.linea is not None)
+        largo = self.lleno - comienzo
+        if comienzo:
+            self.vista[0:largo] = self.vista[comienzo:self.lleno]
+        self.linea, self.lleno = fin - comienzo, largo
+        self.cola = self.linea + 1
+
+    def _consumir(self):
+        """La línea ya se usó: queda sólo la que viene a medias, al principio."""
+        resto = self.lleno - self.cola
+        if resto:
+            self.vista[0:resto] = self.vista[self.cola:self.lleno]
+        self.lleno, self.linea, self.cola = resto, None, 0
+
+    def _hacer_lugar(self):
+        if self.linea is not None:
+            self.descartadas += 1             # detrás viene otra más nueva
+            self._consumir()
+        if _TAMANO - self.lleno < _TROZO:
+            # Una línea a medias de más de 2 KB no es telemetría: se tira.
+            self.lleno, self.cola = 0, 0
+            self.errores_mensaje += 1
 
     # ------------------------------------------------------------ datos
-    def _decodificar(self, linea):
+    def _decodificar(self):
         t0 = self.reloj()
         try:
-            mensaje = json.loads(linea.decode("utf-8"))
+            mensaje = _cargar(self.vista[0:self.linea])
             t1 = self.reloj()
-            if self.validar:
-                validate(mensaje)
+            if self._validate is not None:
+                self._validate(mensaje)
         except Exception as error:
+            self._consumir()
             self.errores_mensaje += 1
             self.estado = "mensaje_invalido: {}".format(error)
             return False
+        self._consumir()
         t2 = self.reloj()
         if self.mensaje is not None and mensaje["seq"] <= self.mensaje["seq"]:
             self.errores_mensaje += 1

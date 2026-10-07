@@ -39,6 +39,16 @@ def _dist_segmento(p, a, b):
     return math.sqrt((p["col"] - a["col"] - t * dc) ** 2 + (p["row"] - a["row"] - t * dr) ** 2)
 
 
+def _dist_tramos(a, b, c, d):
+    """Distancia (celdas) entre los tramos a-b y c-d; 0 si se cortan."""
+    def lado(p, q, s):
+        return (q["col"] - p["col"]) * (s["row"] - p["row"]) - (q["row"] - p["row"]) * (s["col"] - p["col"])
+    o1, o2, o3, o4 = lado(a, b, c), lado(a, b, d), lado(c, d, a), lado(c, d, b)
+    if ((o1 > 0 > o2) or (o1 < 0 < o2)) and ((o3 > 0 > o4) or (o3 < 0 < o4)):
+        return 0.0
+    return min(_dist_segmento(a, c, d), _dist_segmento(b, c, d), _dist_segmento(c, a, b), _dist_segmento(d, a, b))
+
+
 def _buscar(lista, clave, valor):
     for item in lista:
         if item.get(clave) == valor:
@@ -78,6 +88,41 @@ def pendientes(mensaje):
     return salida
 
 
+PRIMERO_MM = 140.0
+
+
+def antes(cubos, zonas, cell, atras_mm=230.0):
+    """Pares (x, y): x tiene que entrar antes que y. Entregado y (más o menos
+    en el centro de su zona), el empuje de x pasaría encima: de su punto previo
+    de ataque a su zona, el rover de x pasa a menos de PRIMERO_MM de la zona
+    de y. Generador oficial, D=0,8: el verde junto a la zona azul y el azul
+    junto a la verde; con el azul entregado primero, el verde no tenía por
+    dónde empujarse (corredor_bloqueado: cubo blue)."""
+    pares = []
+    if not PRIMERO_MM:
+        return pares
+    for x in cubos:
+        cubo, zona = cubos[x], zonas[x]
+        dc, dr = zona["col"] - cubo["col"], zona["row"] - cubo["row"]
+        largo = math.sqrt(dc * dc + dr * dr)
+        if largo < 1e-6:
+            continue
+        previo = {"col": cubo["col"] - dc / largo * atras_mm / cell, "row": cubo["row"] - dr / largo * atras_mm / cell}
+        for y in cubos:
+            if y != x and _dist_segmento(zonas[y], previo, zona) * cell < PRIMERO_MM:
+                pares.append((x, y))
+    return pares
+
+
+def _desorden(orden, pares):
+    """Cuántos pares (x, y) de `pares` quedan al revés en `orden`."""
+    n = 0
+    for x, y in pares:
+        if x in orden and y in orden and orden.index(y) < orden.index(x):
+            n += 1
+    return n
+
+
 def repartir(mensaje, propio, companero=None):
     """Colores para `propio`, en el orden en que conviene llevarlos.
 
@@ -104,8 +149,9 @@ def repartir(mensaje, propio, companero=None):
     for color in colores:
         cubos[color] = _buscar(mensaje["cubes"], "color", color)
         zonas[color] = _buscar(mensaje["depots"], "color", color)
+    pares = antes(cubos, zonas, mensaje["grid"]["cell_mm"])
     if otro is None:
-        mejor = min(_permutaciones(colores), key=lambda o: (_carga(yo, o, cubos, zonas), o))
+        mejor = min(_permutaciones(colores), key=lambda o: (_desorden(o, pares), _carga(yo, o, cubos, zonas), o))
         return list(mejor)
     ids = sorted((propio, companero))
     pos = {propio: yo, companero: otro}
@@ -115,10 +161,11 @@ def repartir(mensaje, propio, companero=None):
         for corte in cortes:
             ordenes = (orden[:corte], orden[corte:])
             cargas = [_carga(pos[ids[i]], ordenes[i], cubos, zonas) for i in (0, 1)]
-            clave = (max(cargas), sum(cargas), ordenes)
+            # Primero el de ID menor (por turnos, el orden global es éste).
+            clave = (_desorden(orden, pares), max(cargas), sum(cargas), ordenes)
             if mejor is None or clave < mejor:
                 mejor = clave
-    return list(mejor[2][ids.index(propio)])
+    return list(mejor[-1][ids.index(propio)])
 
 
 class Ronda:
@@ -128,7 +175,7 @@ class Ronda:
                  companero=None, intentos_por_cubo=2, ayuda_ms=300000, max_edad_ms=1500,
                  companero_cerca_mm=200, sin_dueno_ms=30000, reintento_ms=15000, reloj=ahora_ms,
                  enlace=None, latido_ms=200, plan_espera_ms=600, robar=False, apartarse_ms=8000,
-                 turnos=True, turno_max_ms=120000, tarde_ms=3000, tarde_espera_ms=1500):
+                 turnos=True, turno_max_ms=120000, tarde_ms=3000, tarde_espera_ms=1500, cruce_mm=200.0):
         self.vision, self.misiones, self.robot_id = vision, misiones, robot_id
         self.fase_inicio, self.estrategia, self.companero = fase_inicio, estrategia, companero
         self.intentos_por_cubo, self.ayuda_ms, self.max_edad_ms = intentos_por_cubo, ayuda_ms, max_edad_ms
@@ -148,6 +195,16 @@ class Ronda:
         # sus cubos (ver _esperar_turno). turno_max_ms: si el otro no termina
         # nunca (roto en la cancha), igual sale.
         self.turnos, self.turno_max_ms = turnos, turno_max_ms
+        # Turnos por cubo (cruce_mm > 0): cada uno sale a buscar un cubo sólo
+        # si su camino (de donde está al punto de ataque y de ahí a la zona)
+        # queda a cruce_mm o más del camino del cubo que lleva el otro; si se
+        # cruzan, espera apartado. En las canchas difíciles el generador
+        # oficial cruza a propósito los caminos de los cubos, así que casi
+        # siempre termina siendo por turnos; en las fáciles salen los dos.
+        # Simulador con horquillas, 48 canchas oficiales por dificultad:
+        # D=0,5 35/48 rondas completas (por turnos enteros 28/48), D=0,8
+        # 33/48 (28/48), D=0,2 igual; sin choques nuevos. 0: turnos enteros.
+        self.cruce_mm = cruce_mm
         # Placa reiniciada en plena ronda: el cronómetro oficial (clock) ya pasó
         # de tarde_ms. Antes de decidir, espera hasta tarde_espera_ms a oír al
         # compañero, que sabe qué cubos le quedan (ver _comenzar).
@@ -189,6 +246,8 @@ class Ronda:
         self.esperando_turno = False
         self.tarde_desde = None               # desde cuándo espera oír al compañero (_esperar_compa_tarde)
         self.reincorporado = False            # volvió en plena ronda y tomó lo que el compañero no tiene
+        self.lanzado_ms = 0                   # cuándo lanzó el cubo actual
+        self.cruzado = False                  # esperando: todo lo suyo se cruza con lo del otro
         self.eventos = []
         # Lo último anotado, para anotar sólo los cambios (ver _vigilar).
         self._v_mision = self._v_estado = self._v_vision = self._v_turno = self._v_compa = None
@@ -433,6 +492,14 @@ class Ronda:
             return False
         compa = self.enlace.companero()
         estado = compa.get("e") if compa is not None else None
+        if self.cruce_mm:
+            # Por cubo: sólo hasta saber qué cubo lleva el otro (o que terminó);
+            # desde ahí cada cubo se decide en _avanzar (_choca).
+            if (estado == CORRIENDO and compa.get("a")) or estado == COMPLETA \
+                    or ahora - self.inicio_ms >= 3000:
+                self.turno_mio = True
+                return False
+            return True
         if estado == CORRIENDO and ahora - self.inicio_ms < self.turno_max_ms:
             return True                           # el otro todavía lleva lo suyo
         if estado in (None, ESPERANDO) and ahora - self.inicio_ms < 3000:
@@ -457,6 +524,9 @@ class Ronda:
             self._v_turno = self.turno_mio
             self._anotar("turno: me toca" if self.turno_mio else "turno: espero al companero")
         if self.esperando_turno:
+            # También por cubo: quedarse quieto en la salida esa espera corta
+            # era peor (simulador con horquillas, D=0,8: 24/48 contra 34/48);
+            # estorbaba la salida del otro.
             if self._fresca(mensaje):
                 self._aparcar(mensaje, pendientes(mensaje))   # mientras, fuera de los caminos
             return
@@ -464,6 +534,14 @@ class Ronda:
             # Los dos tomaron el mismo cubo a la vez: cede el de mayor ID.
             if compa is not None and self.actual is not None and compa.get("a") == self.actual \
                     and self.robot_id > compa.get("id", 0):
+                self.cedido = True
+                self.cedidos += 1
+                self.misiones.detener_mision("cedido")
+            elif self.cruce_mm and compa is not None and self.actual is not None and compa.get("a") \
+                    and self.robot_id > compa.get("id", 0) and ahora - self.lanzado_ms < 1500 \
+                    and compa.get("a") in pendientes(mensaje) and self._choca(mensaje, compa, self.actual, ()):
+                # Eligieron a la vez (antes de oírse) dos cubos que se cruzan:
+                # suelta el suyo el de ID mayor, recién salido.
                 self.cedido = True
                 self.cedidos += 1
                 self.misiones.detener_mision("cedido")
@@ -558,17 +636,36 @@ class Ronda:
         libres = [c for c in candidatos if c != ocupado
                   and not any(_dist(r, cubos[c]) * mensaje["grid"]["cell_mm"] < self.companero_cerca_mm
                               for r in otros)]
+        if self.cruce_mm and libres and compa is not None and compa.get("a"):
+            libres = [c for c in libres if not self._choca(mensaje, compa, c, afuera)]
+            if (not libres) != self.cruzado:
+                self.cruzado = not libres
+                self._anotar("se cruza con " + str(compa.get("a")) + ": espera" if self.cruzado else "ya no se cruza")
+            if not libres:
+                self.pausa_hasta = ahora + 500
+                self._aparcar(mensaje, afuera)    # mientras, fuera de los caminos
+                return
+        elif self.cruzado:
+            self.cruzado = False
+            self._anotar("ya no se cruza")
         if not libres:
             self.pausa_hasta = ahora + 1000
             return
         candidatos = libres
-        # Primero los que menos fallaron; entre ellos, el más barato desde aquí.
-        self.actual = min(candidatos, key=lambda c: (self.intentos.get(c, 0),
+        # Primero los que menos fallaron; después, los que no esperan a otro
+        # cubo (ver antes()); entre ellos, el más barato desde aquí.
+        for color in afuera:
+            if color not in cubos:
+                cubos[color] = _buscar(mensaje["cubes"], "color", color)
+                zonas[color] = _buscar(mensaje["depots"], "color", color)
+        esperan = [y for x, y in antes(cubos, zonas, mensaje["grid"]["cell_mm"])]
+        self.actual = min(candidatos, key=lambda c: (self.intentos.get(c, 0), c in esperan,
                                                      _carga(yo, (c,), cubos, zonas), c))
         from llevar_cubo import memoria_libre
         self.mem = memoria_libre()
         self._anotar("lleva {} (ram {})".format(self.actual, self.mem))
         self.misiones.llevar_en_ronda(self.actual)
+        self.lanzado_ms = ahora
         self.proximo_latido = 0                   # anunciarlo ya: evita que el otro lo tome
         self.aparcado = False                     # al terminar, volver a estacionarse
         self.ruta_aparcar = []                    # la de antes (esperando turno) ya no vale
@@ -619,7 +716,7 @@ class Ronda:
                   for r in (borde, grid["rows"] - borde)]
         if mensaje.get("start"):
             puntos.append(mensaje["start"])
-        from llevar_cubo import punto_detras
+        from llevar_cubo import cubo_en_su_zona, punto_detras
         llevar = getattr(self.misiones, "cubo", None)
         # Desde el punto previo de ataque (detrás del cubo, donde se pone el
         # rover para empujar) hasta la zona: no sólo de cubo a zona.
@@ -629,6 +726,13 @@ class Ronda:
             cubo = _buscar(mensaje["cubes"], "color", color)
             zona = _buscar(mensaje["depots"], "color", color)
             if cubo is not None and zona is not None:
+                # Casi adentro (a menos de una celda): en la orilla de la zona
+                # la visión lo da adentro y afuera, y su camino de empuje
+                # aparecía y desaparecía. Cancha 6-oct 19:59: el azul parpadeó
+                # 37 veces y el 10, estacionado, fue y volvió 5 veces entre la
+                # esquina y la salida.
+                if cubo_en_su_zona(cubo, zona, mensaje["depot_size"], grid, mensaje["cube_side"])[1] < 1.0:
+                    continue
                 estorbos.append((punto_detras(cubo, zona, atras, cell) or cubo, zona))
         compa = self._compa()
         lleva = compa.get("a") if compa is not None else None
@@ -687,6 +791,36 @@ class Ronda:
                     continue
                 return
 
+    def _choca(self, mensaje, compa, color, afuera):
+        """True si llevar `color` pasa a menos de cruce_mm de por donde el
+        compañero lleva el suyo. Cada camino: de donde está el rover al punto
+        previo de ataque, y de ahí a la zona (dos tramos rectos). Si el suyo
+        ya entró (`afuera` no lo tiene) todavía se está retirando: cuenta
+        sólo dónde está (simulador: el 11 salía, se lo topaba retrocediendo
+        y le cedía el paso 8 s)."""
+        from llevar_cubo import punto_detras
+        cell = mensaje["grid"]["cell_mm"]
+        llevar = getattr(self.misiones, "cubo", None)
+        atras = getattr(llevar, "aproximacion_mm", 160.0) + getattr(llevar, "previo_mm", 70.0)
+        tramos = []
+        for rover_id, c in ((compa.get("id"), compa.get("a")), (self.robot_id, color)):
+            rover = _buscar(mensaje["rovers"], "id", rover_id)
+            cubo = _buscar(mensaje["cubes"], "color", c)
+            zona = _buscar(mensaje["depots"], "color", c)
+            if rover is None or cubo is None or zona is None:
+                return False
+            if rover_id != self.robot_id and afuera and c not in afuera:
+                tramos.append(((rover, rover),))
+                continue
+            ataque = punto_detras(cubo, zona, atras, cell) or cubo
+            tramos.append(((rover, ataque), (ataque, zona)))
+        limite = self.cruce_mm / cell
+        for a, b in tramos[0]:
+            for c, d in tramos[1]:
+                if _dist_tramos(a, b, c, d) < limite:
+                    return True
+        return False
+
     def _ayudar(self, mensaje, afuera, ahora):
         """Con lo suyo hecho, toma lo que quede sin dueño.
 
@@ -730,6 +864,8 @@ class Ronda:
             datos["error"], datos["errores"] = self.error, self.errores
         if self.esperando_turno:
             datos["turno"] = "esperando"
+        if self.cruzado:
+            datos["turno"] = "se_cruza"
         if self.eventos and self.estado not in (CORRIENDO, COMPLETA):
             datos["eventos"] = self.eventos      # sólo con la ronda terminada: es grande
         if self.enlace is not None:

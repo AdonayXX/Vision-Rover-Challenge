@@ -96,7 +96,9 @@ class CommandSession:
                     status.update(self.info())
                 if self.mission is not None:
                     status["mision"] = self.mission.informe()
-                self.reply = (json.dumps(status) + "\n").encode("ascii")
+                # Compacto: es la respuesta más grande (2-3 KB, una por segundo
+                # con ver_ronda) y cada copia pide un bloque seguido de memoria.
+                self.reply = (json.dumps(status, separators=(",", ":")) + "\n").encode("ascii")
             elif command == "KEEPALIVE":
                 if self.controller.mode is None:
                     return False

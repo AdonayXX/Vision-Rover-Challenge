@@ -318,6 +318,38 @@ class MisionSimuladaTests(unittest.TestCase):
         mision.iniciar(30.0, 20.0)
         self.assertEqual(correr(mision, sim), LLEGO)
 
+    def test_turning_in_place_goes_the_other_way_around_a_cube(self):
+        # Cancha 6-oct 19:59: el 11 giró junto al rojo y la horquilla lo corrió
+        # hasta pegarlo al verde ya entregado. Un cubo a 120 mm, 75° a la
+        # izquierda, y un punto casi detrás (170°): por el lado corto la
+        # horquilla izquierda pasa por el cubo; por el largo (-190°), no.
+        import autonomia
+        from autonomia import barre_girando
+        cubo = {"color": "red", "col": 20.0 + 6.0 * math.cos(math.radians(75)),
+                "row": 20.0 - 6.0 * math.sin(math.radians(75)), "age_ms": 0}
+        mensaje = {"grid": {"cols": 43, "rows": 43, "cell_mm": CELL}, "cube_side": 3.0, "cubes": [cubo]}
+        pose = {"col": 20.0, "row": 20.0, "theta": 0.0}
+        self.assertEqual(barre_girando(mensaje, pose, 170.0), "red")
+        self.assertIsNone(barre_girando(mensaje, pose, -190.0))
+        destino = (20.0 + 10.0 * math.cos(math.radians(170)), 20.0 - 10.0 * math.sin(math.radians(170)))
+        movidos = []
+        for por_el_otro_lado in (True, False):
+            autonomia.GIRO_POR_EL_OTRO_LADO = por_el_otro_lado
+            try:
+                sim = Simulador(ModeloRover(), pose=(20.0, 20.0, 0.0))
+                sim.cubos = [dict(cubo)]
+                sim.frente_mm, sim.puntas = 105.0, (120.0, 65.0)
+                mision = nueva_mision(ModeloRover(), sim)
+                mision.iniciar(*destino)
+                estado = correr(mision, sim)
+                if por_el_otro_lado:
+                    self.assertEqual(estado, LLEGO, mision.informe())
+                movidos.append(math.hypot(sim.cubos[0]["col"] - cubo["col"], sim.cubos[0]["row"] - cubo["row"]) * CELL)
+            finally:
+                autonomia.GIRO_POR_EL_OTRO_LADO = True
+        self.assertLess(movidos[0], 1.0)              # por el otro lado: el cubo ni se toca
+        self.assertGreater(movidos[1], 5.0)           # por el corto lo corría (y se trababa)
+
     def test_real_dead_zone_still_converges(self):
         # Como el 1-oct: el rover real no avanza por debajo de ~0,08.
         real = ModeloRover(zona_muerta_lineal=.08)

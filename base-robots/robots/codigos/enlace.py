@@ -18,8 +18,16 @@ _DIFUSION = bytes([255] * 6)
 
 
 class Enlace:
-    def __init__(self, robot_id, reloj, radio=None, buffer=1536):
+    def __init__(self, robot_id, reloj, radio=None, buffer=1536, lento_ms=300, pausa_ms=5000):
         self.robot_id, self.reloj = robot_id, reloj
+        # send() de CircuitPython reintenta hasta 2 s si los búferes de ESP-NOW
+        # están llenos (poca memoria del IDF o canal ocupado): mientras, el
+        # bucle no lee la visión ni corrige los motores. Un envío de más de
+        # lento_ms calla la radio pausa_ms; el compañero lo toma como radio caída.
+        self.lento_ms, self.pausa_ms = lento_ms, pausa_ms
+        self.envio_max_ms = 0
+        self.lentos = 0
+        self._callado_hasta = None
         # El de fábrica (526 bytes) son tres mensajes nuestros: con el bucle
         # ocupado un rato (A*, red) se llenaba.
         self.buffer = buffer
@@ -72,6 +80,11 @@ class Enlace:
     def enviar(self, datos):
         if self._esp is None:
             return
+        antes = self.reloj()
+        if self._callado_hasta is not None:
+            if antes < self._callado_hasta:
+                return
+            self._callado_hasta = None
         datos["t"], datos["id"] = ETIQUETA, self.robot_id
         try:
             self._esp.send(json.dumps(datos).encode("utf-8"), self._peer)
@@ -79,6 +92,11 @@ class Enlace:
         except Exception as error:
             self.errores += 1
             self.ultimo_error = "envio {}: {}".format(type(error).__name__, error)
+        tardo = self.reloj() - antes
+        self.envio_max_ms = max(self.envio_max_ms, tardo)
+        if tardo > self.lento_ms:
+            self.lentos += 1
+            self._callado_hasta = self.reloj() + self.pausa_ms
 
     def recibir(self):
         """Vacía lo recibido; se queda con el último mensaje del compañero."""
@@ -139,6 +157,10 @@ class Enlace:
             datos["ajenos"] = self.ajenos
         if self.reaperturas:
             datos["reaperturas"] = self.reaperturas
+        if self.envio_max_ms:
+            datos["envio_max_ms"] = self.envio_max_ms
+        if self.lentos:
+            datos["lentos"] = self.lentos
         if self.error:
             datos["error"] = self.error
         # ESP-NOW sólo cruza si los dos están en el mismo canal: en una red

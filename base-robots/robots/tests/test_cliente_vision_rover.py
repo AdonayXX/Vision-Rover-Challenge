@@ -168,9 +168,33 @@ class ClienteVisionTests(unittest.TestCase):
         for seq in range(2, 12):
             self.sock.trozos = [linea(seq)]
             self.cliente.drenar()
-        self.assertLess(len(self.cliente.buffer), 3000 + len(linea(11)))
+        self.assertLessEqual(self.cliente.lleno, len(self.cliente.buf))   # búfer fijo: no crece
         self.assertTrue(self.cliente.poll())
         self.assertEqual(self.cliente.mensaje["seq"], 11)
+
+    def test_stream_in_random_chunks_reuses_the_same_buffer(self):
+        # Cancha 6-oct: cada lectura armaba bytes nuevos y Python crecía
+        # quitándole la memoria al Wi-Fi. Ahora todo pasa por un búfer fijo.
+        import random
+        azar = random.Random(3)
+        buf = self.cliente.buf
+        flujo = b"".join(linea(seq, ts_ms=1000 + seq) for seq in range(1, 301))
+        i = 0
+        while i < len(flujo):
+            trozos = []
+            for _ in range(azar.randint(1, 4)):
+                n = azar.randint(1, 1500)
+                trozos.append(flujo[i:i + n])
+                i += n
+            self.sock.trozos = [t for t in trozos if t]
+            if azar.random() < 0.3:
+                self.cliente.drenar()                    # el A* vacía el socket
+            self.cliente.poll()
+        self.cliente.poll()
+        self.assertEqual(self.cliente.mensaje["seq"], 300)
+        self.assertEqual(self.cliente.errores_mensaje, 0)
+        self.assertIs(self.cliente.buf, buf)
+        self.assertEqual(self.cliente.decodificados + self.cliente.descartadas, 300)
 
     def test_invalid_message_is_counted_not_used(self):
         self.sock.trozos = [b'{"v": 3}\n']
@@ -197,7 +221,7 @@ class ClienteVisionTests(unittest.TestCase):
         self.sock.trozos = [b"x" * 9000]
         self.cliente.poll()
         self.cliente.poll()
-        self.assertLessEqual(len(self.cliente.buffer), 8192)
+        self.assertLessEqual(self.cliente.lleno, len(self.cliente.buf))
         self.assertGreater(self.cliente.errores_mensaje, 0)
 
     def test_stats_are_json_serializable(self):
