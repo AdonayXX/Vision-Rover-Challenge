@@ -2,3 +2,6 @@ __pycache__/
 *.py[cod]
 tools/mpy-cross/
 base-robots/robots/pc/grabaciones/
+base-robots/robots/codigos/config_robot.json
+.codex-build/
+.codex-finalizer/

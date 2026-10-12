@@ -1,31 +1,36 @@
-# Código reutilizable de los rovers
+# Cómo está organizado el software de los rovers
 
-**Para conectar la placa:** [primera prueba de conexion y motores](PRIMERA_PRUEBA.md), con pulsos individuales y comprobacion de parada.
+El firmware que participó en el reto vive en [`codigos/`](codigos/). Cada IdeaBoard ESP32 ejecuta `code.py`, que inicia la red y entra al bucle de `wifi_command_receiver.py`. En cada ciclo se leen sensores y telemetría, se actualiza la ronda y se avanza la misión de movimiento.
 
-Último avance: [estados y acuerdos de tareas](COORDINACION.md), con reservas, confirmaciones y pérdida de comunicación simulada. La suite actual suma **100 pruebas**.
+```text
+code.py
+  └─ wifi_command_receiver.py
+       ├─ cliente_vision_rover.py → telemetria.py
+       ├─ ronda.py → asignacion.py / enlace.py (ESP-NOW)
+       ├─ autonomia.py → llevar_cubo.py → rutas.py
+       └─ control_movimiento.py → ideaboard.py / hardware_sensores.py
+```
 
-Nuevo: [reparto inicial de cubos](ASIGNACION.md), con comparación de dos estrategias en 200 escenarios y 77 pruebas en la suite completa.
+| Módulo | Responsabilidad |
+| --- | --- |
+| [`cliente_vision_rover.py`](codigos/cliente_vision_rover.py) y [`telemetria.py`](codigos/telemetria.py) | Recibir el último mensaje TCP válido y vigilar la antigüedad de los datos. |
+| [`ronda.py`](codigos/ronda.py) y [`asignacion.py`](codigos/asignacion.py) | Esperar el inicio oficial, repartir cubos y decidir cuándo tomar otro. |
+| [`enlace.py`](codigos/enlace.py) | Compartir estado y tareas entre los dos rovers por ESP-NOW. |
+| [`autonomia.py`](codigos/autonomia.py), [`llevar_cubo.py`](codigos/llevar_cubo.py) y [`rutas.py`](codigos/rutas.py) | Navegar, buscar aproximación, empujar, verificar entrega y replanificar. |
+| [`control_movimiento.py`](codigos/control_movimiento.py), [`ideaboard.py`](codigos/ideaboard.py) y [`hardware_sensores.py`](codigos/hardware_sensores.py) | Traducir decisiones a motores y leer sensores de la placa. |
+| [`registro_fallos.py`](codigos/registro_fallos.py) y [`safemode.py`](codigos/safemode.py) | Registrar errores y apoyar la recuperación. |
 
-Para trabajar sin robot ni cámara: [pruebas de telemetría en computadora](PRUEBAS_PC.md). Incluyen una demostración automática con el publicador simulado y el cliente nuevo.
+Las configuraciones [`rover_10.json`](codigos/rover_10.json) y [`rover_11.json`](codigos/rover_11.json) ajustan sentido y ganancia de los motores de cada robot. [`config_robot.example.json`](codigos/config_robot.example.json) es una plantilla; la configuración local con credenciales no se publica.
 
-También están disponibles los [cálculos y decisiones de navegación hacia un punto](NAVEGACION.md), probados con movimiento ideal sin motores.
+## Explorar sin hardware
 
-El paso siguiente ya está implementado: [rutas estáticas con espacio para el cuerpo del rover](RUTAS.md). Se prueban rodeando cubos y esperando cuando el paso se bloquea.
+| Demostración | Qué permite observar |
+| --- | --- |
+| [`pc/demo_rutas.py`](pc/demo_rutas.py) | Una ruta que evita un cubo y la decisión de esperar ante datos viejos o destino ocupado. |
+| [`pc/demo_asignacion.py`](pc/demo_asignacion.py) | Cómo se comparan repartos de los tres cubos. |
+| [`pc/demo_navegacion.py`](pc/demo_navegacion.py) | Llegada a un punto en un modelo ideal, con parada por datos caducados. |
+| [`tests/`](tests/) | Pruebas de los módulos y simulaciones de la ronda completa. |
 
-Los archivos de `codigos/` parten de los ejemplos originales; los módulos de control y recepción ya se corrigieron. Se mantienen juntos porque varios importan `ideaboard` desde esa misma ubicación. Ver [CORRECCIONES.md](CORRECCIONES.md) para uso, cambios de API y pendientes.
+Ejecuta las demostraciones desde la raíz del repositorio. Ejecuta `python -B -m unittest discover -s tests` desde `base-robots/robots`. Las pruebas de computadora no certifican precisión física, estabilidad del Wi-Fi ni autonomía de las baterías.
 
-| Área | Archivos | Uso previsto |
-|---|---|---|
-| Hardware | [ideaboard.py](codigos/ideaboard.py) | Acceso a motores, entradas y LED de la placa |
-| Movimiento básico | [test_motores.py](codigos/test_motores.py) | Comprobar motores y sentidos de giro |
-| Calibración | [motor_calibration.py](codigos/motor_calibration.py) | Compensar diferencias entre motores |
-| Control | [control_movimiento.py](codigos/control_movimiento.py), [move_heading.py](codigos/move_heading.py), [turn_angle.py](codigos/turn_angle.py) | Avance y giro cooperativos; `code_PID.py` queda como ejemplo original |
-| Sensores | [code_4IR.py](codigos/code_4IR.py), [code_ultrasonic.py](codigos/code_ultrasonic.py), [color_detect.py](codigos/color_detect.py), [code_acc.py](codigos/code_acc.py) | Lectura de infrarrojos, ultrasonido, color e IMU |
-| Comunicación entre robots | [espnow_bidirectional.py](codigos/espnow_bidirectional.py), [guía ESP-NOW](codigos/ESPNOW/README.md) | Base de mensajes directos entre los dos rovers |
-| Comandos para pruebas | [wifi_command_receiver.py](codigos/wifi_command_receiver.py), [command_protocol.py](codigos/command_protocol.py), [sesion_comandos.py](codigos/sesion_comandos.py) | Receptor y protocolo unificados, con watchdog y procesamiento por ciclos |
-| Estado | [robot_state.py](codigos/robot_state.py) | Estado operativo del rover; no implementa la misión |
-| Registro | [code_storage.py](codigos/code_storage.py) | Referencia para almacenar mediciones |
-
-La recepción del estado del tablero se estudia en [el cliente del contrato](../vision-system/contrato/test_client.py). El receptor Wi-Fi de esta carpeta recibe órdenes de motores: no sustituye a ese cliente.
-
-El receptor usa [config_robot.example.json](codigos/config_robot.example.json) como plantilla para la configuración local. Los IDs y MAC del ejemplo ESP-NOW siguen pendientes de adaptación. El reglamento copiado reserva las decisiones durante la ronda a los rovers; el control desde computadora queda como herramienta de desarrollo.
+Para llevar el código a la placa, sigue la [guía de firmware](codigos/README.md). Las [notas de coordinación](COORDINACION.md), [rutas](RUTAS.md), [asignación](ASIGNACION.md) y [primeras pruebas](PRIMERA_PRUEBA.md) explican cómo evolucionó cada parte; algunas conservan el lenguaje y las cifras de su etapa original.

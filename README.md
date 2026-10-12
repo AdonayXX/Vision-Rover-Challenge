@@ -1,49 +1,63 @@
-<img src="VisionRover.png" alt="Robot del proyecto" width="900">
+# Vision Rover Challenge: solución de dos rovers autónomos
 
-# Vision Rover Challenge
+![Cancha, cubos y rovers del reto](vrc1.jpeg)
 
-> Inscripción: [sigue este enlace](https://forms.zohopublic.com/pbrenes/form/InscripcionVisionRoverChallenge/formperma/BrlIhyGlHkP2rMzfnJAPL9yKeysvfrFuE6lz2AbGCzs)
+Este repositorio reúne las reglas y recursos del **Vision Rover Challenge** y la solución desarrollada para competir con dos CenfoBots. El objetivo era que ambos rovers llevaran tres cubos de colores a sus zonas usando la posición publicada por una cámara cenital. La cámara informa, y **cada rover decide y controla sus motores por sí mismo**.
 
-<p align="center">
-  <a href="https://youtu.be/0UH3G01p_Bw">
-    <img src="https://img.youtube.com/vi/0UH3G01p_Bw/maxresdefault.jpg" width="600">
-  </a>
-  <br>
-  <a href="https://youtu.be/0UH3G01p_Bw"><b>▶ Ver video en YouTube</b></a>
-</p>
+El equipo obtuvo el **tercer lugar con 42 segundos** en la competencia, según el resultado compartido por sus integrantes. Este repositorio conserva el código, las pruebas y las decisiones de diseño para explicar cómo se llegó allí.
 
+## Entender el proyecto en dos minutos
 
-Este repositorio está en continuo desarrollo.
+```text
+Cámara cenital y sistema de visión oficial
+             │ posiciones, orientación, cubos y fase de la ronda (TCP)
+             ▼
+       Rover 10 ◄──── ESP-NOW ────► Rover 11
+       ESP32 / CircuitPython       ESP32 / CircuitPython
+             │                          │
+             └── planifican, se coordinan y mueven sus motores
+```
 
-El **Vision Rover Challenge** es un reto de robótica colaborativa basado en visión por computadora global.
+El software oficial de visión publica el estado de la cancha. En cada ESP32, nuestro firmware lee la observación más reciente, reparte tareas, calcula rutas, se aproxima a un cubo, lo empuja y comprueba si quedó depositado. Los dos rovers intercambian su estado por ESP-NOW. Durante una ronda, la computadora se usa como infraestructura de visión, no como controlador de los robots.
 
-Dos rovers deben comunicarse y coordinar sus movimientos para localizar y transportar objetos dentro de una superficie de trabajo. Una cámara instalada sobre el área genera un mapa preciso del entorno y proporciona en tiempo real la posición de los rovers, los objetos y los puntos de destino.
+## Por dónde empezar
 
-El desafío consiste en construir la infraestructura de software necesaria para:
+| Si quieres… | Abre… |
+| --- | --- |
+| Entender el objetivo y las reglas | [El reto](el_reto.md), [reglamento](reglamento.md) y [torneo](torneo.md) |
+| Ver qué construyó el equipo | [Solución de los rovers](base-robots/README.md) |
+| Seguir el firmware desde su entrada | [Mapa del código](base-robots/robots/README.md) y [`code.py`](base-robots/robots/codigos/code.py) |
+| Entender el dato que reciben | [Contrato de telemetría](vision-system/contrato/CONTRATO.md) |
 
-* Recibir y procesar la información del sistema de visión global.
-* Determinar la posición y orientación de cada rover.
-* Identificar la ubicación de los objetos cúbicos y sus destinos.
-* Planificar rutas y coordinar las acciones de ambos rovers.
-* Transmitir comandos de movimiento a los robots.
-* Evitar colisiones y completar las tareas de manera eficiente.
+## Estructura del repositorio
 
-El objetivo es que los rovers encuentren los objetos, los transporten y los coloquen en puntos específicos del espacio.
+| Ruta | Contenido |
+| --- | --- |
+| [`base-robots/robots/codigos/`](base-robots/robots/codigos/) | **Firmware autónomo del equipo** para los ESP32: visión, rutas, coordinación, motores y recuperación de fallos. |
+| [`base-robots/robots/tests/`](base-robots/robots/tests/) | Pruebas automatizadas y simulación de los dos rovers. |
+| [`base-robots/robots/pc/`](base-robots/robots/pc/) | Herramientas de diagnóstico y demostraciones en una computadora; no controlan la ronda oficial. |
+| [`vision-system/`](vision-system/) | Sistema de visión y contrato oficial usados como referencia y para pruebas. |
+| [`base-robots/vision-system/`](base-robots/vision-system/) | Copia de trabajo de visión incluida con la base de los rovers. |
+| [`codigos/`](codigos/) | Ejemplos iniciales de sensores y movimiento; **no son el firmware de competencia**. |
+| [`armado/`](armado/), [`conexiones/`](conexiones/), [`aruco/`](aruco/) y [`archivos_fabricacion/`](archivos_fabricacion/) | Materiales de hardware y cancha. |
 
-**¡El equipo que complete el reto con mayor rapidez, precisión y eficiencia será el ganador!**
+## Probar sin robots
 
+Desde la raíz, con Python 3 disponible en el terminal:
 
-## Contenidos:
+```powershell
+python -B base-robots/robots/pc/demo_rutas.py
+python -B base-robots/robots/pc/demo_asignacion.py --scenarios 20
+cd base-robots/robots
+python -B -m unittest discover -s tests
+```
 
-- [¿Qué es el reto?](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/blob/main/el_reto.md)
-- [Especificaciones del Robot](https://github.com/Universidad-Cenfotec/Vision-Robotic-Challenge/blob/main/robot.md)
-- [Reglamento del VIsion Rover Challenge](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/blob/main/reglamento.md)
-- [Formato del torneo y clasificación](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/blob/main/torneo.md)
-- [Armado del Robot](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/tree/main/armado)
-- [Conexiones](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/blob/main/conexiones/README.md)
-- [Programación del CenfoBot](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/blob/main/programacion/README.md)
-- [Códigos en python de movimientos, sensores, control etc, del rover](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/blob/main/codigos/README.md)
-- [Sistema de visión](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/tree/main/vision-system)
-- [Archivos de fabricación](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/tree/main/archivos_fabricacion)
-- [Una Idea de Solución](https://github.com/Universidad-Cenfotec/Vision-Rover-Challenge/blob/main/solucion_simple.md)
-- [Generador de posición inicial de cubos](https://universidad-cenfotec.github.io/Vision-Rover-Challenge/)
+`demo_rutas.py` muestra un desvío alrededor de un cubo y casos en los que la decisión correcta es esperar. `demo_asignacion.py` compara repartos en escenarios generados: sus distancias son **estimaciones**, no tiempos de carrera. La suite usa dobles y simulaciones; pasarla no sustituye una prueba física con cámara, red, motores y baterías.
+
+Para usar hardware, comienza por la [guía de la placa](base-robots/robots/codigos/README.md) y la [primera prueba de motores](base-robots/robots/PRIMERA_PRUEBA.md). Las credenciales Wi-Fi pertenecen a un archivo local de configuración; la [plantilla versionada](base-robots/robots/codigos/config_robot.example.json) no contiene contraseñas reales.
+
+## Lo que enseñó la cancha
+
+La cancha exigió rutas y decisiones fiables cuando un cubo tapaba otro, la visión perdía temporalmente un rover, dos rovers se estorbaban, el Wi-Fi se cortaba o la batería caía al arrancar. El código incluye control por estados, datos con antigüedad, parada ante observaciones inválidas, replanificación y registro de fallos.
+
+Las [notas de desarrollo](ESTADO_ACTUAL.md) documentan pruebas y problemas concretos de octubre de 2026; son una **bitácora histórica**, no una instrucción de despliegue vigente. Las reglas, imágenes y el sistema de visión oficial se conservan como materiales del reto. La solución del equipo está en `base-robots/robots/`.

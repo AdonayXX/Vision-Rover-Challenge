@@ -29,6 +29,9 @@ PID, ESP-NOW, etc.) siguen en la carpeta `codigos/` de la raíz del repositorio.
 | **Diagnóstico** | `registro_fallos.py` | Guarda en memoria no volátil por qué falló o se reinició la placa. |
 | **Configuración** | `config_robot.example.json` | Plantilla de `config_robot.json` (ese no se sube a git: lleva la clave Wi-Fi). |
 
-Pendientes de decidir en el incremento 3 (coordinación de los dos rovers):
-`asignacion.py`, `coordinacion.py`, `robot_state.py`, `espnow_bidirectional.py`,
-`ESPNOW/` y `transporte.py`.
+La ronda autónoma integrada usa `ronda.py` para el reparto de trabajo y
+`enlace.py` para compartir estado por ESP-NOW. `asignacion.py` aporta el cálculo
+del reparto. Los módulos de ensayos anteriores, como `coordinacion.py`,
+`espnow_bidirectional.py` y `transporte.py`, permanecen como referencia histórica.
+El [mapa del firmware](../README.md) indica qué archivos intervienen en la
+ejecución actual.
